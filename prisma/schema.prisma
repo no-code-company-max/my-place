@@ -1,0 +1,101 @@
+// Schema base del core de Place. Ver `docs/data-model.md`.
+// Cada feature agrega sus propias tablas respetando este core.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  handle      String?  @unique
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+
+  memberships Membership[]
+  ownedPlaces PlaceOwnership[]
+}
+
+model Place {
+  id          String  @id @default(cuid())
+  slug        String  @unique // inmutable una vez creado (multi-tenancy.md)
+  name        String
+  description String?
+
+  themeConfig  Json @default("{}")
+  openingHours Json @default("{}")
+
+  billingMode          BillingMode
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripeConnectId      String?
+
+  enabledFeatures Json @default("[\"conversations\",\"events\",\"members\"]")
+
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  memberships Membership[]
+  ownerships  PlaceOwnership[]
+  invitations Invitation[]
+}
+
+model Membership {
+  id       String         @id @default(cuid())
+  userId   String
+  placeId  String
+  role     MembershipRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+  leftAt   DateTime?
+
+  user  User  @relation(fields: [userId], references: [id])
+  place Place @relation(fields: [placeId], references: [id])
+
+  @@unique([userId, placeId])
+  @@index([placeId])
+}
+
+model PlaceOwnership {
+  id        String   @id @default(cuid())
+  userId    String
+  placeId   String
+  grantedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  place Place @relation(fields: [placeId], references: [id])
+
+  @@unique([userId, placeId])
+  @@index([placeId])
+}
+
+model Invitation {
+  id         String    @id @default(cuid())
+  placeId    String
+  email      String
+  invitedBy  String
+  acceptedAt DateTime?
+  expiresAt  DateTime
+  token      String    @unique
+
+  place Place @relation(fields: [placeId], references: [id])
+
+  @@index([placeId])
+  @@index([email])
+}
+
+enum MembershipRole {
+  MEMBER
+  ADMIN
+}
+
+enum BillingMode {
+  OWNER_PAYS
+  OWNER_PAYS_AND_CHARGES
+  SPLIT_AMONG_MEMBERS
+}

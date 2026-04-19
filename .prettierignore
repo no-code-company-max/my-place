@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+dist
+build
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+.glados
+supabase/.branches
+supabase/.temp
+prisma/migrations

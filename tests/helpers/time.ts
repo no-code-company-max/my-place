@@ -6,13 +6,7 @@
  * Se usan exclusivamente desde specs Playwright.
  */
 
-import { PrismaClient } from '@prisma/client'
-
-let _prisma: PrismaClient | null = null
-function getPrisma(): PrismaClient {
-  if (!_prisma) _prisma = new PrismaClient()
-  return _prisma
-}
+import { getTestPrisma as getPrisma } from './prisma'
 
 export async function backdatePost(postId: string, intervalSqlLiteral: string): Promise<void> {
   // El `intervalSqlLiteral` es un literal SQL aceptado como `INTERVAL` en Postgres.
@@ -35,9 +29,4 @@ export async function backdateComment(
   )
 }
 
-export async function closePrisma(): Promise<void> {
-  if (_prisma) {
-    await _prisma.$disconnect()
-    _prisma = null
-  }
-}
+export { closeTestPrisma as closePrisma } from './prisma'

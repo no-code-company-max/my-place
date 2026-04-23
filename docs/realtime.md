@@ -27,31 +27,37 @@ Dentro de un thread activo, realtime es natural — estás en esa conversación 
 
 ## Implementación
 
-Supabase Realtime se conecta vía WebSocket solo cuando el cliente entra a un thread. Al salir del thread (navegar a otra zona, cerrar la pestaña), la conexión se cierra.
+Realtime vive como módulo shared en `src/shared/lib/realtime/` — expone primitivos
+transport-agnostic (`BroadcastSender`, `BroadcastSubscriber`) sin conocer dominio.
+Las features (hoy `discussions`, futuro DM / chat / eventos) construyen sus propias
+convenciones de topic (`post:<id>`, `dm:<convId>`, etc.). Ver
+`docs/decisions/2026-04-21-shared-realtime-module.md`.
+
+**Subscribe (cliente)**: WebSocket long-lived via `supabase.channel()`. Se abre
+cuando el cliente entra a un thread; cleanup via `Unsubscribe` retornado por el
+hook al unmount.
+
+**Send (server)**: HTTP one-shot contra `POST /realtime/v1/api/broadcast` con el
+JWT del actor (no WS). Emisión ~50ms, sin handshake. Best-effort: errores se
+logean y tragan — `revalidatePath` es la fuente autoritaria.
 
 ```typescript
-// Patrón simplificado
-useEffect(() => {
-  const channel = supabase
-    .channel(`thread:${threadId}`)
-    .on('presence', { event: 'sync' }, () => {
-      /* ... */
-    })
-    .on(
-      'postgres_changes',
-      {
-        /* ... */
-      },
-      () => {
-        /* ... */
-      },
-    )
-    .subscribe()
+// Client-side (hook)
+const subscriber = new SupabaseBroadcastSubscriber(createSupabaseBrowser())
+const unsubscribe = subscriber.subscribe<{ comment: CommentView }>(
+  `post:${postId}`,
+  'comment_created',
+  (payload) => {
+    /* dedupe + append */
+  },
+)
+// cleanup: unsubscribe()
+```
 
-  return () => {
-    channel.unsubscribe()
-  }
-}, [threadId])
+```typescript
+// Server-side (action post-commit, best-effort)
+await broadcastNewComment(postId, { comment: view })
+// interno: getBroadcastSender().send('post:<id>', 'comment_created', payload)
 ```
 
 ## Fallback sin realtime

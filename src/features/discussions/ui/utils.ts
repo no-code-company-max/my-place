@@ -13,6 +13,7 @@ import {
   InvalidQuoteTarget,
   PostHiddenError,
   RichTextTooLarge,
+  SlugCollisionExhausted,
 } from '../domain/errors'
 
 /**
@@ -28,6 +29,14 @@ export function friendlyErrorMessage(err: unknown): string {
   if (err instanceof InvalidMention) return 'Las menciones deben ser miembros activos del place.'
   if (err instanceof PostHiddenError || err instanceof CommentDeletedError) {
     return 'Este contenido ya no está disponible.'
+  }
+  if (err instanceof SlugCollisionExhausted)
+    return 'No pudimos generar una URL única. Probá con otro título.'
+  // Cross-boundary fallback: tras serializar por Next 15 se pierde la prototype
+  // chain, el `instanceof` de arriba falla; discriminamos por el `name` que el
+  // constructor base asigna como own-enumerable (sobrevive JSON.stringify).
+  if (isDomainError(err) && (err as { name?: string }).name === 'SlugCollisionExhausted') {
+    return 'No pudimos generar una URL única. Probá con otro título.'
   }
   if (err instanceof OutOfHoursError) return 'El place está cerrado ahora.'
   if (err instanceof AuthorizationError) return 'No tenés permiso para hacer esto.'

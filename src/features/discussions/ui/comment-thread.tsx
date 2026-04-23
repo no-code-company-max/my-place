@@ -4,13 +4,18 @@ import type { AggregatedReaction, ReactionAggregationMap } from '../server/react
 import { reactionMapKey } from '../server/reactions-aggregation'
 import { CommentItem } from './comment-item'
 import { CommentComposer } from './comment-composer'
+import { CommentThreadLive } from './comment-thread-live'
 import { LoadMoreComments } from './load-more-comments'
 
 /**
- * Thread completo: lista inicial (SSR) + load-more (Client) + composer (Client).
- * `quoteStateByCommentId` permite renderizar correctamente los `QuotePreview`
- * de comments que citan a otros que cambiaron de estado (deleted/hidden) desde
- * que se congeló el snapshot original.
+ * Thread completo: lista inicial (SSR) + realtime live wrapper + load-more
+ * (Client) + composer (Client). `quoteStateByCommentId` permite renderizar
+ * correctamente los `QuotePreview` de comments que citan a otros que
+ * cambiaron de estado (deleted/hidden) desde que se congeló el snapshot.
+ *
+ * `CommentThreadLive` envuelve los items SSR — appendea comments que llegan
+ * por broadcast `comment_created` sin re-render del SSR original. Ver
+ * `use-comment-realtime.ts`.
  */
 export function CommentThread({
   postId,
@@ -37,24 +42,32 @@ export function CommentThread({
         {items.length === 0 ? 'Sin comentarios' : 'Comentarios'}
       </h2>
 
-      {items.map((comment) => {
-        const reactions =
-          reactionsByKey.get(reactionMapKey('COMMENT', comment.id)) ?? EMPTY_REACTIONS
-        const quoteTargetState = comment.quotedCommentId
-          ? (quoteStateByCommentId.get(comment.quotedCommentId) ?? 'VISIBLE')
-          : null
-        return (
-          <CommentItem
-            key={comment.id}
-            comment={comment}
-            placeSlug={placeSlug}
-            viewerUserId={viewerUserId}
-            viewerIsAdmin={viewerIsAdmin}
-            reactions={reactions}
-            quoteTargetState={quoteTargetState}
-          />
-        )
-      })}
+      <CommentThreadLive
+        postId={postId}
+        placeSlug={placeSlug}
+        viewerUserId={viewerUserId}
+        viewerIsAdmin={viewerIsAdmin}
+        initialItems={items}
+      >
+        {items.map((comment) => {
+          const reactions =
+            reactionsByKey.get(reactionMapKey('COMMENT', comment.id)) ?? EMPTY_REACTIONS
+          const quoteTargetState = comment.quotedCommentId
+            ? (quoteStateByCommentId.get(comment.quotedCommentId) ?? 'VISIBLE')
+            : null
+          return (
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              placeSlug={placeSlug}
+              viewerUserId={viewerUserId}
+              viewerIsAdmin={viewerIsAdmin}
+              reactions={reactions}
+              quoteTargetState={quoteTargetState}
+            />
+          )
+        })}
+      </CommentThreadLive>
 
       {nextCursor ? (
         <LoadMoreComments

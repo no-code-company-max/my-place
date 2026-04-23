@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RESERVED_POST_SLUGS, generatePostSlug } from '../domain/slug'
+import { SlugCollisionExhausted } from '../domain/errors'
+import { InvariantViolation, isDomainError } from '@/shared/errors/domain-error'
 
 describe('generatePostSlug', () => {
   it('normaliza ASCII simple', () => {
@@ -65,5 +67,72 @@ describe('generatePostSlug', () => {
     expect(RESERVED_POST_SLUGS.has('m')).toBe(true)
     expect(RESERVED_POST_SLUGS.has('conversations')).toBe(true)
     expect(RESERVED_POST_SLUGS.has('flags')).toBe(true)
+  })
+
+  describe('exhaustión de sufijos (reserved set patológico)', () => {
+    function buildPathologicalReserved(base: string): Set<string> {
+      // Base + todos los sufijos `-2..-999` → cap de MAX_COLLISION_SUFFIX agotado.
+      const set = new Set<string>([base])
+      for (let n = 2; n < 1000; n++) set.add(`${base}-${n}`)
+      return set
+    }
+
+    it('lanza SlugCollisionExhausted (no Error genérico) al agotar sufijos', () => {
+      const reserved = buildPathologicalReserved('tema')
+      expect(() => generatePostSlug('Tema', { reserved })).toThrow(SlugCollisionExhausted)
+    })
+
+    it('el error es subclase de InvariantViolation (categoría de dominio)', () => {
+      const reserved = buildPathologicalReserved('tema')
+      try {
+        generatePostSlug('Tema', { reserved })
+        throw new Error('debería haber lanzado')
+      } catch (err) {
+        expect(err).toBeInstanceOf(SlugCollisionExhausted)
+        expect(err).toBeInstanceOf(InvariantViolation)
+        expect(isDomainError(err)).toBe(true)
+      }
+    })
+
+    it('el error trae code + name + context serializables para cross-boundary', () => {
+      const reserved = buildPathologicalReserved('tema')
+      try {
+        generatePostSlug('Tema', { reserved })
+        throw new Error('debería haber lanzado')
+      } catch (err) {
+        if (!(err instanceof SlugCollisionExhausted)) throw err
+        // `code` es la categoría (no hay nuevo DOMAIN_ERROR_CODE por subclase).
+        expect(err.code).toBe('INVARIANT_VIOLATION')
+        // `name` es el discriminador específico, sobrevive JSON.stringify.
+        expect(err.name).toBe('SlugCollisionExhausted')
+        expect(err.context).toMatchObject({
+          title: 'Tema',
+          candidate: 'tema',
+          attemptedSuffixes: 1000,
+        })
+        // Own-enumerable check: tras round-trip JSON, la forma se preserva.
+        const roundtripped = JSON.parse(
+          JSON.stringify({
+            name: err.name,
+            code: err.code,
+            context: err.context,
+            message: err.message,
+          }),
+        )
+        expect(roundtripped.code).toBe('INVARIANT_VIOLATION')
+        expect(roundtripped.name).toBe('SlugCollisionExhausted')
+      }
+    })
+
+    it('respeta el fallback custom al reportar el candidate agotado', () => {
+      const reserved = buildPathologicalReserved('post')
+      try {
+        generatePostSlug('', { reserved, fallback: 'post' })
+        throw new Error('debería haber lanzado')
+      } catch (err) {
+        if (!(err instanceof SlugCollisionExhausted)) throw err
+        expect(err.context).toMatchObject({ candidate: 'post', title: '' })
+      }
+    })
   })
 })

@@ -11,6 +11,8 @@
  * el slug candidato.
  */
 
+import { SlugCollisionExhausted } from './errors'
+
 export const RESERVED_POST_SLUGS: ReadonlySet<string> = new Set([
   'settings',
   'm',
@@ -45,9 +47,11 @@ export function generatePostSlug(title: string, opts: GeneratePostSlugOptions = 
     const withSuffix = `${candidate}-${n}`
     if (!reserved.has(withSuffix)) return withSuffix
   }
-  throw new Error(
-    `generatePostSlug: imposible asignar slug tras ${MAX_COLLISION_SUFFIX} intentos para "${title}"`,
-  )
+  throw new SlugCollisionExhausted({
+    title,
+    candidate,
+    attemptedSuffixes: MAX_COLLISION_SUFFIX,
+  })
 }
 
 function normalizeTitleToSlug(title: string): string {

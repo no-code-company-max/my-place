@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { storageStateFor } from '../../helpers/playwright-auth'
 import { placeUrl } from '../../helpers/subdomain'
-import { E2E_PLACES } from '../../fixtures/e2e-data'
+import { E2E_EMAILS, E2E_PLACES } from '../../fixtures/e2e-data'
+import { createTestPost, deletePostById, findUserIdByEmail } from '../../helpers/db'
 
 /**
  * Flow Post CRUD (C.H, subset inicial — más flows agendados en C.H.1).
@@ -32,6 +33,30 @@ test.describe('Post CRUD — Palermo', () => {
     test('link "Nueva conversación" visible en header', async ({ page }) => {
       await page.goto(placeUrl(palermoSlug, '/conversations'))
       await expect(page.getByRole('link', { name: /Nueva conversación/i })).toBeVisible()
+    })
+
+    test('post >60s: botón Editar NO aparece para el autor (edit window expiró)', async ({
+      page,
+    }) => {
+      // Crea un post propio del spec con `createdAt` retroactivo → ventana 60s
+      // ya expiró. Aislado de `baseline-post` que usan otros flows.
+      const memberAId = await findUserIdByEmail(E2E_EMAILS.memberA)
+      const expiredPostId = await createTestPost({
+        placeId: E2E_PLACES.palermo.id,
+        authorUserId: memberAId,
+        slug: 'post-crud-edit-expired',
+        title: 'Edit window expired',
+        backdate: '2 minutes',
+      })
+      try {
+        await page.goto(placeUrl(palermoSlug, `/conversations/post-crud-edit-expired`))
+        await expect(page.getByRole('heading', { name: /Edit window expired/ })).toBeVisible()
+        const postArticle = page.getByRole('article').first()
+        await expect(postArticle.getByRole('button', { name: /^Editar$/ })).toHaveCount(0)
+        await expect(postArticle.getByRole('button', { name: /^Eliminar$/ })).toHaveCount(0)
+      } finally {
+        await deletePostById(expiredPostId)
+      }
     })
   })
 

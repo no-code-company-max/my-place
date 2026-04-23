@@ -117,15 +117,19 @@ body          jsonb?                -- TipTap AST
 createdAt     timestamptz not null default now()
 editedAt      timestamptz?
 hiddenAt      timestamptz?          -- admin hide (reversible)
-deletedAt     timestamptz?          -- soft delete (irreversible UI)
 lastActivityAt timestamptz not null default now()  -- update en cada Comment nuevo
 version       int not null default 0                 -- optimistic lock
 ```
 
+**Delete es HARD** (decisión C.G.1 — ver ADR `docs/decisions/2026-04-21-post-hard-delete.md`):
+Post no tiene `deletedAt`. `deletePostAction` elimina la fila en una transacción que
+cascadea (FK) comments + post-reads y limpia polimórficamente reactions + flags
+sobre ambos target types. Irreversible desde UI.
+
 Índices:
 
-- `(placeId, lastActivityAt DESC) WHERE deletedAt IS NULL` — lista foro ordenada por última actividad.
-- `(placeId, createdAt DESC)` — lista admin con deleted incluidos.
+- `(placeId, lastActivityAt DESC)` — lista foro ordenada por última actividad.
+- `(placeId, createdAt DESC)` — lista admin.
 - `(authorUserId) WHERE authorUserId IS NOT NULL` — perfil contextual del miembro + job de erasure.
 - **UNIQUE `(placeId, slug)`** — lookup por URL y garantía de unicidad del slug dentro del place.
 
@@ -280,10 +284,10 @@ $$;
 
 ### Post
 
-- `SELECT`: `is_active_member(placeId) AND (deletedAt IS NULL AND hiddenAt IS NULL OR is_place_admin(placeId))`.
+- `SELECT`: `is_active_member(placeId) AND (hiddenAt IS NULL OR is_place_admin(placeId))`.
 - `INSERT`: `is_active_member(placeId) AND authorUserId = auth.uid()`.
 - `UPDATE`: `is_active_member(placeId) AND (authorUserId = auth.uid() OR is_place_admin(placeId))`. La ventana 60s y las columnas mutables se enforzan en la action; RLS solo restringe quién puede tocar la fila.
-- `DELETE`: `false` — soft delete siempre.
+- `DELETE`: sin policy — denegado a `authenticated`/`anon`. El hard delete del admin (C.G.1) corre con service role desde la server action `hardDeletePost`.
 
 ### Comment
 
@@ -323,36 +327,37 @@ Jobs que bypassean RLS (conectan con `SUPABASE_SERVICE_ROLE_KEY`):
 
 ## 6. Estados del dominio
 
-| Entidad      | Estados                                                                                                                                                                              |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Post         | `VISIBLE` (no `hiddenAt`, no `deletedAt`), `HIDDEN` (`hiddenAt`, no `deletedAt`), `DELETED` (`deletedAt`). Dimensión ortogonal derivada: `VIVO` vs `DORMIDO` según `lastActivityAt`. |
-| Comment      | `VISIBLE`, `DELETED`.                                                                                                                                                                |
-| Flag         | `OPEN`, `REVIEWED_ACTIONED`, `REVIEWED_DISMISSED`.                                                                                                                                   |
-| PlaceOpening | activa (`endAt IS NULL`), cerrada.                                                                                                                                                   |
+| Entidad      | Estados                                                                                                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Post         | `VISIBLE` (no `hiddenAt`), `HIDDEN` (`hiddenAt` set). Delete es **hard** (cascada FK + cleanup polimorfo de reactions/flags; la fila desaparece). Dimensión ortogonal derivada: `VIVO` vs `DORMIDO` según `lastActivityAt`. |
+| Comment      | `VISIBLE`, `DELETED` (`deletedAt` set — soft delete; render muestra `[mensaje eliminado]`).                                                                                                                                 |
+| Flag         | `OPEN`, `REVIEWED_ACTIONED`, `REVIEWED_DISMISSED`.                                                                                                                                                                          |
+| PlaceOpening | activa (`endAt IS NULL`), cerrada.                                                                                                                                                                                          |
 
 **Vivo/dormido** es presentación: `dormido = now - lastActivityAt > 30 días`. Se deriva en render, no es columna. Cualquier Comment actualiza `lastActivityAt` y reactiva.
 
 ## 7. Comportamiento por rol
 
-| Acción                              | Member      | Admin                                       | Owner        | Ex-miembro | No-miembro auth |
-| ----------------------------------- | ----------- | ------------------------------------------- | ------------ | ---------- | --------------- |
-| Ver Post/Comment (visible)          | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Ver Post HIDDEN                     | ✗           | ✓                                           | ✓            | ✗          | ✗               |
-| Ver Post/Comment DELETED (como tal) | placeholder | ✓ raw                                       | ✓ raw        | ✗          | ✗               |
-| Crear Post                          | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Crear Comment                       | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Editar propio <60s                  | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Editar propio ≥60s                  | ✗           | admin edita Post propio                     | ✓ como admin | ✗          | ✗               |
-| Editar Post de otro                 | ✗           | ✗ (no puede re-escribir — solo hide/delete) | ✗            | ✗          | ✗               |
-| Eliminar Post propio <60s           | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Eliminar Post de otro               | ✗           | ✓                                           | ✓            | ✗          | ✗               |
-| Eliminar Comment propio <60s        | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Eliminar Comment de otro            | ✗           | ✓                                           | ✓            | ✗          | ✗               |
-| Hide/Unhide Post                    | ✗           | ✓                                           | ✓            | ✗          | ✗               |
-| Reaccionar                          | ✓           | ✓                                           | ✓            | ✗          | ✗               |
-| Flaggear                            | ✓           | ✓ (flaggea también)                         | ✓            | ✗          | ✗               |
-| Revisar flags (/settings/flags)     | ✗           | ✓                                           | ✓            | ✗          | ✗               |
-| Mark read (dwell)                   | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Acción                          | Member      | Admin                                       | Owner        | Ex-miembro | No-miembro auth |
+| ------------------------------- | ----------- | ------------------------------------------- | ------------ | ---------- | --------------- |
+| Ver Post/Comment (visible)      | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Ver Post HIDDEN                 | ✗           | ✓                                           | ✓            | ✗          | ✗               |
+| Ver Comment DELETED (como tal)  | placeholder | ✓ raw                                       | ✓ raw        | ✗          | ✗               |
+| Ver Post eliminado              | 404         | 404                                         | 404          | 404        | 404             |
+| Crear Post                      | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Crear Comment                   | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Editar propio <60s              | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Editar propio ≥60s              | ✗           | admin edita Post propio                     | ✓ como admin | ✗          | ✗               |
+| Editar Post de otro             | ✗           | ✗ (no puede re-escribir — solo hide/delete) | ✗            | ✗          | ✗               |
+| Eliminar Post propio <60s       | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Eliminar Post de otro           | ✗           | ✓                                           | ✓            | ✗          | ✗               |
+| Eliminar Comment propio <60s    | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Eliminar Comment de otro        | ✗           | ✓                                           | ✓            | ✗          | ✗               |
+| Hide/Unhide Post                | ✗           | ✓                                           | ✓            | ✗          | ✗               |
+| Reaccionar                      | ✓           | ✓                                           | ✓            | ✗          | ✗               |
+| Flaggear                        | ✓           | ✓ (flaggea también)                         | ✓            | ✗          | ✗               |
+| Revisar flags (/settings/flags) | ✗           | ✓                                           | ✓            | ✗          | ✗               |
+| Mark read (dwell)               | ✓           | ✓                                           | ✓            | ✗          | ✗               |
 
 Todas las acciones requieren **place abierto** (`assertPlaceOpenOrThrow`). El gate de `(gated)/layout.tsx` ya lo cubre en lectura; las actions lo re-enforzan como defensa en profundidad.
 
@@ -441,15 +446,24 @@ Admin hace click en "Ocultar" en el dropdown del Post. Action `hidePostAction(po
 
 Reversible con `unhidePostAction`.
 
-### Delete soft
+### Delete
 
-Post: `deletePostAction`. Action paralela a hide; setea `deletedAt`. Miembros ya no lo ven; admin ve con marcador "eliminado por admin". Irreversible desde UI.
+**Post → hard delete** (C.G.1, ADR `docs/decisions/2026-04-21-post-hard-delete.md`).
+`deletePostAction` llama `hardDeletePost(postId)` en una única tx que: (1) cleanup
+polimórfico de reactions sobre POST y sobre cada COMMENT hijo, (2) cleanup polimórfico
+de flags idem, (3) `DELETE FROM "Post"` dispara CASCADE sobre comments + post-reads
+por FK. La fila desaparece; links y citas preservan `quotedCommentId` por
+`ON DELETE SET NULL`. Admin puede delete siempre; autor dentro de 60s. Irreversible.
 
-Comment: `deleteCommentAction`. Mismo patrón. UI renderiza `[mensaje eliminado — {fecha}]` preservando el autor solo si el actor es admin; para miembros, el nombre también se reemplaza por "miembro" (respeto del tono del producto, no dar pie a doxing).
+**Comment → soft delete.** `deleteCommentAction` setea `deletedAt`. UI renderiza
+`[mensaje eliminado — {fecha}]` preservando el autor solo si el actor es admin; para
+miembros, el nombre también se reemplaza por "miembro" (respeto del tono del producto,
+no dar pie a doxing).
 
-### Hard delete
+### Hard delete de Comment
 
-Solo DBA por SQL manual. No hay ruta desde UI.
+Solo DBA por SQL manual (o service role desde `members/` cron de erasure 365d). No hay
+ruta desde UI para hard-delete de Comment — el soft delete es suficiente.
 
 ### Flag workflow
 
@@ -488,8 +502,8 @@ Cada hide/unhide/delete/flag-review loguea pino con: `action`, `placeId`, `actor
   }
   ```
 - **Texto plano derivado** del AST: walker que extrae nodos `text` ignorando marks, trunca a 200 chars con elipsis. Se computa server-side al crear el Comment.
-- **Target se hide/delete después:** render compara `quotedCommentId` con estado actual; si target `deletedAt !== null` muestra `[mensaje eliminado]`; si `hiddenAt !== null` muestra `[mensaje oculto]`. Los miembros comunes no distinguen hide de delete en UI — solo admin.
-- **`quotedCommentId` nullable.** Preserva citas si un DBA hard-deletea el target (muy raro).
+- **Target se hide/delete después:** render compara `quotedCommentId` con estado actual; si target `deletedAt !== null` muestra `[mensaje eliminado]`. Los Comments no se hide (sólo soft-delete); el caso de Post hide no aplica a citas porque las citas son a Comments. Los miembros comunes no ven distinción entre hide/delete en UI — solo admin.
+- **`quotedCommentId` nullable con `ON DELETE SET NULL`.** Preserva citas si un DBA hard-deletea el Comment target, o si el Post padre se hard-deletea (caso común post-C.G.1) — cascade se dispara y el quotedCommentId queda null, render muestra placeholder.
 - **Borde ámbar izquierdo** en UI (clase Tailwind `border-l-2 border-l-amber-500` compatible con CSS vars del place).
 
 ## 12. Rich text — TipTap + JSON AST
@@ -597,28 +611,36 @@ El componente `<PostBody>` llama `renderRichText` y usa `dangerouslySetInnerHTML
 
 ## 13. Realtime y presencia
 
-> **Alcance MVP (C.F, 2026-04-24):** de todo lo que describe esta sección, el MVP
-> implementa **solo presence** en `post:<postId>`. No se broadcastean nuevos
-> comments — aparecen al recargar o navegar. Rationale: priorizar "saber quién
-> está" por sobre "ver mensajes aparecer" evita el forking de state optimista vs
-> SSR. La misma infraestructura (private channels + policies en `realtime.messages`)
-> servirá después para DM/chat y, si se decide, para broadcast de comments.
-> Decisión registrada en `.claude/plans/gleaming-chasing-comet.md`.
+> **Alcance actual (C.F + C.J, 2026-04-21):** el thread `post:<postId>` expone
+> **dos capas realtime**: (a) presence de miembros con la vista abierta y (b)
+> broadcast de nuevos comments (`comment_created`). `revalidatePath` sigue
+> siendo la **fuente autoritaria** — el broadcast es optimización de latencia,
+> best-effort. Ambas capas comparten las policies `realtime.messages` ya
+> definidas en la migration `20260424000000_realtime_discussions_presence`.
+> La infraestructura shared vive en `src/shared/lib/realtime/` y se reutilizará
+> en DM, chat y eventos live. Decisión registrada en
+> `docs/decisions/2026-04-21-shared-realtime-module.md`.
 
 ### Canales
 
 Supabase Realtime, **solo** dentro del thread (per `docs/realtime.md`):
 
 - `post:<postId>`:
-  - **Presence:** miembros con la vista del Post abierta. **Implementado en MVP.**
-  - **Broadcast:** nuevos comments emitidos desde server action post-commit. **Fuera de MVP — post-C.F.**
+  - **Presence:** miembros con la vista del Post abierta (track via
+    `channel.track({ userId, displayName, avatarUrl })`).
+  - **Broadcast:** nuevos comments emitidos desde `createCommentAction`
+    post-commit. Event `comment_created`, payload `{ comment: CommentView }`.
 
 **Sin canales a nivel place/list.** Contradice `docs/realtime.md` y el principio anti-ansiedad.
 
 ### Autorización
 
 - **Subscribe:** RLS enforcea que `auth.uid()` es miembro activo del place derivado del postId. La subscripción a `post:<postId>` requiere que el cliente tenga permiso de lectura sobre ese Post (política SELECT). El canal se abre con `{ config: { private: true } }` contra `realtime.messages` — ver migration `20260424000000_realtime_discussions_presence` y funciones `realtime.discussions_post_id_from_topic()` + `realtime.discussions_viewer_is_thread_member()`.
-- **Broadcast:** **emitido desde server action tras commit** (`supabase.channel(…).send({type: 'broadcast', event: 'comment_created', payload})`). Nunca desde cliente. Previene flooding. (Fuera del MVP.)
+- **Broadcast (server → canal):** emitido desde `createCommentAction` tras el commit vía
+  `POST <SUPABASE_URL>/realtime/v1/api/broadcast` (HTTP one-shot, ~50ms;
+  sin handshake WS) con el JWT del actor obtenido del `createSupabaseServer()`.
+  RLS aplica idéntico al subscribe — policy `discussions_thread_send` sobre
+  `realtime.messages`. Nunca emitido desde cliente. Ver `supabase-sender.ts`.
 
 ### Presencia
 
@@ -649,11 +671,44 @@ Romper cualquiera de las dos degrada el indicador al punto de hacerlo ruido. Amb
 
 ### Fallback sin realtime
 
-Thread funciona sin ws: los comments aparecen al refrescar manual. Presencia no se actualiza. Alineado con `docs/realtime.md#Fallback`.
+Thread funciona sin ws: los comments aparecen al refrescar manual (el `revalidatePath`
+del action es siempre el path autoritativo). Presencia no se actualiza. Alineado
+con `docs/realtime.md#Fallback`.
 
 ### Dedupe broadcasts
 
-Si usuario creó un comment hace <2s y recibe el broadcast del suyo propio, el cliente deduplica por `commentId` contra el state optimista que ya insertó.
+El hook `useCommentRealtime` (`src/features/discussions/ui/use-comment-realtime.ts`)
+mantiene un `Set<commentId>` inicializado con los items SSR. Cada mensaje recibido
+por broadcast:
+
+1. Si `comment.id` ya está en el Set → descarta (cubre: emisor recibe su propio
+   broadcast **y** el revalidatePath re-streamea el mismo comment; cliente aplica
+   dedupe ambos casos).
+2. Si es nuevo → agrega al Set + appendea al state local.
+
+Cuando `initialItems` cambia (SSR re-stream post-revalidate), el hook marca los
+IDs nuevos como vistos y los purga de `appendedComments` — así el comment
+aparece sólo una vez (desde SSR), no duplicado.
+
+### Feature flag de rollback
+
+`DISCUSSIONS_BROADCAST_ENABLED=false` desactiva la emisión del broadcast sin deploy
+de código — el sistema cae al comportamiento pre-C.J (sólo `revalidatePath`). Default
+ON. Ver `docs/decisions/2026-04-21-shared-realtime-module.md`.
+
+### Postura best-effort
+
+El broadcast **nunca** propaga errores al action: si falla (sin sesión, HTTP non-2xx,
+network), se logea `pino.warn({ event: 'commentBroadcastFailed' })` y el action
+continúa normalmente. La visibilidad del comment no depende del broadcast — depende
+del commit + `revalidatePath`. Este invariante protege el happy path.
+
+### Payload
+
+El broadcast viaja `{ comment: CommentView }` full (body rich-text incluido). No
+incluye `reactionsByKey` (counts=0 hasta próximo revalidate), mismo trade-off que
+`LoadMoreComments`. Tamaño típico <5KB, muy por debajo del cap de ~250KB por
+message de Supabase.
 
 ## 14. Paginación
 
@@ -686,15 +741,28 @@ No virtual scroll. Botón **"Ver más antiguos"** al final de la lista que carga
 
 Subclases que se agregan en C.C. Viven en `src/features/discussions/domain/errors.ts` (feature-local; `shared/errors` ya tiene base + OutOfHoursError):
 
-| Error                | Code                  | Cuándo                                                                                                             |
-| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `EditWindowExpired`  | `EDIT_WINDOW_EXPIRED` | Autor intenta editar tras 60s.                                                                                     |
-| `PostHiddenError`    | `POST_HIDDEN`         | Comentar en Post con `hiddenAt IS NOT NULL`.                                                                       |
-| `PostDeletedError`   | `POST_DELETED`        | Comentar en Post con `deletedAt IS NOT NULL`.                                                                      |
-| `InvalidQuoteTarget` | `INVALID_QUOTE`       | `quotedCommentId` no pertenece al postId, no existe, o pertenece a un Comment que a su vez cita (profundidad > 1). |
-| `FlagAlreadyExists`  | `FLAG_DUPLICATE`      | UNIQUE violation en Flag.                                                                                          |
-| `RichTextTooLarge`   | `RICH_TEXT_TOO_LARGE` | Body serializado > 20 KB.                                                                                          |
-| `InvalidMention`     | `INVALID_MENTION`     | `userId` mencionado no es miembro activo del place.                                                                |
+Viven en `src/features/discussions/domain/errors.ts`:
+
+| Error                    | Code                  | Cuándo                                                                                                                                                     |
+| ------------------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EditWindowExpired`      | `INVARIANT_VIOLATION` | Autor intenta editar tras 60s.                                                                                                                             |
+| `PostHiddenError`        | `CONFLICT`            | Comentar en Post con `hiddenAt IS NOT NULL`.                                                                                                               |
+| `CommentDeletedError`    | `CONFLICT`            | Editar un Comment con `deletedAt IS NOT NULL`.                                                                                                             |
+| `InvalidQuoteTarget`     | `VALIDATION`          | `quotedCommentId` no pertenece al postId, no existe, o pertenece a un Comment que a su vez cita (profundidad > 1).                                         |
+| `RichTextTooLarge`       | `VALIDATION`          | Body serializado > 20 KB.                                                                                                                                  |
+| `InvalidMention`         | `VALIDATION`          | `userId` mencionado no es miembro activo del place.                                                                                                        |
+| `SlugCollisionExhausted` | `INVARIANT_VIOLATION` | `generatePostSlug` agotó 1000 sufijos numéricos. Inalcanzable en prod sin reserved set corrupto; se modela como invariante para discriminar en logging/UI. |
+
+**Discriminación cross-boundary**: `code` (categoría) + `name` (subclase). `code` pertenece al enum `DomainErrorCode` (fijo); la subclase específica viaja en `name` (own-enumerable, sobrevive JSON serialization del boundary de server actions). Los catchers en UI/middlewares chequean ambos. Ver `src/shared/errors/domain-error.ts` § "boundary de server actions".
+
+Viven en `src/features/flags/domain/errors.ts` (sub-slice flags separado post-C.G):
+
+| Error               | Code             | Cuándo                                                          |
+| ------------------- | ---------------- | --------------------------------------------------------------- |
+| `FlagAlreadyExists` | `FLAG_DUPLICATE` | UNIQUE violation en Flag (reporter ya flaggeó el mismo target). |
+
+Nota post-C.G.1: no existe `PostDeletedError` — Post es hard delete (la fila desaparece).
+El intento de interactuar con un Post borrado produce `NotFoundError` estándar.
 
 Reusos de `shared/errors/domain-error.ts`:
 
@@ -834,11 +902,103 @@ Checklist que C.B–C.H deben cumplir:
 - `findOrCreateCurrentOpening` testeado en los 6 casos del lifecycle (sección 9).
 - Pino log verificable en tests (spy en logger).
 
-### RLS (tests SQL directos)
+### RLS (tests SQL directos) — C.H ✅ (2026-04-22)
 
-- Con JWT de user A miembro del place X, SELECT no retorna filas de place Y.
-- Con JWT de user A no-miembro, INSERT en Post falla.
-- Con service role, SELECT retorna todo sin filtro.
+Implementado con harness `pg.Pool` sobre `DIRECT_URL` (session mode). Cada caso abre tx,
+opcionalmente seedea como `postgres` super, cambia a rol `authenticated`, setea
+`request.jwt.claims` vía `set_config(…, true)`, ejecuta queries bajo RLS, `ROLLBACK`.
+Patrón oficial Supabase — sin firma de JWTs, sin libs nuevas. Ver `tests/rls/harness.ts`.
+
+**72 casos verdes** contra policies instaladas en `my-place`:
+
+| Tabla             | Casos | Archivo                               |
+| ----------------- | ----- | ------------------------------------- |
+| helpers-functions | 8     | `tests/rls/helpers-functions.test.ts` |
+| Post              | 19    | `tests/rls/post.test.ts`              |
+| Comment           | 12    | `tests/rls/comment.test.ts`           |
+| Reaction          | 8     | `tests/rls/reaction.test.ts`          |
+| Flag              | 14    | `tests/rls/flag.test.ts`              |
+| PostRead          | 6     | `tests/rls/post-read.test.ts`         |
+| PlaceOpening      | 5     | `tests/rls/place-opening.test.ts`     |
+
+Roles ejercitados: `owner`, `admin`, `memberA`, `memberB`, `exMember` (leftAt set), `nonMember`, `anon`.
+
+**Cobertura por tabla × rol × acción:**
+
+| Tabla / acción          | active                                             | ex-member                               | admin     | owner | non-member | anon |
+| ----------------------- | -------------------------------------------------- | --------------------------------------- | --------- | ----- | ---------- | ---- |
+| Post SELECT visible     | ✓                                                  | ✗                                       | ✓         | ✓     | ✗          | ✗    |
+| Post SELECT hidden      | ✗                                                  | ✗                                       | ✓         | ✓     | ✗          | ✗    |
+| Post INSERT self-author | ✓                                                  | ✗                                       | ✓         | ✓     | ✗          | ✗    |
+| Post INSERT otro author | ✗                                                  | ✗                                       | ✗         | ✗     | ✗          | ✗    |
+| Post UPDATE author      | ✓                                                  | ✗                                       | ✓ (admin) | ✓     | ✗          | —    |
+| Post DELETE             | ✗                                                  | ✗                                       | ✗         | ✗     | ✗          | ✗    |
+| Comment × 5 acciones    | idem Post (sin filtro deletedAt en SELECT)         |
+| Reaction × 4 acciones   | idem (DELETE self sin `is_active_member` — tested) |
+| Flag SELECT own         | ✓                                                  | ✓ (policy sin is_active_member, tested) | ✓         | ✓     | ✗          | —    |
+| Flag SELECT todos       | ✗                                                  | ✗                                       | ✓         | ✓     | ✗          | —    |
+| Flag UPDATE             | ✗                                                  | ✗                                       | ✓         | ✓     | ✗          | —    |
+| PostRead × 2 acciones   | idem (SELECT self O active-member-del-post)        |
+| PlaceOpening SELECT     | ✓                                                  | ✗                                       | ✓         | ✓     | ✗          | —    |
+| PlaceOpening mutate     | ✗ (todos — sólo service_role, sin policy)          |
+
+Reconciliación migration SQL ↔ DB live (2026-04-23): la migration
+`prisma/migrations/20260426000000_post_hard_delete_align/migration.sql` codifica el
+cambio que se había aplicado manualmente vía SQL Editor de Supabase tras C.G.1
+(ADR `docs/decisions/2026-04-21-post-hard-delete.md`). Sus pasos (todos idempotentes):
+drop de la columna `Post.deletedAt`, drop + recreate de la policy
+`Post_select_active_member` sin la branch de `deletedAt`, drop del índice parcial
+`Post_placeId_lastActivityAt_active_idx` (reemplazado por no-parcial), redefinición de
+la función `realtime.discussions_viewer_is_thread_member()` sin filtro de `deletedAt`,
+recreate de las policies `discussions_thread_receive` / `discussions_thread_send` sobre
+`realtime.messages`. Aplicar sobre `my-place` es no-op semántico; aplicar sobre un DB
+fresco (CI branches, ambientes nuevos) lo lleva al estado actual de prod.
+
+### E2E (Playwright, C.H + C.H.1 + C.H.2) ✅ (2026-04-22)
+
+Infraestructura production-ready:
+
+- **`tests/global-setup.ts`** — corre `tests/fixtures/e2e-seed.ts` (aditivo, FK-safe,
+  prefijos reservados `usr_e2e_*` / `place_e2e_*` / `/^e2e-.*@e2e\.place\.local$/`),
+  luego logs in de 6 roles vía `POST /api/test/sign-in` → persiste cookies a
+  `tests/.auth/<role>.json`. Consumido por specs vía `storageStateFor(role)`.
+- **`src/app/api/test/sign-in/route.ts`** — gate doble: `NODE_ENV === 'production'` →
+  404 sin leer body; header `x-test-secret !== E2E_TEST_SECRET` → 404. 9 casos unit
+  cubren ambos paths. Ver `src/app/api/test/sign-in/__tests__/route.test.ts`.
+- **Helpers**: `tests/helpers/{subdomain,playwright-auth,time,reset-content,db,prisma}.ts`.
+  `reset-content` tiene guard `/^place_e2e_/` para evitar tocar dev data. Prisma singleton
+  compartido en `prisma.ts` evita saturar el pooler bajo paralelismo.
+- **Puerto 3001** en dev server local (evita colisión con dev servers de otros proyectos
+  en el host). Cookies cross-subdomain se mantienen (cookie-domain strippea puerto).
+- **Aislamiento por project**: specs que crean posts usan slug `${spec}-${browserName}`
+  para que chromium y mobile-safari no colisionen en `UNIQUE(placeId, slug)` al correr
+  en paralelo. Ver ADR `2026-04-22-mobile-safari-webkit-flows.md`.
+
+**48 tests verdes × 2 browsers** (chromium + mobile-safari):
+
+| Archivo                            | Tests por browser | Alcance                                                               |
+| ---------------------------------- | ----------------- | --------------------------------------------------------------------- |
+| `smoke/health.spec.ts`             | 1                 | `GET /api/health` → 200 + db=up                                       |
+| `smoke/auth.spec.ts`               | 4                 | Landing + login + gate redirect                                       |
+| `smoke/middleware-routing.spec.ts` | 3                 | Multi-tenant routing apex/sub                                         |
+| `smoke/auth-storageState.spec.ts`  | 1                 | Validación de globalSetup + storageState                              |
+| `flows/post-crud.spec.ts`          | 4                 | Lista / CTA / nonMember bloqueado / ventana 60s expiró (backdatePost) |
+| `flows/hours-gate.spec.ts`         | 3                 | Belgrano cerrado → memberB ve gate / reopen / owner mantiene settings |
+| `flows/admin-inline.spec.ts`       | 2                 | Admin kebab con items / autor no-admin no ve kebab                    |
+| `flows/comment-reactions.spec.ts`  | 2                 | Comment seedeado aparece / reaction heart persiste en DB              |
+| `flows/moderation.spec.ts`         | 2                 | Owner reporta (modal → action → DB) / admin ve flag en cola           |
+| `flows/invite-accept.spec.ts`      | 1                 | Admin completa form → Invitation creada con token                     |
+
+### CI ✅ (2026-04-22)
+
+Job `e2e` rescripted con **branches Supabase efímeras** vía Management API.
+`scripts/ci/branch-helpers.sh` expone `create_branch → poll_until_active →
+fetch_branch_env → delete_branch`. `if: always()` en cleanup + `concurrency:
+cancel-in-progress` evitan leaked branches de runs cancelados. Requiere GH Secrets:
+`SUPABASE_ACCESS_TOKEN` (scope projects:write,branches:write), `SUPABASE_PROJECT_REF`,
+`E2E_TEST_SECRET`. Job falla con mensaje explícito si un secret falta — no degrada
+silenciosamente. Costo ≈ $0.03/run. Ver ADR
+`docs/decisions/2026-04-22-e2e-rls-testing-cloud-branches.md`.
 
 ### UI (C.E, C.F, C.G)
 
@@ -851,19 +1011,6 @@ Checklist que C.B–C.H deben cumplir:
 - `/settings/flags` lista + acciones funcionan + badge count.
 - Realtime: nuevo comment aparece en todos los clientes presentes.
 
-### E2E (Playwright, C.H)
-
-Escenario golden path:
-
-1. User A crea Post.
-2. User B abre el thread, dwell ≥5s ⇒ A ve a B como lector.
-3. B comenta.
-4. A recibe el comment vía realtime sin refresh.
-5. B reacciona con 👍.
-6. A flaggea el comment por `OTHER` con nota.
-7. Admin entra a `/settings/flags`, oculta el post.
-8. Miembros ya no ven el post; admin ve como `HIDDEN`.
-
 ### Build
 
 `pnpm typecheck && pnpm lint && pnpm test && pnpm build` verdes.
@@ -871,7 +1018,7 @@ Escenario golden path:
 ### MCP supabase (manual)
 
 ```sql
-SELECT id, "placeId", "authorUserId", title, "deletedAt", "hiddenAt"
+SELECT id, "placeId", "authorUserId", title, "hiddenAt"
 FROM "Post" WHERE "placeId" = 'place_xxx' ORDER BY "lastActivityAt" DESC;
 
 SELECT COUNT(*) FROM "Flag" WHERE "placeId" = 'place_xxx' AND status = 'OPEN';

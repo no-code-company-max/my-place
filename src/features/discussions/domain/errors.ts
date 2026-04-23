@@ -75,3 +75,23 @@ export class InvalidMention extends ValidationError {
     super('La mención apunta a un usuario que no es miembro activo.', context)
   }
 }
+
+/**
+ * `generatePostSlug` no pudo asignar un slug único tras `attemptedSuffixes`
+ * intentos (cap de diseño = 1000). Estadísticamente inalcanzable en prod,
+ * pero el invariante existe: si se llega acá, el reserved set del place está
+ * corrupto o hay un título patológico. Se modela como `InvariantViolation`
+ * — no es race/concurrencia (no mapea a `ConflictError`) ni input inválido
+ * del usuario (no mapea a `ValidationError`).
+ *
+ * Cross-boundary (Next 15 server action → cliente): la categoría viaja en
+ * `code = 'INVARIANT_VIOLATION'` + la subclase específica en `name =
+ * 'SlugCollisionExhausted'`. Ambos son own-enumerable (sobreviven a
+ * JSON.stringify). Los catchers en UI/middlewares discriminan por `name` sin
+ * depender de `instanceof`. Ver `domain-error.ts` § "boundary de server actions".
+ */
+export class SlugCollisionExhausted extends InvariantViolation {
+  constructor(context: { title: string; candidate: string; attemptedSuffixes: number }) {
+    super(`No pudimos asignar una URL única tras ${context.attemptedSuffixes} intentos.`, context)
+  }
+}

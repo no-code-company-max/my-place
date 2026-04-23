@@ -10,7 +10,8 @@
  * posts" o un estado conocido. Idempotente.
  */
 
-import { PrismaClient, type Prisma } from '@prisma/client'
+import { type Prisma, type PrismaClient } from '@prisma/client'
+import { getTestPrisma, closeTestPrisma } from './prisma'
 import {
   E2E_BASELINE_POST_SLUG,
   E2E_DISPLAY_NAMES,
@@ -20,11 +21,7 @@ import {
   type E2EPlaceKey,
 } from '../fixtures/e2e-data'
 
-let _prisma: PrismaClient | null = null
-function getPrisma(): PrismaClient {
-  if (!_prisma) _prisma = new PrismaClient()
-  return _prisma
-}
+const getPrisma = getTestPrisma
 
 function assertE2EPlaceId(placeId: string): void {
   if (!placeId.startsWith(E2E_PLACE_ID_PREFIX)) {
@@ -78,9 +75,4 @@ export async function resetContent(placeKey: E2EPlaceKey): Promise<void> {
   })
 }
 
-export async function closeResetPrisma(): Promise<void> {
-  if (_prisma) {
-    await _prisma.$disconnect()
-    _prisma = null
-  }
-}
+export { closeTestPrisma as closeResetPrisma }

@@ -50,7 +50,10 @@ confusión). Queda auditado en pino con `byAdmin: true`.
 
 ## Implementación
 
-### Schema (migración manual vía Supabase SQL Editor, no archivo Prisma)
+### Schema
+
+El cambio se ejecutó originalmente sobre `my-place` vía Supabase SQL Editor
+(sin archivo Prisma en ese momento):
 
 ```sql
 ALTER TABLE "Post" DROP COLUMN "deletedAt";
@@ -59,6 +62,15 @@ ALTER TABLE "Post" DROP COLUMN "deletedAt";
 
 Se retiró el índice que incluía `deletedAt` (queda sólo el `createdAt DESC`
 para listado). `schema.prisma` refleja la columna removida.
+
+**Reconciliación posterior (2026-04-23)**: la migración
+`prisma/migrations/20260426000000_post_hard_delete_align/migration.sql` codifica
+estos pasos más la actualización de la policy `Post_select_active_member` y la
+función `realtime.discussions_viewer_is_thread_member` (ambas referenciaban
+`deletedAt` en las migrations históricas 20260422000100 y 20260424000000). Todos
+los statements son idempotentes: no-op semántico sobre `my-place`, corrección
+completa sobre un DB fresco (CI branches, ambientes nuevos) — garantiza que
+`prisma migrate deploy` from zero reproduce el schema actual de prod.
 
 ### `hardDeletePost`
 

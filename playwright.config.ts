@@ -9,6 +9,7 @@ const port = new URL(baseURL).port || '3001'
 const base = {
   testDir: './tests/e2e',
   fullyParallel: true,
+  workers: process.env.CI ? 2 : 3,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: (process.env.CI ? 'github' : 'list') as 'github' | 'list',
@@ -23,7 +24,14 @@ const base = {
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-safari', use: { ...devices['iPhone 14'] } },
+    {
+      // C.H.2 cerrado (2026-04-22): diagnóstico descartó que webkit sea el problema.
+      // Causa raíz eran slugs compartidos entre projects. Fix aplicado con
+      // `${spec}-${browserName}` en beforeAll de specs que crean posts.
+      // Ver ADR `docs/decisions/2026-04-22-mobile-safari-webkit-flows.md`.
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 14'] },
+    },
   ],
 } satisfies PlaywrightTestConfig
 

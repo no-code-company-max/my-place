@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MembershipRole } from '@prisma/client'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { EditWindowExpired, InvalidQuoteTarget } from '../domain/errors'
@@ -48,7 +48,14 @@ vi.mock('@/shared/config/env', () => ({
   serverEnv: {
     APP_EDIT_SESSION_SECRET: 'x'.repeat(48) + 'comments-actions-test-secret',
   },
+  clientEnv: {
+    NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
+  },
 }))
+
+import { FakeBroadcastSender } from '@/shared/lib/realtime/server'
+import { resetBroadcastSender, setBroadcastSender } from '@/shared/lib/realtime/sender-provider'
 
 import {
   createCommentAction,
@@ -78,8 +85,16 @@ function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
   )
 }
 
+let fakeBroadcastSender: FakeBroadcastSender
+
 beforeEach(() => {
   vi.resetAllMocks()
+  fakeBroadcastSender = new FakeBroadcastSender()
+  setBroadcastSender(fakeBroadcastSender)
+})
+
+afterEach(() => {
+  resetBroadcastSender()
 })
 
 describe('createCommentAction', () => {
@@ -179,6 +194,76 @@ describe('createCommentAction', () => {
     await expect(createCommentAction({ postId: 'po-x', body: bodyDoc })).rejects.toBeInstanceOf(
       NotFoundError,
     )
+  })
+
+  it('tras commit: broadcast `comment_created` sobre `post:<id>` con payload {comment}', async () => {
+    mockActiveMember()
+    postFindUnique.mockResolvedValue({
+      id: 'po-1',
+      placeId: 'place-1',
+      slug: 'tema-1',
+      hiddenAt: null,
+    })
+    commentCreate.mockResolvedValue({ id: 'c-new' })
+    postUpdateMany.mockResolvedValue({ count: 1 })
+    // `emitCommentBroadcast` re-fetchea via findCommentById tras el commit
+    // para obtener una CommentView consistente.
+    commentFindUnique.mockResolvedValue({
+      id: 'c-new',
+      postId: 'po-1',
+      placeId: 'place-1',
+      authorUserId: 'user-1',
+      authorSnapshot: { displayName: 'Max', avatarUrl: null },
+      body: bodyDoc,
+      quotedCommentId: null,
+      quotedSnapshot: null,
+      createdAt: new Date('2026-04-22T12:00:00Z'),
+      editedAt: null,
+      deletedAt: null,
+    })
+
+    await createCommentAction({ postId: 'po-1', body: bodyDoc })
+
+    expect(fakeBroadcastSender.captures).toHaveLength(1)
+    expect(fakeBroadcastSender.lastCapture).toMatchObject({
+      topic: 'post:po-1',
+      event: 'comment_created',
+      payload: { comment: expect.objectContaining({ id: 'c-new' }) },
+    })
+    // revalidatePath sigue disparándose — broadcast es optimización, no reemplazo.
+    expect(revalidatePathFn).toHaveBeenCalledWith('/the-place/conversations/tema-1')
+  })
+
+  it('error del broadcast NO rompe el action: se traga y sigue con revalidate', async () => {
+    mockActiveMember()
+    postFindUnique.mockResolvedValue({
+      id: 'po-1',
+      placeId: 'place-1',
+      slug: 'tema-1',
+      hiddenAt: null,
+    })
+    commentCreate.mockResolvedValue({ id: 'c-new' })
+    postUpdateMany.mockResolvedValue({ count: 1 })
+    commentFindUnique.mockResolvedValue({
+      id: 'c-new',
+      postId: 'po-1',
+      placeId: 'place-1',
+      authorUserId: 'user-1',
+      authorSnapshot: { displayName: 'Max', avatarUrl: null },
+      body: bodyDoc,
+      quotedCommentId: null,
+      quotedSnapshot: null,
+      createdAt: new Date(),
+      editedAt: null,
+      deletedAt: null,
+    })
+    // Sender fail mode: simula un transport failure.
+    setBroadcastSender(new FakeBroadcastSender({ failMode: true }))
+
+    const result = await createCommentAction({ postId: 'po-1', body: bodyDoc })
+
+    expect(result).toEqual({ ok: true, commentId: 'c-new' })
+    expect(revalidatePathFn).toHaveBeenCalled()
   })
 })
 

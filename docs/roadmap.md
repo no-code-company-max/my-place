@@ -2,7 +2,7 @@
 
 Orden de construcción priorizado para minimizar bloqueos y permitir iteración. Cada fase es aproximadamente una semana, ajustar al ritmo real.
 
-## Fase 1 — Infraestructura
+## Fase 1 — Infraestructura ✅
 
 - Next.js 15 + TypeScript strict + Tailwind
 - eslint con `no-restricted-paths`
@@ -15,7 +15,7 @@ Orden de construcción priorizado para minimizar bloqueos y permitir iteración.
 
 **Entregable**: `prueba.place.app` responde, hay login, se crea user en DB.
 
-## Fase 2 — Places + Members
+## Fase 2 — Places + Members ✅
 
 - Feature `places`: crear, listar, archivar
 - Feature `members`: invitar por email, aceptar invitación, salir del place
@@ -27,7 +27,7 @@ Orden de construcción priorizado para minimizar bloqueos y permitir iteración.
 
 **Entregable**: podés crear un place, invitar a alguien, sumarse, multi-admin funciona.
 
-## Fase 2.5 — Hours (horario de apertura del place)
+## Fase 2.5 — Hours (horario de apertura del place) ✅ (2026-04-21)
 
 Implementar según `docs/features/hours/spec.md`:
 
@@ -61,7 +61,7 @@ Implementar según `docs/features/hours/spec.md`:
 
 **Entregable**: un place puede encender/apagar features y la UI responde.
 
-## Fase 5 — Discussions (foro)
+## Fase 5 — Discussions (foro) ✅ (2026-04-22, C.H cierra la red de tests; C.H.1 flows adicionales pendiente)
 
 Implementar según `docs/features/discussions/spec.md` (spec canónico) y `docs/ontologia/conversaciones.md` (ontología).
 
@@ -98,7 +98,9 @@ Implementar según `docs/features/discussions/spec.md` (spec canónico) y `docs/
 - **C.G** — Moderación UI: `FlagButton` discreto en `PostDetail` + `CommentItem`, `FlagModal` con Radix Dialog (Zod + `useTransition` + Sonner), cola admin `/settings/flags` con `FlagQueueItem` (ignorar / ocultar / eliminar). `reviewFlagAction` ampliado con `sideEffect` transaccional (HIDE_TARGET / DELETE_TARGET) — aplica la review + update del target en la misma `prisma.$transaction`. Split del sub-slice `features/flags/` (backend migrado desde discussions; `public.ts` client-safe + `public.server.ts` server-only por el chain de `server-only` que Next traza al bundle cliente). ADR: `docs/decisions/2026-04-21-flags-subslice-split.md`. ✅ (2026-04-21)
 - **C.G.1** — Moderación inline: `PostAdminMenu` (kebab en `PostDetail` con Editar / Ocultar / Eliminar) + `CommentAdminMenu` (kebab en `CommentItem` con Eliminar). Post delete pasó a **hard delete** (cascade de comments + postReads vía FK, cleanup polimórfico de reactions + flags en la misma tx) — desapareció la columna `Post.deletedAt` y el estado `DELETED`. `reviewFlagAction` con `sideEffect: DELETE_TARGET` sobre POST delega en `hardDeletePost` tras reclamar el flag. Edit/Delete bypasean la ventana de 60s para admin (`canEditPost` + `canDeleteContent` con admin-bypass existente). Cola `/settings/flags` con tabs Pendientes/Resueltos + paginación 20 (cursor keyset). Edit del post vive en `/conversations/new?edit=<postId>` — la misma página sirve crear y editar. `shared/ui/dropdown-menu.tsx` nuevo primitive Radix. ADR: `docs/decisions/2026-04-21-post-hard-delete.md`. ✅ (2026-04-21)
 - **C.H** — E2E Playwright + RLS tests directos con JWT alterno. Infra production-ready sobre `my-place` Cloud: `/api/test/sign-in` con gate doble + 9 casos unit, seed E2E aditivo FK-safe con prefijos reservados (`usr_e2e_*`, `place_e2e_*`, `/^e2e-.*@e2e\.place\.local$/`), harness RLS `pg` + `SET LOCAL request.jwt.claims` sobre `DIRECT_URL` con **72 casos directos** cubriendo las 16 policies + 2 helpers (`is_active_member`, `is_place_admin`). Playwright `globalSetup` seedea + loguea los 6 roles a `storageState`. 24 tests E2E verdes × 2 browsers (chromium + mobile-safari): smokes (health, auth, middleware-routing, auth-storageState) + `flows/post-crud` MVP. CI job `e2e` rescripted con branches Supabase efímeras vía Management API (`scripts/ci/branch-helpers.sh`): `create → poll → fetch env → migrate → seed → rls → e2e → delete (always())`, `concurrency.cancel-in-progress` evita branches leaked. ADR: `docs/decisions/2026-04-22-e2e-rls-testing-cloud-branches.md`. ✅ (2026-04-22)
-- **C.H.1** — Flows E2E adicionales (mecánicos sobre la infra de C.H): `flows/comment-reactions`, `flows/moderation`, `flows/invite-accept` (con FakeMailer), `flows/hours-gate`, `flows/admin-inline` (C.G.1), test de ventana 60s via `backdatePost`. Pendiente.
+- **C.H.1** — Flows E2E adicionales sobre la infra de C.H. 6 spec files × 13 tests × chromium: `post-crud` (3 + test de ventana 60s vía `backdatePost` + post propio del spec), `hours-gate` (3 sobre Belgrano, `setPlaceClosedByKey` / `setPlaceAlwaysOpen`), `admin-inline` (2 — kebab admin + autor no-admin), `comment-reactions` (2 — comment seedeado + reaction persiste en DB), `moderation` (2 — owner reporta + admin ve en cola), `invite-accept` (1 — admin completa form + Invitation creada con token). Aislamiento real por spec: cada flow crea su propio post con slug dedicado (`*-spec-post`) + `deletePostBySlug` + `afterAll` con `deletePostById` cascade. Prisma singleton compartido entre helpers (`tests/helpers/prisma.ts`) evita saturar el pooler. `playwright.config.ts` excluye `flows/**` de mobile-safari vía `testIgnore` (WebKit + Next dev + Radix tiene fricciones conocidas; smokes siguen corriendo en ambos browsers). CI se beneficia del mismo setup. Decisión Mobile-safari coverage pendiente en C.H.2. ✅ (2026-04-22)
+- **C.H.2** — Mobile-safari coverage de flows. Diagnóstico instrumentado descartó la hipótesis inicial (Next dev + Radix + WebKit streaming). Causa raíz real: race condition en `UNIQUE(placeId, slug)` cuando chromium y mobile-safari corrían `beforeAll` en paralelo sobre el mismo slug fijo. Fix: slugs per-project (`${spec}-${browserName}`) en `comment-reactions`, `admin-inline`, `moderation`. Removido `testIgnore: ['**/flows/**']`. Timeouts de modal close y poll bumpeados para variance WebKit emulado (más lento bajo paralelismo vs chromium). **48 tests verdes** ambos browsers. ADR `docs/decisions/2026-04-22-mobile-safari-webkit-flows.md`. ✅ (2026-04-22)
+- **C.J** — Broadcast de `comment_created` en realtime. `src/shared/lib/realtime/` expone primitivos transport-agnostic (`BroadcastSender` / `BroadcastSubscriber`) con impls Supabase (HTTP REST `/realtime/v1/api/broadcast` en server + WS subscribe en cliente) y fakes para tests. Semantic layer `features/discussions/server/realtime.ts` (`broadcastNewComment`) + hook `useCommentRealtime` con dedupe por `commentId` y sync con `initialItems` del SSR. `revalidatePath` sigue como fuente autoritaria — broadcast es optimización best-effort (errores se tragan con `pino.warn`). Feature flag `DISCUSSIONS_BROADCAST_ENABLED` para rollback sin deploy. ADR `docs/decisions/2026-04-21-shared-realtime-module.md`. ✅ (2026-04-21)
 
 **Fuera de esta fase** (v2 o descartado): audio, temporadas, UI dedicada de dormidos, búsqueda full-text, DMs, push/email, analytics visibles, rich text con imágenes/tablas.
 
@@ -191,10 +193,27 @@ de ninguna fase, pero hay que retomar antes de dar el producto por maduro.
   widget de "novedades" en portada, panel admin de moderación), envolver con
   `cache()` — mismo patrón que `findOrCreateCurrentOpening`. Evita groupBy
   duplicado del `PostRead` por viewer.
-- **Broadcast de nuevos comments.** Decidido fuera de MVP (ver
-  `docs/features/discussions/spec.md § 13`). Infra lista (private channels +
-  policies `realtime.messages` sobre `post:%`); implementación: emisión
-  post-commit desde `createCommentAction` + dedupe client-side por `commentId`.
+- **Broadcast de `comment_edited` y `comment_deleted`.** `comment_created` ya
+  viaja via broadcast (C.J, 2026-04-21). Extender el evento tipado en
+  `shared/lib/realtime` no requiere cambios al layer. El hook
+  `useCommentRealtime` ganaría un switch sobre `event` y un reducer que
+  aplica `edited` (replace body + bump version) o `deleted` (flag placeholder).
+- **Optimistic insert en `CommentComposer`.** Hoy el emisor ve su comment
+  ~300ms tras submit via su propio broadcast. UX polish: insertar en state
+  local al submit + reconciliar cuando llega el broadcast (dedupe por
+  `commentId` del server response). Complejidad baja, valor marginal en MVP.
+- **Migrar `thread-presence.tsx` a `SupabaseBroadcastSubscriber` del shared.**
+  Hoy abre el canal inline — funciona pero duplica la lógica de lifecycle.
+  Consolidar en el shared tras alguna iteración más de uso real.
+- **Telemetría de emit/fail rate de broadcast.** Eventos pino
+  `commentBroadcast{Emitted,Failed}` están estructurados para export a
+  Grafana / Datadog cuando se decida observabilidad activa.
+- **Retry policy en `broadcastNewComment`.** Hoy best-effort sin retry. Si
+  las métricas muestran tail elevado de fail-rate, considerar 1 reintento
+  con backoff corto (no bloqueante del action).
+- **E2E Realtime con 2 browser contexts (C.I).** Playwright con dos `context`
+  concurrentes para validar que el comment del emisor aparece en el viewer
+  sin reload. Agendado a futuro por complejidad de timing + cleanup.
 - **Bloque "leyeron esta noche"** en `PostDetail`. Lista de lectores durante la
   apertura actual. Requiere query `PostRead.findMany({ placeOpeningId })` + UI
   compacta. Deferido hasta tener feedback de uso real.

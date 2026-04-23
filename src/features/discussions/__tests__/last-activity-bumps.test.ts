@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 /**
@@ -10,8 +10,8 @@ import { join, relative } from 'node:path'
  * > soft-delete) lo toca.
  *
  * Romperlo degrada el dot indicator de §13 a ruido. Este test es un "lint declarativo":
- * escanea cada archivo de `server/actions/` y asegura que `lastActivityAt` sólo
- * aparezca como escritura en los 2 actions permitidos.
+ * escanea cada archivo de `server/actions/**` y asegura que `lastActivityAt` sólo
+ * aparezca como escritura en los archivos permitidos.
  *
  * Ubicado como test (no como eslint rule) porque es una regla semántica del dominio,
  * no una convención de código — su vida está atada al contrato del dot, no al estilo.
@@ -25,41 +25,61 @@ const WRITE_PATTERN = /(?<!\/\/[^\n]*)\blastActivityAt\s*[:=](?!=)/g
 
 type WriteSite = { file: string; line: number; snippet: string }
 
+/**
+ * Archivos donde es lícito bumpear `lastActivityAt`. Tras el split C.H.3 los
+ * actions viven en subdirectorios (`posts/create.ts`, etc). Mantenemos
+ * tolerancia por legacy flat files durante la transición.
+ */
+function isAllowedWriteFile(relPath: string): boolean {
+  const n = relPath.replace(/\\/g, '/')
+  return (
+    n.endsWith('/posts/create.ts') ||
+    n.endsWith('/comments/create.ts') ||
+    n.endsWith('/posts.ts') ||
+    n.endsWith('/comments.ts')
+  )
+}
+
+function listActionFiles(dir: string): string[] {
+  const out: string[] = []
+  const entries = readdirSync(dir)
+  for (const entry of entries) {
+    const full = join(dir, entry)
+    const st = statSync(full)
+    if (st.isDirectory()) {
+      out.push(...listActionFiles(full))
+    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
+      out.push(full)
+    }
+  }
+  return out
+}
+
 function findWriteSites(filePath: string, relPath: string): WriteSite[] {
   const content = readFileSync(filePath, 'utf-8')
   const lines = content.split('\n')
   const sites: WriteSite[] = []
 
   lines.forEach((line, idx) => {
-    // Saltear líneas que son comentarios de línea completa
     if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) return
     if (WRITE_PATTERN.test(line)) {
       sites.push({ file: relPath, line: idx + 1, snippet: line.trim() })
     }
-    // Reset regex state (flag /g mantiene lastIndex entre llamadas)
     WRITE_PATTERN.lastIndex = 0
   })
 
   return sites
 }
 
-function scanActionsDir(): WriteSite[] {
-  const files = readdirSync(ACTIONS_DIR).filter((f) => f.endsWith('.ts'))
-  return files.flatMap((f) =>
-    findWriteSites(join(ACTIONS_DIR, f), relative(process.cwd(), join(ACTIONS_DIR, f))),
-  )
-}
-
 describe('invariante 20: lastActivityAt sólo se bumpea en createPost y createComment', () => {
-  it('ninguna action fuera de createPost/createComment escribe `lastActivityAt`', () => {
-    const sites = scanActionsDir()
-    const offenders = sites.filter(
-      (s) => !s.file.endsWith('posts.ts') && !s.file.endsWith('comments.ts'),
-    )
+  const files = listActionFiles(ACTIONS_DIR)
+  const sites = files.flatMap((f) => findWriteSites(f, relative(process.cwd(), f)))
 
+  it('ningún archivo fuera de los allowed bumpea lastActivityAt', () => {
+    const offenders = sites.filter((s) => !isAllowedWriteFile(s.file))
     expect(
       offenders,
-      `Estas actions escriben \`lastActivityAt\` en violación del invariante 20:\n${offenders
+      `Estos archivos escriben \`lastActivityAt\` en violación del invariante 20:\n${offenders
         .map((o) => `  ${o.file}:${o.line}  →  ${o.snippet}`)
         .join(
           '\n',
@@ -67,50 +87,33 @@ describe('invariante 20: lastActivityAt sólo se bumpea en createPost y createCo
     ).toEqual([])
   })
 
-  it('posts.ts escribe `lastActivityAt` sólo dentro de createPostAction (no en edit/hide/unhide/delete)', () => {
-    const filePath = join(ACTIONS_DIR, 'posts.ts')
-    const content = readFileSync(filePath, 'utf-8')
-
-    // Encontrar el bloque createPostAction (entre su firma y la siguiente `export async function`)
-    const createStart = content.indexOf('export async function createPostAction')
-    expect(createStart, 'createPostAction debe existir').toBeGreaterThan(-1)
-    const nextExport = content.indexOf('export async function', createStart + 1)
-    const createBlock =
-      nextExport === -1 ? content.slice(createStart) : content.slice(createStart, nextExport)
-    const outsideBlock =
-      (nextExport === -1 ? '' : content.slice(nextExport)) + content.slice(0, createStart)
-
+  it('posts/create.ts (o posts.ts legacy) bumpea lastActivityAt al menos una vez', () => {
+    const postCreateFiles = files.filter(
+      (f) => f.endsWith('/posts/create.ts') || f.endsWith('/posts.ts'),
+    )
     expect(
-      createBlock.match(/\blastActivityAt\b/g)?.length ?? 0,
+      postCreateFiles.length,
+      'debe existir al menos un archivo de create de post',
+    ).toBeGreaterThan(0)
+    const content = readFileSync(postCreateFiles[0]!, 'utf-8')
+    expect(
+      content.match(/\blastActivityAt\b/g)?.length ?? 0,
       'createPostAction debe bumpear lastActivityAt al menos una vez',
     ).toBeGreaterThanOrEqual(1)
-
-    expect(
-      outsideBlock.match(/\blastActivityAt\s*[:=](?!=)/g) ?? [],
-      'Ninguna otra action en posts.ts (edit/hide/unhide/delete) debe escribir lastActivityAt',
-    ).toEqual([])
   })
 
-  it('comments.ts escribe `lastActivityAt` sólo dentro de createCommentAction (no en edit/delete)', () => {
-    const filePath = join(ACTIONS_DIR, 'comments.ts')
-    const content = readFileSync(filePath, 'utf-8')
-
-    const createStart = content.indexOf('export async function createCommentAction')
-    expect(createStart, 'createCommentAction debe existir').toBeGreaterThan(-1)
-    const nextExport = content.indexOf('export async function', createStart + 1)
-    const createBlock =
-      nextExport === -1 ? content.slice(createStart) : content.slice(createStart, nextExport)
-    const outsideBlock =
-      (nextExport === -1 ? '' : content.slice(nextExport)) + content.slice(0, createStart)
-
+  it('comments/create.ts (o comments.ts legacy) bumpea lastActivityAt al menos una vez', () => {
+    const commentCreateFiles = files.filter(
+      (f) => f.endsWith('/comments/create.ts') || f.endsWith('/comments.ts'),
+    )
     expect(
-      createBlock.match(/\blastActivityAt\b/g)?.length ?? 0,
+      commentCreateFiles.length,
+      'debe existir al menos un archivo de create de comment',
+    ).toBeGreaterThan(0)
+    const content = readFileSync(commentCreateFiles[0]!, 'utf-8')
+    expect(
+      content.match(/\blastActivityAt\b/g)?.length ?? 0,
       'createCommentAction debe bumpear lastActivityAt al menos una vez',
     ).toBeGreaterThanOrEqual(1)
-
-    expect(
-      outsideBlock.match(/\blastActivityAt\s*[:=](?!=)/g) ?? [],
-      'Ninguna otra action en comments.ts (edit/delete) debe escribir lastActivityAt',
-    ).toEqual([])
   })
 })

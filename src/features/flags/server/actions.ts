@@ -26,39 +26,10 @@ type ReviewInput = ReturnType<typeof parseReviewInput>
  * flag no requiere que el place esté abierto: moderación es meta-nivel.
  */
 export async function flagAction(input: unknown): Promise<{ ok: true; flagId: string }> {
-  const parsed = flagInputSchema.safeParse(input)
-  if (!parsed.success) {
-    throw new ValidationError('Datos inválidos.', { issues: parsed.error.issues })
-  }
-  const data = parsed.data
-
+  const data = parseFlagInput(input)
   const target = await resolveFlaggableTarget(data.targetType, data.targetId)
   const actor = await resolveActorForPlace({ placeId: target.placeId })
-
-  let flagId: string
-  try {
-    const created = await prisma.flag.create({
-      data: {
-        targetType: data.targetType,
-        targetId: data.targetId,
-        placeId: target.placeId,
-        reporterUserId: actor.actorId,
-        reason: data.reason,
-        reasonNote: data.reasonNote ?? null,
-      },
-      select: { id: true },
-    })
-    flagId = created.id
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new FlagAlreadyExists({
-        targetType: data.targetType,
-        targetId: data.targetId,
-        reporterUserId: actor.actorId,
-      })
-    }
-    throw err
-  }
+  const flagId = await createFlagOrConflict(data, target.placeId, actor.actorId)
 
   logger.info(
     {
@@ -75,6 +46,48 @@ export async function flagAction(input: unknown): Promise<{ ok: true; flagId: st
 
   revalidatePath(`/${actor.placeSlug}/settings/flags`)
   return { ok: true, flagId }
+}
+
+function parseFlagInput(input: unknown): ReturnType<typeof flagInputSchema.parse> {
+  const parsed = flagInputSchema.safeParse(input)
+  if (!parsed.success) {
+    throw new ValidationError('Datos inválidos.', { issues: parsed.error.issues })
+  }
+  return parsed.data
+}
+
+/**
+ * Insert con guard de duplicado (UNIQUE `(targetType, targetId,
+ * reporterUserId)`). Mapea P2002 → `FlagAlreadyExists` typed.
+ */
+async function createFlagOrConflict(
+  data: ReturnType<typeof parseFlagInput>,
+  placeId: string,
+  reporterUserId: string,
+): Promise<string> {
+  try {
+    const created = await prisma.flag.create({
+      data: {
+        targetType: data.targetType,
+        targetId: data.targetId,
+        placeId,
+        reporterUserId,
+        reason: data.reason,
+        reasonNote: data.reasonNote ?? null,
+      },
+      select: { id: true },
+    })
+    return created.id
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw new FlagAlreadyExists({
+        targetType: data.targetType,
+        targetId: data.targetId,
+        reporterUserId,
+      })
+    }
+    throw err
+  }
 }
 
 /**

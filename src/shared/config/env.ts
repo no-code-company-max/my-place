@@ -60,6 +60,15 @@ const serverSchema = z.object({
   // Override del nivel de log de pino. Default `debug` en dev, `info` en prod.
   // Consumido por `shared/lib/logger.ts`. Valores válidos = niveles estándar pino.
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
+
+  // Secret para gatear `/api/cron/erasure` (C.L). Vercel Cron inyecta
+  // `Authorization: Bearer <CRON_SECRET>` en cada invocación diaria.
+  // Comparación timing-safe en el handler. Mínimo 32 chars de aleatoriedad
+  // (recomendado: `openssl rand -hex 32`). En prod es obligatorio — sin él
+  // el handler deny-all. En dev opcional: si falta, el endpoint rechaza
+  // todo request (útil para evitar invocación accidental).
+  // Ver ADR `docs/decisions/2026-04-24-erasure-365d.md`.
+  CRON_SECRET: z.string().min(32).optional(),
 })
 
 const clientSchema = z.object({
@@ -116,9 +125,13 @@ export const serverEnv = new Proxy({} as ServerEnv, {
 })
 
 /**
- * En prod, los tres settings de Resend son obligatorios. En dev/test pueden
- * faltar (el factory de mailer cae a `FakeMailer`). No se valida con `superRefine`
- * porque eso convertiría `serverSchema` en `ZodEffects` y rompería `.merge()`.
+ * En prod, settings obligatorios que no se pueden expresar como `required`
+ * en el schema Zod (porque convertir `serverSchema` en `ZodEffects` rompe
+ * `.merge()`). Se validan acá post-parse:
+ *
+ * - Resend mailer (RESEND_API_KEY, EMAIL_FROM, RESEND_WEBHOOK_SECRET).
+ * - APP_EDIT_SESSION_SECRET (HMAC de edit-session tokens).
+ * - CRON_SECRET (Vercel Cron gate, C.L).
  */
 function assertProductionMailerConfig(env: ServerEnv): void {
   if (env.NODE_ENV !== 'production') return
@@ -127,6 +140,7 @@ function assertProductionMailerConfig(env: ServerEnv): void {
   if (!env.EMAIL_FROM) missing.push('EMAIL_FROM')
   if (!env.RESEND_WEBHOOK_SECRET) missing.push('RESEND_WEBHOOK_SECRET')
   if (!env.APP_EDIT_SESSION_SECRET) missing.push('APP_EDIT_SESSION_SECRET')
+  if (!env.CRON_SECRET) missing.push('CRON_SECRET')
   if (missing.length > 0) {
     throw new Error(
       `[env] server env invalid (production):\n${missing.map((k) => `  · ${k}: Required`).join('\n')}`,

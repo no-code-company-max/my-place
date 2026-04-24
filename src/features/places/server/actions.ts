@@ -27,52 +27,14 @@ import { findPlaceBySlug, findPlaceOwnership } from './queries'
 export async function createPlaceAction(
   input: unknown,
 ): Promise<{ ok: true; place: { id: string; slug: string } }> {
-  const parsed = createPlaceSchema.safeParse(input)
-  if (!parsed.success) {
-    throw new ValidationError('Datos inválidos para crear el place.', {
-      issues: parsed.error.issues,
-    })
-  }
-  const data: CreatePlaceInput = parsed.data
-
-  assertSlugFormat(data.slug)
-  assertSlugNotReserved(data.slug)
-
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) {
-    throw new AuthorizationError('Necesitás iniciar sesión para crear un place.')
-  }
-  const actorId = auth.user.id
+  const data = parseCreatePlaceInput(input)
+  const actorId = await requireAuthUserId('Necesitás iniciar sesión para crear un place.')
 
   const existing = await findPlaceBySlug(data.slug)
-  if (existing) {
-    throw new ConflictError('Ese slug ya está en uso.', { slug: data.slug })
-  }
+  if (existing) throw new ConflictError('Ese slug ya está en uso.', { slug: data.slug })
 
   try {
-    const place = await prisma.$transaction(async (tx) => {
-      const created = await tx.place.create({
-        data: {
-          slug: data.slug,
-          name: data.name,
-          description: data.description ?? null,
-          billingMode: data.billingMode,
-        },
-        select: { id: true, slug: true },
-      })
-
-      await tx.placeOwnership.create({
-        data: { userId: actorId, placeId: created.id },
-      })
-
-      await tx.membership.create({
-        data: { userId: actorId, placeId: created.id, role: MembershipRole.ADMIN },
-      })
-
-      return created
-    })
-
+    const place = await prisma.$transaction((tx) => createPlaceTx(tx, data, actorId))
     logger.info(
       {
         event: 'placeCreated',
@@ -83,7 +45,6 @@ export async function createPlaceAction(
       },
       'place created',
     )
-
     revalidatePath('/inbox')
     return { ok: true, place }
   } catch (err) {
@@ -93,6 +54,52 @@ export async function createPlaceAction(
     logger.error({ err, actorId, slug: data.slug }, 'createPlaceAction failed')
     throw err
   }
+}
+
+function parseCreatePlaceInput(input: unknown): CreatePlaceInput {
+  const parsed = createPlaceSchema.safeParse(input)
+  if (!parsed.success) {
+    throw new ValidationError('Datos inválidos para crear el place.', {
+      issues: parsed.error.issues,
+    })
+  }
+  const data: CreatePlaceInput = parsed.data
+  assertSlugFormat(data.slug)
+  assertSlugNotReserved(data.slug)
+  return data
+}
+
+async function requireAuthUserId(reason: string): Promise<string> {
+  const supabase = await createSupabaseServer()
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth.user) throw new AuthorizationError(reason)
+  return auth.user.id
+}
+
+/**
+ * Tx del create: tres inserts atómicos (place + ownership + membership del
+ * creador como ADMIN). El caller maneja P2002 fuera de la tx y mapea a
+ * `ConflictError` con copy final de usuario.
+ */
+async function createPlaceTx(
+  tx: Prisma.TransactionClient,
+  data: CreatePlaceInput,
+  actorId: string,
+): Promise<{ id: string; slug: string }> {
+  const created = await tx.place.create({
+    data: {
+      slug: data.slug,
+      name: data.name,
+      description: data.description ?? null,
+      billingMode: data.billingMode,
+    },
+    select: { id: true, slug: true },
+  })
+  await tx.placeOwnership.create({ data: { userId: actorId, placeId: created.id } })
+  await tx.membership.create({
+    data: { userId: actorId, placeId: created.id, role: MembershipRole.ADMIN },
+  })
+  return created
 }
 
 /**

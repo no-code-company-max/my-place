@@ -15,11 +15,11 @@ import {
   INVITATION_TTL_DAYS,
 } from '@/features/members/domain/invariants'
 import { countActiveMemberships, findInviterPermissions } from '@/features/members/server/queries'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
 import {
   deliverInvitationEmail,
   fetchInviterDisplayName,
   findPlaceStateBySlugWithName,
-  requireAuthUserId,
   type PlaceWithName,
 } from './shared'
 

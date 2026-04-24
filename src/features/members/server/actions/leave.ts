@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/db/client'
 import { logger } from '@/shared/lib/logger'
 import { InvariantViolation, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { assertPlaceActive } from '@/features/members/domain/invariants'
 import { findActiveMembership, findPlaceStateBySlug } from '@/features/members/server/queries'
-import { requireAuthUserId } from './shared'
 
 /**
  * Sale del place: setea `Membership.leftAt = now()`. Si el actor era owner, también

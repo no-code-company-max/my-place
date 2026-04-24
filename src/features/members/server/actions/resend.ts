@@ -7,7 +7,8 @@ import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/d
 import { resendInvitationSchema, type ResendInvitationInput } from '@/features/members/schemas'
 import { assertInviterHasRole, assertPlaceActive } from '@/features/members/domain/invariants'
 import { findInvitationById, findInviterPermissions } from '@/features/members/server/queries'
-import { deliverInvitationEmail, fetchInviterDisplayName, requireAuthUserId } from './shared'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
+import { deliverInvitationEmail, fetchInviterDisplayName } from './shared'
 
 /**
  * Reenvía el email de una invitación pending: regenera magic link y vuelve a

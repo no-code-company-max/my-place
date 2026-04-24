@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { Prisma, MembershipRole } from '@prisma/client'
 import { prisma } from '@/db/client'
-import { createSupabaseServer } from '@/shared/lib/supabase/server'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { logger } from '@/shared/lib/logger'
 import {
   AuthorizationError,
@@ -69,13 +69,6 @@ function parseCreatePlaceInput(input: unknown): CreatePlaceInput {
   return data
 }
 
-async function requireAuthUserId(reason: string): Promise<string> {
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) throw new AuthorizationError(reason)
-  return auth.user.id
-}
-
 /**
  * Tx del create: tres inserts atómicos (place + ownership + membership del
  * creador como ADMIN). El caller maneja P2002 fuera de la tx y mapea a
@@ -109,12 +102,7 @@ async function createPlaceTx(
 export async function archivePlaceAction(
   placeId: string,
 ): Promise<{ ok: true; alreadyArchived: boolean }> {
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) {
-    throw new AuthorizationError('Necesitás iniciar sesión para archivar un place.')
-  }
-  const actorId = auth.user.id
+  const actorId = await requireAuthUserId('Necesitás iniciar sesión para archivar un place.')
 
   const place = await prisma.place.findUnique({
     where: { id: placeId },
@@ -206,12 +194,7 @@ export async function transferOwnershipAction(
 async function validateTransferPreconditions(
   data: TransferOwnershipInput,
 ): Promise<{ actorId: string; place: { id: string; slug: string; archivedAt: Date | null } }> {
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) {
-    throw new AuthorizationError('Necesitás iniciar sesión para transferir ownership.')
-  }
-  const actorId = auth.user.id
+  const actorId = await requireAuthUserId('Necesitás iniciar sesión para transferir ownership.')
 
   if (data.toUserId === actorId) {
     throw new ValidationError('No tiene sentido transferirte la ownership a vos mismo.', {

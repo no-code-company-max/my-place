@@ -1,11 +1,9 @@
 import 'server-only'
 import { InvitationDeliveryStatus } from '@prisma/client'
 import { prisma } from '@/db/client'
-import { createSupabaseServer } from '@/shared/lib/supabase/server'
 import { generateInviteMagicLink } from '@/shared/lib/supabase/admin-links'
 import { getMailer } from '@/shared/lib/mailer'
 import {
-  AuthorizationError,
   DomainError,
   InvitationEmailFailedError,
   InvitationLinkGenerationError,
@@ -32,13 +30,6 @@ export type PlaceWithName = {
 
 export function truncate(s: string, n = DELIVERY_ERROR_MAX_LEN): string {
   return s.length <= n ? s : s.slice(0, n)
-}
-
-export async function requireAuthUserId(reason: string): Promise<string> {
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) throw new AuthorizationError(reason)
-  return auth.user.id
 }
 
 export async function fetchInviterDisplayName(actorId: string): Promise<string> {

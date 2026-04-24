@@ -5,9 +5,9 @@ import { MembershipRole, Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
 import { logger } from '@/shared/lib/logger'
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { assertPlaceActive, assertPlaceHasCapacity } from '@/features/members/domain/invariants'
 import { findActiveMembership, findInvitationByToken } from '@/features/members/server/queries'
-import { requireAuthUserId } from './shared'
 
 /**
  * Canjea un token de invitación por una `Membership` activa en el place.

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/db/client'
-import { createSupabaseServer } from '@/shared/lib/supabase/server'
+import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { logger } from '@/shared/lib/logger'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { findMemberPermissions } from '@/features/members/public'
@@ -29,12 +29,7 @@ export async function updatePlaceHoursAction(input: unknown): Promise<{ ok: true
   }
   const data = parsed.data
 
-  const supabase = await createSupabaseServer()
-  const { data: auth } = await supabase.auth.getUser()
-  if (!auth.user) {
-    throw new AuthorizationError('Necesitás iniciar sesión para editar el horario.')
-  }
-  const actorId = auth.user.id
+  const actorId = await requireAuthUserId('Necesitás iniciar sesión para editar el horario.')
 
   const place = await findPlaceStateBySlug(data.placeSlug)
   if (!place) {

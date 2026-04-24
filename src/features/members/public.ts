@@ -45,3 +45,5 @@ export {
   RESEND_EVENT_TO_STATUS,
   canTransition as canTransitionInvitationDelivery,
 } from './server/delivery-transitions'
+export { runErasure } from './server/erasure/run-erasure'
+export type { ErasureRunResult } from './server/erasure/types'

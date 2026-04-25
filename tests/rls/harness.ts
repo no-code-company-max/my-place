@@ -266,3 +266,67 @@ export async function insertTestOpening(
   )
   return id
 }
+
+/* ========================================================================
+ * Helpers para slice `events` (F.B Fase 6).
+ * ==================================================================== */
+
+export type RSVPStateValue = 'GOING' | 'GOING_CONDITIONAL' | 'NOT_GOING_CONTRIBUTING' | 'NOT_GOING'
+
+export async function insertTestEvent(
+  client: PoolClient,
+  opts: {
+    placeId: string
+    authorUserId: string | null
+    title?: string
+    timezone?: string
+    startsAt?: Date
+    endsAt?: Date | null
+    cancelledAt?: Date | null
+    id?: string
+  },
+): Promise<string> {
+  const id = opts.id ?? rlsId('event_rls')
+  // Default startsAt una hora en el futuro para no chocar con invariant
+  // del dominio si se ejecuta vía action (los tests RLS bypasean igual,
+  // pero mantengo el default sensato).
+  const startsAt = opts.startsAt ?? new Date(Date.now() + 60 * 60 * 1000)
+  await client.query(
+    `INSERT INTO "Event"
+       (id, "placeId", "authorUserId", "authorSnapshot", title, "startsAt",
+        "endsAt", timezone, "createdAt", "updatedAt", "cancelledAt")
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, NOW(), NOW(), $9)`,
+    [
+      id,
+      opts.placeId,
+      opts.authorUserId,
+      JSON.stringify({ displayName: 'RLS', avatarUrl: null }),
+      opts.title ?? 'RLS test event',
+      startsAt,
+      opts.endsAt ?? null,
+      opts.timezone ?? 'America/Argentina/Buenos_Aires',
+      opts.cancelledAt ?? null,
+    ],
+  )
+  return id
+}
+
+export async function insertTestRsvp(
+  client: PoolClient,
+  opts: {
+    eventId: string
+    userId: string
+    state?: RSVPStateValue
+    note?: string | null
+    id?: string
+  },
+): Promise<string> {
+  const id = opts.id ?? rlsId('rsvp_rls')
+  await client.query(
+    `INSERT INTO "EventRSVP"
+       (id, "eventId", "userId", state, note, "updatedAt")
+     VALUES ($1, $2, $3, $4::\"RSVPState\", $5, NOW())`,
+    [id, opts.eventId, opts.userId, opts.state ?? 'GOING', opts.note ?? null],
+  )
+  return id
+}

@@ -19,14 +19,16 @@ model User {
   avatarUrl   String?
   createdAt   DateTime @default(now())
 
-  memberships   Membership[]
-  ownedPlaces   PlaceOwnership[]
-  posts         Post[]           @relation("PostAuthor")
-  comments      Comment[]        @relation("CommentAuthor")
-  reactions     Reaction[]
-  postReads     PostRead[]
-  flagsFiled    Flag[]           @relation("FlagReporter")
-  flagsReviewed Flag[]           @relation("FlagReviewer")
+  memberships    Membership[]
+  ownedPlaces    PlaceOwnership[]
+  posts          Post[]           @relation("PostAuthor")
+  comments       Comment[]        @relation("CommentAuthor")
+  reactions      Reaction[]
+  postReads      PostRead[]
+  flagsFiled     Flag[]           @relation("FlagReporter")
+  flagsReviewed  Flag[]           @relation("FlagReviewer")
+  eventsAuthored Event[]          @relation("EventAuthor")
+  eventRsvps     EventRSVP[]
 }
 
 model Place {
@@ -56,6 +58,7 @@ model Place {
   reactions   Reaction[]
   openings    PlaceOpening[]
   flags       Flag[]
+  events      Event[]
 }
 
 model Membership {
@@ -160,6 +163,10 @@ model Post {
   author   User?      @relation("PostAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
   comments Comment[]
   reads    PostRead[]
+  // Back-reference 1:1 al evento que generó este Post como thread asociado
+  // (auto-thread, ver docs/features/events/spec-integrations.md § 1). Nullable
+  // porque la mayoría de los Posts no son de evento. El @unique vive en Event.postId.
+  event    Event?
   // Índice parcial en migración discussions_core (Prisma no soporta WHERE):
   //   (authorUserId) WHERE authorUserId IS NOT NULL
 
@@ -265,6 +272,7 @@ model Flag {
 enum ContentTargetKind {
   POST
   COMMENT
+  EVENT
 }
 
 enum ReactionEmoji {
@@ -325,4 +333,75 @@ model ErasureAuditLog {
 
   @@index([membershipId])
   @@index([appliedAt])
+}
+
+// Slice `events` (Fase 6 — F.B). Ver docs/features/events/spec.md § 4.
+//
+// Decisiones encodeadas en el schema:
+//   1. `authorUserId` nullable + `authorSnapshot jsonb` → erasure 365d (mismo patrón Post/Comment).
+//   2. `postId` nullable + `@unique` → 1:1 con el thread asociado (auto-thread tx atómica).
+//      Nullable resuelve el chicken-and-egg al crear (Event → Post → UPDATE postId
+//      en una sola tx). `onDelete: SetNull` permite que el Post desaparezca sin
+//      arrastrar el evento. Defensivo a futuro: discussions deshabilitada por place.
+//   3. `cancelledAt` para soft-cancel — preserva RSVPs como señal histórica + thread
+//      sigue vivo. DELETE prohibido para authenticated (RLS); service_role bypassea.
+//   4. `startsAt`/`endsAt` como `timestamptz` UTC + `timezone TEXT` IANA — eventos
+//      son puntos en tiempo (vs hours = patterns recurrentes en local-place).
+//   5. `description Json?` reusa TipTap AST de discussions.
+//   6. `EventRSVP.note` válido sólo en GOING_CONDITIONAL/NOT_GOING_CONTRIBUTING vía
+//      CHECK constraint en la migración (defensa en profundidad sobre el invariant).
+//   7. `EventRSVP.userId` cascadea a User para que el DELETE explícito por erasure
+//      365d (PR-3 en F.C) tenga relación natural; el filtro per-place en runErasure
+//      asegura que sólo se borran las RSVPs del place que el user dejó.
+//
+// Las políticas RLS viven en la misma migración (events_core_schema). El enum
+// EVENT en `ContentTargetKind` se agrega en una segunda migración separada por
+// la restricción Postgres `ALTER TYPE ... ADD VALUE` fuera de tx.
+model Event {
+  id             String    @id @default(cuid())
+  placeId        String
+  authorUserId   String?
+  authorSnapshot Json
+  title          String    @db.VarChar(120)
+  description    Json?
+  startsAt       DateTime  @db.Timestamptz(3)
+  endsAt         DateTime? @db.Timestamptz(3)
+  timezone       String
+  location       String?   @db.VarChar(200)
+  postId         String?   @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  cancelledAt    DateTime?
+
+  place  Place       @relation(fields: [placeId], references: [id], onDelete: Restrict)
+  author User?       @relation("EventAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  post   Post?       @relation(fields: [postId], references: [id], onDelete: SetNull)
+  rsvps  EventRSVP[]
+
+  @@index([placeId, startsAt])
+  @@index([placeId, cancelledAt, startsAt])
+}
+
+model EventRSVP {
+  id        String    @id @default(cuid())
+  eventId   String
+  userId    String
+  state     RSVPState
+  // Sólo válido en GOING_CONDITIONAL y NOT_GOING_CONTRIBUTING (CHECK constraint).
+  // Documentado en docs/features/events/spec-rsvp.md § 2.
+  note      String?   @db.VarChar(280)
+  updatedAt DateTime  @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId, state])
+}
+
+enum RSVPState {
+  GOING
+  GOING_CONDITIONAL
+  NOT_GOING_CONTRIBUTING
+  NOT_GOING
 }

@@ -148,6 +148,19 @@ async function loadAndAuthorizeFlag(
     throw new AuthorizationError('Sólo admins pueden revisar flags.', { flagId: flag.id })
   }
 
+  if (flag.targetType === 'EVENT') {
+    // F.B agregó EVENT al enum ContentTargetKind (events_core_schema), pero el
+    // soporte completo de flags sobre eventos llega en F.C (PR-2 — switch
+    // exhaustivo + mapEventSnapshot + UI). Hasta entonces, ningún path de UI
+    // crea flags de tipo EVENT (flag-modal.tsx limita targetType a POST/COMMENT).
+    // Si igualmente llega uno (insert manual / SQL admin), rechazamos limpio
+    // en lugar de propagar `targetType` ancho hacia abajo.
+    throw new ValidationError('Soporte de flag sobre eventos llega en F.C.', {
+      flagId: flag.id,
+      targetType: flag.targetType,
+    })
+  }
+
   if (data.sideEffect === 'HIDE_TARGET' && flag.targetType === 'COMMENT') {
     throw new ValidationError('Los comentarios se eliminan, no se ocultan.', {
       flagId: flag.id,
@@ -155,7 +168,9 @@ async function loadAndAuthorizeFlag(
     })
   }
 
-  return { flag, actor }
+  // El guard sobre 'EVENT' arriba garantiza targetType ∈ {'POST','COMMENT'},
+  // pero TS no propaga el narrowing al objeto entero — assertion segura.
+  return { flag: flag as FlagRecord, actor }
 }
 
 /**

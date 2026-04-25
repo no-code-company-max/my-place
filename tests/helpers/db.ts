@@ -150,6 +150,30 @@ export async function findUserIdByEmail(email: string): Promise<string> {
   return user.id
 }
 
+export async function deleteEventsByPlace(placeId: string): Promise<void> {
+  // Eventos creados por F.D smoke specs. EventRSVP cascadea por FK.
+  // El thread auto-creado (Post) queda asociado vía Event.postId; lo
+  // borramos también para no acumular en /conversations entre runs.
+  const events = await getPrisma().event.findMany({
+    where: { placeId },
+    select: { id: true, postId: true },
+  })
+  await getPrisma().event.deleteMany({ where: { placeId } })
+  const postIds = events.map((e) => e.postId).filter((x): x is string => x !== null)
+  if (postIds.length > 0) {
+    await getPrisma().post.deleteMany({ where: { id: { in: postIds } } })
+  }
+}
+
+export async function findEventIdByTitle(placeId: string, title: string): Promise<string | null> {
+  const event = await getPrisma().event.findFirst({
+    where: { placeId, title },
+    select: { id: true },
+    orderBy: { createdAt: 'desc' },
+  })
+  return event?.id ?? null
+}
+
 export async function deleteFlagsByPlace(placeId: string): Promise<void> {
   await getPrisma().flag.deleteMany({ where: { placeId } })
 }

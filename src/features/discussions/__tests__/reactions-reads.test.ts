@@ -43,6 +43,11 @@ vi.mock('@/shared/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({ auth: { getUser: getUserFn } }),
 }))
 
+vi.mock('@/features/hours/public.server', () => ({
+  assertPlaceOpenOrThrow: (...a: unknown[]) => assertPlaceOpenFn(...a),
+  findPlaceHours: (...a: unknown[]) => findPlaceHoursFn(...a),
+}))
+
 vi.mock('@/features/hours/public', () => ({
   assertPlaceOpenOrThrow: (...a: unknown[]) => assertPlaceOpenFn(...a),
   findPlaceHours: (...a: unknown[]) => findPlaceHoursFn(...a),

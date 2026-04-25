@@ -18,8 +18,11 @@ vi.mock('@/db/client', () => ({
 }))
 
 vi.mock('@/features/hours/public', () => ({
-  findPlaceHours: (...a: unknown[]) => findPlaceHoursFn(...a),
   currentOpeningWindow: (...a: unknown[]) => currentOpeningWindowFn(...a),
+}))
+
+vi.mock('@/features/hours/public.server', () => ({
+  findPlaceHours: (...a: unknown[]) => findPlaceHoursFn(...a),
 }))
 
 vi.mock('server-only', () => ({}))

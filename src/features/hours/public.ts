@@ -1,6 +1,15 @@
 /**
- * API pública del slice `hours`. Único punto de entrada desde otras partes del sistema.
- * Ver `docs/architecture.md` § boundaries y `docs/features/hours/spec.md`.
+ * API pública client-safe del slice `hours`. Tipos puros, helpers de
+ * dominio (sin I/O), schemas Zod, server actions (callables desde Client
+ * Components) y componentes UI.
+ *
+ * **No** incluye queries server-only ni helpers que toquen Prisma — viven
+ * en `public.server.ts`. Mezclar `import 'server-only'` acá rompería el
+ * build cuando un Client Component que viaja al bundle importa de este
+ * archivo (ej: `events/ui/event-form.tsx` necesita `ALLOWED_TIMEZONES`).
+ *
+ * Ver `docs/decisions/2026-04-21-flags-subslice-split.md` § "Boundary
+ * client vs server" — mismo patrón.
  */
 
 export type {
@@ -22,7 +31,6 @@ export {
   type UpdateHoursInput,
 } from './schemas'
 
-export { findPlaceHours, assertPlaceOpenOrThrow } from './server/queries'
 export { updatePlaceHoursAction } from './server/actions'
 
 export { HoursForm, type HoursFormDefaults } from './ui/hours-form'

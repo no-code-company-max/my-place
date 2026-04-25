@@ -2,7 +2,7 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
-import { assertPlaceOpenOrThrow } from '@/features/hours/public'
+import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { logger } from '@/shared/lib/logger'
 import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { createCommentInputSchema, type CreateCommentInput } from '@/features/discussions/schemas'

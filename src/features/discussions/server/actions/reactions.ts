@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
-import { assertPlaceOpenOrThrow } from '@/features/hours/public'
+import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { logger } from '@/shared/lib/logger'
 import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { reactInputSchema, unreactInputSchema } from '@/features/discussions/schemas'

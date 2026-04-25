@@ -2,7 +2,8 @@ import 'server-only'
 import { cache } from 'react'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
-import { currentOpeningWindow, findPlaceHours } from '@/features/hours/public'
+import { findPlaceHours } from '@/features/hours/public.server'
+import { currentOpeningWindow } from '@/features/hours/public'
 import type { OpeningHours } from '@/features/hours/public'
 
 /**

@@ -81,3 +81,12 @@ export { createEventAction } from './server/actions/create'
 export { updateEventAction } from './server/actions/update'
 export { cancelEventAction } from './server/actions/cancel'
 export { rsvpEventAction } from './server/actions/rsvp'
+
+// ---------------------------------------------------------------
+// UI components (Server + Client)
+// ---------------------------------------------------------------
+
+export { EventList } from './ui/event-list'
+export { EventDetail } from './ui/event-detail'
+export { EventForm } from './ui/event-form'
+export { EventCancelledBadge } from './ui/event-cancelled-badge'

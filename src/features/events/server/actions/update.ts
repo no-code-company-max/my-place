@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { logger } from '@/shared/lib/logger'
-import { assertPlaceOpenOrThrow } from '@/features/hours/public'
+import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { resolveActorForPlace } from '@/features/discussions/public.server'
 import { assertRichTextSize } from '@/features/discussions/public'
 import {

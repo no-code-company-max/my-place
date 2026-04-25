@@ -18,7 +18,7 @@ const REASON_OPTIONS: ReadonlyArray<{ value: ReasonValue; label: string }> = [
 ]
 
 type Props = {
-  targetType: 'POST' | 'COMMENT'
+  targetType: 'POST' | 'COMMENT' | 'EVENT'
   targetId: string
   open: boolean
   onOpenChange: (open: boolean) => void

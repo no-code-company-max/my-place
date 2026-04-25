@@ -136,6 +136,7 @@ export { PostDetail } from './ui/post-detail'
 export { PostList } from './ui/post-list'
 export { PostReadersBlock } from './ui/post-readers-block'
 export { PostUnreadDot } from './ui/post-unread-dot'
+export { RichTextRenderer } from './ui/rich-text-renderer'
 export { ThreadPresence } from './ui/thread-presence'
 
 export {

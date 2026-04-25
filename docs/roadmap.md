@@ -106,19 +106,36 @@ Implementar según `docs/features/discussions/spec.md` (spec canónico) y `docs/
 
 **Fuera de esta fase** (v2 o descartado): audio, temporadas, UI dedicada de dormidos, búsqueda full-text, DMs, push/email, analytics visibles, rich text con imágenes/tablas.
 
-## Fase 6 — Eventos
+## Fase 6 — Eventos (en planning, F.A en progreso 2026-04-25)
 
-Implementar según `docs/ontologia/eventos.md`:
+Implementar según `docs/ontologia/eventos.md`. Spec canónico:
+`docs/features/events/spec.md` (+ sub-specs `spec-rsvp.md`,
+`spec-integrations.md`). Plan completo:
+`~/.claude/plans/tidy-stargazing-summit.md`.
 
-- Crear evento (presencial, virtual, híbrido)
-- Fecha/hora con timezone awareness
-- Confirmación texturada: voy / voy si puedo / no voy pero aporto / no voy
-- Thread del foro auto-generado al crear evento (integración con conversations)
-- Tres momentos: antes, durante, después
-- Rituales con recurrencia
-- Acumulación cálida sin gamificación
+**Scope F1 (lo que se construye en esta fase)**:
 
-**Entregable**: feature de eventos completa con los tres momentos.
+- Schema `Event` + `EventRSVP` + enum `RSVPState` con CHECK constraint sobre `note`.
+- RLS sobre Event y EventRSVP (7 policies, helpers `is_active_member` + `is_place_admin`).
+- 4 estados RSVP texturados alineados con ontología: `GOING / GOING_CONDITIONAL / NOT_GOING_CONTRIBUTING / NOT_GOING` + textfield opcional para los 2 condicionales.
+- Server Actions: createEventAction (con auto-thread tx atómica via discussions), updateEventAction, cancelEventAction (soft-cancel), rsvpEventAction (upsert).
+- UI: listado próximos/pasados, detalle, crear, editar, RSVP button con 4 estados.
+- Estado derivado calculado (no persistido): upcoming / happening / past / cancelled. Default 2h cuando endsAt null. Sin buffer pre-startsAt (sin urgencia artificial).
+- Timezone strategy: `timestamptz` UTC + columna `timezone` IANA del evento (eventos = puntos en tiempo, distinto a hours = patterns recurrentes).
+- Erasure 365d extendido para Event + EventRSVPs (per-place, no global).
+- Eventos reportables vía `EVENT` agregado a `ContentTargetKind` (flags).
+- Helper transaccional `createPostFromSystemHelper` agregado a discussions.
+- Helper genérico `assertNever` agregado a `shared/lib/`.
+
+**Sub-milestones de Fase 6**:
+
+- **F.A** — Spec-first (este sub-milestone, en progreso 2026-04-25). Escribir `docs/features/events/spec.md` (+ `spec-rsvp.md` + `spec-integrations.md`) + ADR de excepción cap LOC (`docs/decisions/2026-04-25-events-size-exception.md`). Sin código.
+- **F.B** — Schema + 2 migrations (CREATE TABLE separada de `ALTER TYPE ContentTargetKind`) + 7 RLS policies + 9 tests RLS. ⏳
+- **F.C** — Domain + invariants + queries + 4 actions + extensiones PR-1 (`createPostFromSystemHelper` en discussions), PR-2 (`EVENT` en `ContentTargetKind` + `assertNever` en shared), PR-3 (`runErasure` extendido para Event + DELETE EventRSVP per-place). 27+ tests. ⏳
+- **F.D** — UI listado + detalle + crear + editar + RSVP button + Playwright smoke. ⏳
+- **F.E** — Auto-thread tx atómica cableada en `createEventAction` + relación bidireccional Event ↔ Post + badge cancelado en thread. ⏳
+
+**Entregable**: feature de eventos F1 completa — CRUD + RSVP texturado + thread auto + listado. Diferido en post-F1: recurrencia, UI 3 momentos contextual, memoria fresca, archive físico, exclusiones granulares, permisos por rol granulares, ICS export, realtime presence, notificaciones, recordatorios, cupo máximo, reacciones sobre Event, eventos all-day como tipo dedicado, cover visual, naturaleza presencial/virtual como discriminador.
 
 ## Fase 7 — Portada y zonas
 

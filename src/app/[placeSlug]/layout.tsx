@@ -1,8 +1,12 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { findMemberPermissions } from '@/features/members/public'
+import { listMyPlaces } from '@/features/places/public'
+import { isPlaceOpen, parseOpeningHours } from '@/features/hours/public'
 import { buildThemeVars, type ThemeConfig } from '@/shared/config/theme'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
+import { clientEnv } from '@/shared/config/env'
+import { AppShell } from '@/features/shell/public'
 
 type Props = {
   children: React.ReactNode
@@ -15,20 +19,25 @@ type Props = {
  *  2. Place existe y no está archivado (sino → 404).
  *  3. Visitor es miembro activo o owner del place (sino → 404).
  *
- * NO chequea el horario — eso vive en `(gated)/layout.tsx`. Todas las rutas
- * sensibles al horario están dentro de ese route group; `/settings/*` queda
- * fuera a propósito para que admin/owner pueda configurar el horario incluso
- * con el place cerrado.
+ * NO chequea el horario para gating de contenido — eso vive en
+ * `(gated)/layout.tsx`. Pero SÍ deriva `placeClosed` del horario para
+ * que el shell muestre los dots deshabilitados (chrome consistente
+ * incluso cuando el contenido bajo está cerrado).
  *
- * Ver `docs/features/hours/spec.md` § "Arquitectura del gate".
+ * Monta `<AppShell>` (R.2.2): chrome común con TopBar + community
+ * switcher + dots + search trigger. El shell envuelve `{children}`.
+ * `/settings/*` también obtiene shell porque está fuera de gated pero
+ * dentro de este layout (admin necesita switcher/search desde settings).
+ *
+ * Ver `docs/features/shell/spec.md` § 10 (mount strategy) y
+ * `docs/features/hours/spec.md` § "Arquitectura del gate".
  */
 export default async function PlaceLayout({ children, params }: Props) {
   const { placeSlug } = await params
 
-  // auth y place son independientes (cada uno solo necesita el slug y
-  // la cookie). Paralelizamos para eliminar 1 RTT del critical path —
-  // ambos están cached por React.cache, así que llamadas posteriores
-  // en el mismo render son hits.
+  // auth, place y la lista de places del user son independientes —
+  // todos van en paralelo para eliminar RTT del critical path. Cached
+  // por React.cache; llamadas posteriores en el mismo render son hits.
   const [auth, place] = await Promise.all([getCurrentAuthUser(), loadPlaceBySlug(placeSlug)])
   if (!auth) {
     redirect(`/login?next=/${placeSlug}`)
@@ -37,16 +46,31 @@ export default async function PlaceLayout({ children, params }: Props) {
     notFound()
   }
 
-  const perms = await findMemberPermissions(auth.id, place.id)
+  const [perms, places] = await Promise.all([
+    findMemberPermissions(auth.id, place.id),
+    listMyPlaces(auth.id),
+  ])
   if (!perms.isOwner && !perms.role) {
     notFound()
   }
 
   const themeConfig = (place.themeConfig ?? {}) as ThemeConfig
+  // Derivación pure (sin queries): `place.openingHours` ya viene en el
+  // Place row. El gate real de contenido sigue en (gated)/layout.tsx;
+  // acá solo lo usamos para el chrome.
+  const placeClosed = !isPlaceOpen(parseOpeningHours(place.openingHours), new Date()).open
 
   return (
-    <div style={buildThemeVars(themeConfig)} className="min-h-screen bg-bg text-text">
-      {children}
+    <div style={buildThemeVars(themeConfig)} className="min-h-screen">
+      <AppShell
+        places={places}
+        currentSlug={placeSlug}
+        apexUrl={clientEnv.NEXT_PUBLIC_APP_URL}
+        apexDomain={clientEnv.NEXT_PUBLIC_APP_DOMAIN}
+        placeClosed={placeClosed}
+      >
+        {children}
+      </AppShell>
     </div>
   )
 }

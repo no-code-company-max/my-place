@@ -20,6 +20,7 @@ export default tseslint.config(
       'test-results/**',
       'next-env.d.ts',
       '**/*.config.{js,cjs,mjs,ts}',
+      'handoff/**',
     ],
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),

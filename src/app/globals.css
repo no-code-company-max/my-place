@@ -3,49 +3,109 @@
 @tailwind utilities;
 
 /*
- * Tema default de Place.
- * Cada place sobrescribe estas variables en runtime via buildThemeVars()
- * aplicado en [placeSlug]/layout.tsx. Ver docs/theming.md.
+ * Default tokens del producto. Cada place sobrescribe via
+ * buildThemeVars() en su layout.tsx (per-place customization).
+ *
+ * Acá viven los SSR fallbacks antes que el layout per-place inyecte
+ * las CSS vars dinámicas.
+ *
+ * F.G rebrand (2026-04-27): nuevos tokens del handoff (warm warm-brown
+ * accent, oklch surfaces, member palette) + place-* aliases backward-
+ * compat. Ver docs/theming.md § "Design tokens (rebrand F.G)".
  */
+
 :root {
-  --place-bg: #f7f5f1;
+  /* ── Tokens primarios (handoff — oklch para browsers modernos). ── */
+  --bg: oklch(0.985 0.006 75);
+  --surface: oklch(1 0 0);
+  --soft: oklch(0.95 0.008 75);
+  --text: oklch(0.22 0.008 60);
+  --muted: oklch(0.55 0.012 60);
+  --border: oklch(0.9 0.008 75);
+  --dot: oklch(0.82 0.008 75);
+
+  --accent: #b5633a;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+
+  --pad: 14px;
+  --radius-card: 16px;
+
+  --title-font: var(--font-fraunces), 'Source Serif 4', Georgia, serif;
+  --body-font: var(--font-inter), -apple-system, system-ui, sans-serif;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --member-1: #c0825b;
+  --member-2: #7a8c5a;
+  --member-3: #4f6b85;
+  --member-4: #8b6aa3;
+  --member-5: #b08a3e;
+  --member-6: #8a5a2b;
+  --member-7: #9a6b4e;
+  --member-8: #5e7d6f;
+
+  /* ── Aliases place-* legacy (backward-compat). ── */
+  --place-bg: #f5f1ea;
   --place-card-bg: #ffffff;
-  --place-card-bg-soft: #f0ede7;
-  --place-text: #1a1a1a;
-  --place-text-medium: #4a4a4a;
-  --place-text-soft: #7a7a7a;
-  --place-text-whisper: #a8a8a8;
-  --place-link: #2a4d3e;
-  --place-link-underline: #2a4d3e;
-  --place-divider: #e6e1d8;
-  --place-mark-bg: #1a1a1a;
-  --place-mark-fg: #f7f5f1;
+  --place-card-bg-soft: #efeae0;
+  --place-text: #1f1d1a;
+  --place-text-medium: #52483b;
+  --place-text-soft: #847d72;
+  --place-text-whisper: #aaa498;
+  --place-link: #b5633a;
+  --place-link-underline: #b5633a;
+  --place-divider: #e2dccf;
+  --place-mark-bg: #b5633a;
+  --place-mark-fg: #ffffff;
 
-  /* Color fijo del producto: presencia viva. No customizable (theming.md). */
+  /* ── Producto: presencia + unread (no rebrand-able, identidad fija). ── */
   --place-presence: #22c55e;
-
-  /* Dot de novedad (posts con actividad más reciente que la última lectura
-     del viewer). Ámbar fijo del producto — señal consistente entre places. */
   --place-unread: #f59e0b;
+}
+
+/*
+ * Browser fallback: Safari <16.4, Chrome <111, Firefox <113 no soportan
+ * oklch(). Renderizamos hex aproximado para garantizar visual coherente.
+ */
+@supports not (color: oklch(0 0 0)) {
+  :root {
+    --bg: #f5f1ea;
+    --surface: #ffffff;
+    --soft: #efeae0;
+    --text: #1f1d1a;
+    --muted: #847d72;
+    --border: #e2dccf;
+    --dot: #cfc9bd;
+  }
+}
+
+/*
+ * color-mix() requiere los mismos targets. Fallback rgba estático para
+ * --accent-soft.
+ */
+@supports not (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --accent-soft: rgba(181, 99, 58, 0.14);
+  }
 }
 
 html,
 body {
-  background: var(--place-bg);
-  color: var(--place-text);
-  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body-font);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 a {
-  color: var(--place-link);
-  text-decoration-color: var(--place-link-underline);
+  color: var(--accent);
+  text-decoration-color: var(--accent);
 }
 
 h1,
 h2,
 h3,
-.font-serif {
-  font-family: var(--font-fraunces), Fraunces, ui-serif, Georgia, serif;
+.font-serif,
+.font-title {
+  font-family: var(--title-font);
 }

@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { Check } from 'lucide-react'
 import { rsvpEventAction } from '../server/actions/rsvp'
-import type { RSVPState } from '../domain/types'
+import { RSVPState as RSVPStateEnum, type RSVPState } from '../domain/types'
 import { RSVP_BUTTON_ORDER, rsvpAcceptsNote, rsvpLabel, rsvpTextfieldHints } from './rsvp-labels'
 import { friendlyEventErrorMessage } from './errors'
 
@@ -48,7 +49,7 @@ export function RSVPButton({
     return (
       <section
         aria-label="RSVP"
-        className="rounded-md border border-place-divider bg-place-card p-3 text-sm text-place-text-soft"
+        className="rounded-[10px] border-[0.5px] border-border bg-soft p-3 text-sm text-muted"
       >
         Evento cancelado — las RSVPs se preservan, no se pueden cambiar.
       </section>
@@ -95,10 +96,13 @@ export function RSVPButton({
 
   return (
     <section aria-label="RSVP" className="space-y-3">
-      <h2 className="text-sm font-medium text-place-text-soft">¿Venís?</h2>
-      <div className="flex flex-wrap gap-2">
+      <h2 className="font-body text-xs font-semibold uppercase tracking-wider text-muted">
+        ¿Venís?
+      </h2>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {RSVP_BUTTON_ORDER.map((state) => {
           const active = state === currentState
+          const showCheck = active && state === RSVPStateEnum.GOING
           return (
             <button
               key={state}
@@ -106,12 +110,12 @@ export function RSVPButton({
               onClick={() => submit(state)}
               disabled={pending}
               aria-pressed={active}
-              className={`rounded-md border px-3 py-1.5 text-sm transition disabled:opacity-60 ${
-                active
-                  ? 'border-place-mark-fg bg-place-mark-bg text-place-mark-fg'
-                  : 'border-place-divider bg-place-card text-place-text hover:border-place-mark-fg'
-              }`}
+              className={[
+                'flex h-10 items-center justify-center gap-1 rounded-[10px] font-body text-[13px] font-semibold disabled:opacity-60 motion-safe:transition-colors',
+                active ? 'bg-text text-bg' : 'bg-soft text-text hover:bg-border',
+              ].join(' ')}
             >
+              {showCheck ? <Check size={12} aria-hidden="true" /> : null}
               {rsvpLabel(state)}
             </button>
           )
@@ -120,7 +124,7 @@ export function RSVPButton({
 
       {textfieldHints && currentState ? (
         <div className="space-y-1">
-          <label className="block text-xs text-place-text-soft" htmlFor="rsvp-note">
+          <label className="block text-xs text-muted" htmlFor="rsvp-note">
             {textfieldHints.label}
           </label>
           <div className="flex items-center gap-2">
@@ -135,9 +139,9 @@ export function RSVPButton({
               placeholder={textfieldHints.placeholder}
               maxLength={280}
               disabled={pending}
-              className="flex-1 rounded-md border border-place-divider bg-place-card px-3 py-1.5 text-sm text-place-text focus:border-place-mark-fg focus:outline-none"
+              className="flex-1 rounded-[10px] border-[0.5px] border-border bg-surface px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
             />
-            <span className="text-[10px] text-place-text-soft">{note.length}/280</span>
+            <span className="text-[10px] text-muted">{note.length}/280</span>
           </div>
         </div>
       ) : null}
@@ -146,7 +150,7 @@ export function RSVPButton({
         <p
           role="alert"
           aria-live="polite"
-          className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+          className="rounded-[10px] border-[0.5px] border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
         >
           {feedback.message}
         </p>

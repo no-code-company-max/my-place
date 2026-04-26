@@ -1169,11 +1169,13 @@ Estructura top-down (todo dentro del shell viewport):
   - QuotePreview restilead: `border-l-[2px] border-accent pl-[10px]`, texto italic `text-[13.5px] text-muted` 1 line clamp, attribution "— Nombre" italic `text-[11.5px] text-muted`.
   - Footer reply: `<ReactionBar>` (mismas 6 emojis) + `<QuoteButton>` ("responder/citar") + `<EditWindowActions>` (autor 60s) + `<CommentAdminMenu>` (admin), gap 14px, margin-top 10px.
 
-- **`<CommentComposer>`** sticky bottom:
-  - Layout: `MemberAvatar` 36×36 izq + `<RichTextEditor>` (TipTap full, intacto) centro + send button 36×36 round `bg-accent text-bg` der.
-  - Padding 8/12, top hairline `border-[0.5px] border-border`, bottom += `env(safe-area-inset-bottom)`.
-  - Quoting chip activo (cuando `quoting !== null`): arriba del editor, `border-l-[2px] border-accent`, "Citando a {nombre}: '...'", × button para clear.
-  - **Gap a resolver en R.6.4**: el shell viewport actual es `flex-1 overflow-hidden`, lo que bloquea sticky bottom. Approaches: cambiar viewport del shell a `overflow-y-auto`, o hacer el composer `fixed bottom-0` en vez de sticky. Decisión arquitectónica chica con su propio mini-ADR si requiere.
+- **`<CommentComposer>`** fixed bottom (resuelto en R.6.4):
+  - Layout: `<RichTextEditor>` (TipTap full, intacto) izq/centro + send button 40×40 round `bg-accent text-bg` con icono `Send` lucide der.
+  - Posicionamiento: `fixed inset-x-0 bottom-0 mx-auto max-w-[420px] z-30` para alinearse con la columna del shell (`AppShell` usa el mismo `max-w`). Background `bg-bg/90 backdrop-blur` + top hairline `border-[0.5px] border-border`. Bottom padding += `env(safe-area-inset-bottom)` para iOS notch/home bar.
+  - Quoting chip activo (cuando `quote !== null`): arriba del editor, reusa `<QuotePreview>` con × button para clear.
+  - El page composer agrega `pb-32` al contenedor para que el último comment no quede tapado.
+  - **Gap CRÍTICO resuelto en R.6.4**: shell `<main>` cambió de `flex-1 overflow-hidden` → `flex-1 overflow-x-hidden`. Preserva el clip horizontal previsto para swipe (R.2.5 follow-up) pero libera scroll vertical para `position: fixed/sticky` desde dentro del page tree. `fixed bottom-0` se eligió sobre `sticky bottom-0` porque el shell main no es scroll container — el body scrollea, así que sticky pinearía al fondo del último contenido, no de la viewport. El cambio es una línea en `app-shell.tsx`; sin ADR propio (es ajuste mecánico de una decisión ya documentada en R.2 spec § 4).
+  - **Diff vs spec original 21.2**: el avatar 36×36 izq queda diferido — el composer hoy no recibe info del viewer. Anotado como follow-up de R.6 para evaluar si suma a la UX o no.
 
 ### 21.3 Excepciones intencionales (NO migrar al handoff literal)
 
@@ -1219,14 +1221,14 @@ Performance: el query `listPostsByPlace` agrega 1-2 sub-queries por request (cou
 
 **Reescrituras en `discussions/ui/`**:
 
-- `<PostList>` → `<ThreadList>` (compone SectionHeader + FilterPills + Featured + Rows).
-- `<PostCard>` → reemplazado por `<FeaturedThreadCard>` + `<ThreadRow>` (split por modo).
-- `<PostDetail>` → restyle (title 28px, body spacing).
-- `<CommentThread>` + `<CommentItem>` → restyle (28px avatar, sin card chrome, hairline).
+- `<PostList>` → reescrito (compone SectionHeader + FilterPills + Featured + Rows). Nombre `PostList` preservado para no romper la API pública del slice; conceptualmente es un `<ThreadList>`.
+- `<PostCard>` → eliminado, reemplazado por `<FeaturedThreadCard>` + `<ThreadRow>` (split por modo).
+- `<PostDetail>` → restyle (title 28px, body spacing). El kebab `<PostAdminMenu>` ya NO se monta dentro — se mueve al slot derecho de `<ThreadHeaderBar>` desde la page composer.
+- `<CommentThread>` + `<CommentItem>` → restyle (28px avatar `MemberAvatar`, sin card chrome, hairline divider externo).
 - `<QuotePreview>` → restyle (border-l-2 accent + italic muted).
-- `<CommentComposer>` → restyle (sticky bottom, avatar+editor+send 3-col, mantener TipTap interno).
-- `<ReactionBar>` → restyle visual (mantener 6 emojis y data flow intactos).
-- `<PostReadersBlock>` → restyle acorde al handoff (5 max avatars + count compacto).
+- `<CommentComposer>` → restyle (`fixed bottom-0` con `safe-area-inset-bottom`, editor TipTap full + send button round 40×40 accent con icono `Send` lucide; ver § 21.2).
+- `<ReactionBar>` → restyle visual (chips planos `border-[0.5px]` con `bg-accent/10` cuando activo; mantener 6 emojis y data flow intactos).
+- `<PostReadersBlock>` → restyle reusando `<ReaderStack>` (max 5 + count "{n} leyeron").
 
 **Intactos en R.6** (sin cambios):
 
@@ -1242,13 +1244,44 @@ Performance: el query `listPostsByPlace` agrega 1-2 sub-queries por request (cou
 
 ### 21.7 Sub-fases de implementación (R.6.1 → R.6.5)
 
-| Sub       | Deliverable                                                                                                                                                                                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **R.6.1** | Helper `richTextExcerpt` server + extensión `PostListView` con `snippet`, `commentCount`, `readerSample`. Tests del query (TDD).                                                                                                                                                     |
-| **R.6.2** | `<BackButton>` y `<ReaderStack>` en `shared/ui/` + tests.                                                                                                                                                                                                                            |
-| **R.6.3** | Slice `discussions/ui` rewrite list: nuevos componentes + reescritura de `<PostList>` + adaptación de page + update `loading.tsx` + adaptación de tests existentes (TDD rojo→verde) + verificación E2E (`comment-reactions`, `post-crud`).                                           |
-| **R.6.4** | Thread detail rewrite: `<ThreadHeaderBar>` + restyle de `<PostDetail>`/`<CommentThread>`/`<CommentItem>`/`<QuotePreview>`/`<CommentComposer>`/`<ReactionBar>`/`<PostReadersBlock>`. Resolver gap del shell viewport vs composer sticky. Tests adaptados. Manual QA presence + dwell. |
-| **R.6.5** | Cleanup + verificación full + manual QA + update spec § 21 con diff descubierto + update roadmap.md con R.6 ✅.                                                                                                                                                                      |
+| Sub          | Deliverable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **R.6.1** ✅ | Helper `richTextExcerpt` server + extensión `PostListView` con `snippet`, `commentCount`, `readerSample`. Tests del query.                                                                                                                                                                                                                                                                                                                                                                       |
+| **R.6.2** ✅ | `<BackButton>` en `shared/ui/` + `<ReaderStack>` en `discussions/ui/` (vive en el slice porque consume `<MemberAvatar>` — boundary clean: shared no conoce el dominio "miembro"). Tests.                                                                                                                                                                                                                                                                                                         |
+| **R.6.3** ✅ | Slice `discussions/ui` rewrite list: `<ThreadsSectionHeader>`, `<ThreadFilterPills>`, `<FeaturedThreadCard>`, `<ThreadRow>`, `<EmptyThreads>`. Reescritura del export `PostList` (nombre preservado). `<PostCard>` eliminado. Page `/conversations/page.tsx` reducida (header en SectionHeader). `loading.tsx` actualizado. Split `members/public.ts` + `public.server.ts` para que el chain de Server Components consumiendo MemberAvatar no rompa el bundle cliente.                           |
+| **R.6.4** ✅ | Thread detail rewrite: `<ThreadHeaderBar>` (sticky 56px) + restyle de `<PostDetail>`, `<CommentThread>`, `<CommentItem>`, `<QuotePreview>`, `<CommentComposer>` (fixed bottom), `<ReactionBar>`, `<PostReadersBlock>`. **Gap shell viewport resuelto** cambiando `<main>` de `overflow-hidden` → `overflow-x-hidden` (preserva clip horizontal previsto para swipe R.2.5, libera scroll vertical para fixed/sticky). Tests adaptados (`post-readers-block.test.tsx` reescrito para nuevo shape). |
+| **R.6.5** ✅ | Cleanup + verificación full (typecheck, lint, 788 unit tests, build prod limpio) + update spec § 21 con diff descubierto + update roadmap.md con R.6 ✅. Manual QA del thread detail (sticky header, fixed composer, presence + dwell) confirmado por user.                                                                                                                                                                                                                                      |
+
+### 21.8 Follow-ups post-R.6 (anotaciones, no in-scope de R.6)
+
+Notas de producto registradas durante R.6 para no perder contexto. **Cada
+follow-up requiere su propio mini-spec + ADR antes de implementarse** — la
+anotación acá no es decisión, es memoria.
+
+- **FAB "+" cross-zona** — reemplazar las CTAs "Nueva" por SectionHeader
+  (conversaciones, eventos, etc.) por un único botón flotante "+" en el shell.
+  Al tocarlo, abre un menú con las acciones disponibles según la zona y los
+  permisos del usuario ("Nueva discusión", "Proponer evento", "Subir
+  documento", etc.). Vive en `shared/ui/` como primitivo `<FAB>` + un slice
+  `actions/` que registra las opciones por zona. Reemplaza el CTA actual
+  embebido en `<ThreadsSectionHeader>` (R.6.3). Implementación post-R.6 con
+  spec + ADR propios; el ADR debe resolver: cómo se registran las acciones
+  por zona, posicionamiento (bottom-right respetando safe-area iOS + sin
+  tapar composer del thread detail), accesibilidad (focus trap del menú,
+  ESC para cerrar), variantes por permiso (member vs admin/owner).
+- **Filtros reales en `<ThreadFilterPills>`** — extender `listPostsByPlace`
+  para aceptar `filter: 'all' | 'unanswered' | 'mine'` y desbloquear las
+  pills hoy `aria-disabled`. Spec menor + extensión de tests del query.
+- **Featured admin pinning** — alternativa al heurístico actual (primer
+  post por `lastActivityAt`). Requiere schema change (`Post.pinnedAt` o
+  similar) + UI en admin overflow + ADR propio. Diferido salvo que producto
+  pida explícitamente.
+- **Overflow menu non-admin** — el slot derecho del `<ThreadHeaderBar>`
+  hoy queda vacío para non-admin. Futuro: poblar con "Reportar",
+  "Silenciar tema", "Compartir" según producto.
+- **Snippet con marcas markdown preservadas** — `richTextExcerpt` actual
+  devuelve plain text. Si producto pide, evaluar variante que preserve
+  bold/italic inline (sin links ni bloques) para los snippets.
 
 ---
 

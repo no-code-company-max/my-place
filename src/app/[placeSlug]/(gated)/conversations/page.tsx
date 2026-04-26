@@ -30,14 +30,14 @@ export default async function ConversationsPage({ params }: Props) {
     <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl italic text-place-text">Conversaciones</h1>
-          <p className="mt-1 text-sm text-place-text-soft">
+          <h1 className="font-serif text-2xl italic text-text">Conversaciones</h1>
+          <p className="mt-1 text-sm text-muted">
             Turnos editoriales del place. Sin apuro, sin scroll infinito.
           </p>
         </div>
         <Link
           href="/conversations/new"
-          className="shrink-0 rounded-md bg-place-mark-bg px-3 py-2 text-sm text-place-mark-fg hover:opacity-90"
+          className="shrink-0 rounded-md bg-accent px-3 py-2 text-sm text-bg hover:opacity-90"
         >
           Nueva conversación
         </Link>

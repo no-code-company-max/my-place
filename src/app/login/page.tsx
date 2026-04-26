@@ -24,7 +24,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm">
         <h1 className="mb-2 font-serif text-4xl italic">Entrar</h1>
-        <p className="mb-8 text-sm text-place-text-medium">
+        <p className="mb-8 text-sm text-muted">
           Te enviamos un link a tu email. Hacé click y listo.
         </p>
         <LoginForm

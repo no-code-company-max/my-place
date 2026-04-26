@@ -37,8 +37,8 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
     return (
       <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
         <header>
-          <h1 className="font-serif text-2xl italic text-place-text">Nueva conversación</h1>
-          <p className="mt-1 text-sm text-place-text-soft">
+          <h1 className="font-serif text-2xl italic text-text">Nueva conversación</h1>
+          <p className="mt-1 text-sm text-muted">
             Sin apuro. Escribí y publicá cuando tenga sentido.
           </p>
         </header>
@@ -64,8 +64,8 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
       <header>
-        <h1 className="font-serif text-2xl italic text-place-text">Editar conversación</h1>
-        <p className="mt-1 text-sm text-place-text-soft">
+        <h1 className="font-serif text-2xl italic text-text">Editar conversación</h1>
+        <p className="mt-1 text-sm text-muted">
           Los cambios se marcan con «(editado)» al lado del título.
         </p>
       </header>

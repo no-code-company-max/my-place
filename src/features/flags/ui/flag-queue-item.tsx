@@ -63,11 +63,11 @@ export function FlagQueueItem({ view }: Props): React.ReactElement {
         : null
 
   return (
-    <li className="rounded-lg border border-place-divider bg-place-card p-4">
+    <li className="rounded-lg border border-border bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 space-y-1">
-          <div className="flex items-center gap-2 text-xs text-place-text-soft">
-            <span className="rounded-full border border-place-divider px-2 py-0.5 uppercase tracking-wide">
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span className="rounded-full border border-border px-2 py-0.5 uppercase tracking-wide">
               {view.targetType}
             </span>
             <span>·</span>
@@ -77,30 +77,28 @@ export function FlagQueueItem({ view }: Props): React.ReactElement {
             <span>·</span>
             <span className="italic">{CONTENT_STATUS_LABEL[view.contentStatus]}</span>
           </div>
-          {view.title ? (
-            <h3 className="font-serif text-base text-place-text">{view.title}</h3>
-          ) : null}
+          {view.title ? <h3 className="font-serif text-base text-text">{view.title}</h3> : null}
           {view.preview ? (
-            <p className="text-sm text-place-text-soft">{view.preview}</p>
+            <p className="text-sm text-muted">{view.preview}</p>
           ) : (
-            <p className="text-sm italic text-place-text-soft">[contenido no disponible]</p>
+            <p className="text-sm italic text-muted">[contenido no disponible]</p>
           )}
           {view.reasonNote ? (
-            <p className="bg-place-mark-bg/30 mt-2 rounded border-l-2 border-place-divider px-3 py-1.5 text-sm text-place-text">
-              <span className="mr-1 text-xs uppercase text-place-text-soft">Nota:</span>
+            <p className="bg-accent/30 mt-2 rounded border-l-2 border-border px-3 py-1.5 text-sm text-text">
+              <span className="mr-1 text-xs uppercase text-muted">Nota:</span>
               {view.reasonNote}
             </p>
           ) : null}
           {targetHref ? (
             <a
               href={targetHref}
-              className="inline-block text-xs text-place-text-soft underline hover:text-place-text"
+              className="inline-block text-xs text-muted underline hover:text-text"
             >
               Ver en contexto
             </a>
           ) : null}
           {isResolved ? (
-            <p className="mt-2 text-xs italic text-place-text-soft">
+            <p className="mt-2 text-xs italic text-muted">
               Resuelto {view.status === 'REVIEWED_ACTIONED' ? 'con acción' : 'sin acción'}
               {view.reviewedAt ? ' · ' : null}
               {view.reviewedAt ? <TimeAgo date={view.reviewedAt} /> : null}
@@ -115,7 +113,7 @@ export function FlagQueueItem({ view }: Props): React.ReactElement {
             type="button"
             onClick={() => setConfirm({ kind: 'dismiss' })}
             disabled={pending}
-            className="rounded px-3 py-1.5 text-sm text-place-text-soft hover:text-place-text"
+            className="rounded px-3 py-1.5 text-sm text-muted hover:text-text"
           >
             Ignorar
           </button>
@@ -124,7 +122,7 @@ export function FlagQueueItem({ view }: Props): React.ReactElement {
               type="button"
               onClick={() => setConfirm({ kind: 'hide' })}
               disabled={pending || alreadyHidden || alreadyGone}
-              className="hover:bg-place-mark-bg/30 rounded border border-place-divider px-3 py-1.5 text-sm text-place-text disabled:opacity-50"
+              className="hover:bg-accent/30 rounded border border-border px-3 py-1.5 text-sm text-text disabled:opacity-50"
             >
               Ocultar
             </button>
@@ -133,7 +131,7 @@ export function FlagQueueItem({ view }: Props): React.ReactElement {
             type="button"
             onClick={() => setConfirm({ kind: 'delete' })}
             disabled={pending || alreadyGone}
-            className="rounded bg-[color:var(--place-mark-bg)] px-3 py-1.5 text-sm font-medium text-[color:var(--place-mark-fg)] disabled:opacity-50"
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
           >
             Eliminar
           </button>
@@ -223,7 +221,7 @@ function ConfirmActions({
         type="button"
         onClick={onCancel}
         disabled={pending}
-        className="rounded px-3 py-1.5 text-sm text-place-text-soft hover:text-place-text"
+        className="rounded px-3 py-1.5 text-sm text-muted hover:text-text"
       >
         Cancelar
       </button>
@@ -231,7 +229,7 @@ function ConfirmActions({
         type="button"
         onClick={onConfirm}
         disabled={pending}
-        className="rounded bg-[color:var(--place-mark-bg)] px-3 py-1.5 text-sm font-medium text-[color:var(--place-mark-fg)] disabled:opacity-60"
+        className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-60"
       >
         {pending ? 'Aplicando…' : confirmLabel}
       </button>

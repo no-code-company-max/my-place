@@ -18,18 +18,14 @@ export default async function MarketingHomePage() {
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="max-w-xl text-center">
         <h1 className="mb-4 font-serif text-5xl italic">Place</h1>
-        <p className="text-place-text-medium">
-          Un lugar digital pequeño e íntimo para hasta 150 personas.
-        </p>
+        <p className="text-muted">Un lugar digital pequeño e íntimo para hasta 150 personas.</p>
         <Link
           href={ctaHref}
           className="mt-8 inline-block rounded-md bg-neutral-900 px-5 py-2 text-white"
         >
           {ctaLabel}
         </Link>
-        <p className="mt-8 text-sm text-place-text-whisper">
-          Landing placeholder · Fase 8 del roadmap
-        </p>
+        <p className="mt-8 text-sm text-muted">Landing placeholder · Fase 8 del roadmap</p>
       </div>
     </main>
   )

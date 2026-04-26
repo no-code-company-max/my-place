@@ -159,21 +159,21 @@ export function EventForm({ mode, allowedTimezones, defaultTimezone }: Props): R
       ) : null}
 
       <label className="block">
-        <span className="mb-1 block text-sm text-place-text-soft">Título</span>
+        <span className="mb-1 block text-sm text-muted">Título</span>
         <input
           type="text"
           maxLength={EVENT_TITLE_MAX_LENGTH}
           aria-invalid={formState.errors.title ? true : undefined}
-          className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
           {...register('title', { required: true, minLength: EVENT_TITLE_MIN_LENGTH })}
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm text-place-text-soft">Descripción (opcional)</span>
+        <span className="mb-1 block text-sm text-muted">Descripción (opcional)</span>
         <textarea
           rows={4}
-          className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
           placeholder="Qué traer, cómo llegar, intenciones, links útiles…"
           {...register('description')}
         />
@@ -181,28 +181,28 @@ export function EventForm({ mode, allowedTimezones, defaultTimezone }: Props): R
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm text-place-text-soft">Empieza</span>
+          <span className="mb-1 block text-sm text-muted">Empieza</span>
           <input
             type="datetime-local"
             required
-            className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
             {...register('startsAt', { required: true })}
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm text-place-text-soft">Termina (opcional)</span>
+          <span className="mb-1 block text-sm text-muted">Termina (opcional)</span>
           <input
             type="datetime-local"
-            className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
             {...register('endsAt')}
           />
         </label>
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-sm text-place-text-soft">Timezone del evento</span>
+        <span className="mb-1 block text-sm text-muted">Timezone del evento</span>
         <select
-          className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
           {...register('timezone', { required: true })}
         >
           {allowedTimezones.map((tz) => (
@@ -211,21 +211,19 @@ export function EventForm({ mode, allowedTimezones, defaultTimezone }: Props): R
             </option>
           ))}
         </select>
-        <span className="mt-1 block text-xs text-place-text-soft">
+        <span className="mt-1 block text-xs text-muted">
           La hora del evento se muestra siempre en este timezone, sin importar dónde esté quien lo
           mire.
         </span>
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm text-place-text-soft">
-          Dónde (opcional, dirección o link)
-        </span>
+        <span className="mb-1 block text-sm text-muted">Dónde (opcional, dirección o link)</span>
         <input
           type="text"
           maxLength={EVENT_LOCATION_MAX_LENGTH}
           placeholder="Av. Corrientes 1234 / https://meet.google.com/abc-defg-hij"
-          className="w-full rounded-md border border-place-divider bg-place-card px-3 py-2 text-place-text focus:border-place-mark-fg focus:outline-none"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
           {...register('location')}
         />
       </label>
@@ -234,7 +232,7 @@ export function EventForm({ mode, allowedTimezones, defaultTimezone }: Props): R
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-place-mark-bg px-4 py-2 text-place-mark-fg disabled:opacity-60"
+          className="rounded-md bg-accent px-4 py-2 text-bg disabled:opacity-60"
         >
           {pending
             ? mode.kind === 'create'
@@ -251,7 +249,7 @@ export function EventForm({ mode, allowedTimezones, defaultTimezone }: Props): R
               router.push(mode.postSlug ? `/conversations/${mode.postSlug}` : '/events')
             }
             disabled={pending}
-            className="rounded-md px-3 py-2 text-sm text-place-text-soft hover:text-place-text"
+            className="rounded-md px-3 py-2 text-sm text-muted hover:text-text"
           >
             Cancelar
           </button>

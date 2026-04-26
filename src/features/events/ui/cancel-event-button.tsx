@@ -37,7 +37,7 @@ export function CancelEventButton({ eventId }: { eventId: string }): React.React
       <button
         type="button"
         onClick={() => setConfirming(true)}
-        className="rounded-md border border-place-divider px-3 py-1.5 text-place-text-soft hover:border-amber-300 hover:text-amber-700"
+        className="rounded-md border border-border px-3 py-1.5 text-muted hover:border-amber-300 hover:text-amber-700"
       >
         Cancelar evento
       </button>
@@ -46,7 +46,7 @@ export function CancelEventButton({ eventId }: { eventId: string }): React.React
 
   return (
     <span className="inline-flex items-center gap-2">
-      <span className="text-place-text-soft">¿Seguro? La conversación queda viva.</span>
+      <span className="text-muted">¿Seguro? La conversación queda viva.</span>
       <button
         type="button"
         onClick={cancel}
@@ -59,7 +59,7 @@ export function CancelEventButton({ eventId }: { eventId: string }): React.React
         type="button"
         onClick={() => setConfirming(false)}
         disabled={pending}
-        className="text-place-text-soft hover:text-place-text"
+        className="text-muted hover:text-text"
       >
         Volver
       </button>

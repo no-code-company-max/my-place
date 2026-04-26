@@ -139,6 +139,17 @@ Implementar según `docs/ontologia/eventos.md`. Spec canónico:
 
 **Entregable**: feature de eventos F1 completa — CRUD + RSVP texturado + thread auto + listado + relación bidireccional + visual del handoff aplicado. Diferido en post-F1: recurrencia, UI 3 momentos contextual, memoria fresca, archive físico, exclusiones granulares, permisos por rol granulares, ICS export, realtime presence, notificaciones, recordatorios, cupo máximo, reacciones sobre Event, eventos all-day como tipo dedicado, cover visual, naturaleza presencial/virtual como discriminador, density variants (data-density), theme variants (data-theme), dark mode auto, WCAG contrast validation real, custom tooltip primitive, migración masiva SVG → lucide.
 
+## Roadmap macro post-F.G — Replicar handoff/ en el producto
+
+Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`. Define las fases R.1 → R.4 que llevan el producto del estado post-F.G al diseño completo del `handoff/`. Library/library-category diferidos por decisión de producto.
+
+- **R.1 — Migración visual a tokens del rebrand F.G** ✅ (2026-04-26). Refactor mecánico de tokens `place-*` legacy → tokens canónicos (`bg`/`text`/`surface`/`muted`/`border`/`accent`/etc.) en todos los consumers del codebase (~50 archivos). Aliases `--place-*` se mantienen como compat layer en `globals.css` y `theme.ts`. Excepciones intencionales: `--place-presence` (verde fijo de presencia), `--place-unread` (naranja fijo de unread), `--place-danger` (con fallback hex), clase CSS `place-mention` (identifier semantic). Sub-fases:
+  - **R.1.A** (commit `f17099b`): discussions/ui (20) + shared/ui (3 — dialog, dropdown-menu, toaster).
+  - **R.1.B** (este commit): events/ui (3) + flags/ui (3) + hours/ui (1) + src/app/\* (17) + audit final + update docs/{theming,roadmap}.md.
+- **R.2 — App shell común (`_shell`)** — pendiente. Spec `docs/features/shell/spec.md` antes de código.
+- **R.3 — Home / portada (`home`)** — pendiente. Spec `docs/features/home/spec.md` antes de código.
+- **R.4 — Search (overlay global)** — pendiente. Spec `docs/features/search/spec.md` antes de código + migration DB fulltext.
+
 ## Fase 7 — Portada y zonas
 
 - Swipe horizontal entre zonas (portada + zonas por feature activa)

@@ -9,6 +9,17 @@ El producto entró a una nueva paleta visual canónica (handoff design en
 `--place-*` legacy como aliases backward-compat. Ver
 `docs/decisions/2026-04-27-design-handoff-rebrand.md`.
 
+> **R.1 cerrado (2026-04-26)** — todos los consumers (`src/features/*`,
+> `src/app/*`, `src/shared/ui/*`) usan los tokens nuevos directamente
+> (`bg`, `surface`, `soft`, `text`, `muted`, `border`, `accent`, etc.).
+> Los aliases `--place-*` y las clases Tailwind `bg-place-card`,
+> `text-place-text-soft`, etc. **se mantienen activos en el theme** como
+> compat layer (por si algún ext consumer los usa), pero **ningún
+> archivo del proyecto los referencia**. Excepciones intencionales:
+> `--place-presence` (verde fijo de presencia), `--place-unread`
+> (naranja fijo de unread), `--place-danger` (con fallback hex), y la
+> clase CSS custom `place-mention` (identifier semantic, no token).
+
 ### Tokens primarios (handoff)
 
 Cada token es una CSS custom property generable por place via

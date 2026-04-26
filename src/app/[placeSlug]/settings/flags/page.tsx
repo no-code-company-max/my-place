@@ -61,11 +61,11 @@ export default async function SettingsFlagsPage({ params, searchParams }: Props)
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
       <header>
-        <p className="text-sm text-place-text-soft">Settings · {place.name}</p>
-        <h1 className="font-serif text-3xl italic text-place-text">Reportes</h1>
+        <p className="text-sm text-muted">Settings · {place.name}</p>
+        <h1 className="font-serif text-3xl italic text-text">Reportes</h1>
       </header>
 
-      <nav aria-label="Filtrar reportes" className="flex gap-1 border-b border-place-divider">
+      <nav aria-label="Filtrar reportes" className="flex gap-1 border-b border-border">
         <TabLink tab="pending" active={tab === 'pending'}>
           Pendientes
         </TabLink>
@@ -75,7 +75,7 @@ export default async function SettingsFlagsPage({ params, searchParams }: Props)
       </nav>
 
       {views.length === 0 ? (
-        <p className="rounded-lg border border-place-divider bg-place-card p-6 text-sm italic text-place-text-soft">
+        <p className="rounded-lg border border-border bg-surface p-6 text-sm italic text-muted">
           {tab === 'pending' ? 'No hay reportes pendientes.' : 'No hay reportes resueltos todavía.'}
         </p>
       ) : (
@@ -90,7 +90,7 @@ export default async function SettingsFlagsPage({ params, searchParams }: Props)
         <div className="flex justify-center">
           <Link
             href={nextHref}
-            className="rounded-md border border-place-divider bg-place-card px-4 py-2 text-sm text-place-text-soft hover:text-place-text"
+            className="rounded-md border border-border bg-surface px-4 py-2 text-sm text-muted hover:text-text"
           >
             Siguientes →
           </Link>
@@ -115,8 +115,8 @@ function TabLink({
       aria-current={active ? 'page' : undefined}
       className={
         active
-          ? 'border-b-2 border-place-mark-fg px-4 py-2 text-sm font-medium text-place-text'
-          : 'px-4 py-2 text-sm text-place-text-soft hover:text-place-text'
+          ? 'border-b-2 border-bg px-4 py-2 text-sm font-medium text-text'
+          : 'px-4 py-2 text-sm text-muted hover:text-text'
       }
     >
       {children}

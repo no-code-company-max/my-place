@@ -30,8 +30,8 @@ export default async function NewEventPage({ params }: Props) {
   return (
     <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
       <header>
-        <h1 className="font-serif text-2xl italic text-place-text">Proponer evento</h1>
-        <p className="mt-1 text-sm text-place-text-soft">
+        <h1 className="font-serif text-2xl italic text-text">Proponer evento</h1>
+        <p className="mt-1 text-sm text-muted">
           Una invitación al place. Los miembros pueden responder con cuánto pueden.
         </p>
       </header>

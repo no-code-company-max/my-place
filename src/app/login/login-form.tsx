@@ -55,10 +55,7 @@ export function LoginForm({ next, syncError }: { next?: string; syncError?: bool
 
   if (sent) {
     return (
-      <div
-        className="rounded-md border border-neutral-300 p-4 text-sm text-place-text-soft"
-        role="status"
-      >
+      <div className="rounded-md border border-neutral-300 p-4 text-sm text-muted" role="status">
         Te enviamos un link a tu email. Revisá la bandeja y el spam.
       </div>
     )
@@ -75,13 +72,13 @@ export function LoginForm({ next, syncError }: { next?: string; syncError?: bool
         </div>
       ) : null}
       <label className="block text-sm">
-        <span className="mb-1 block text-place-text-soft">Email</span>
+        <span className="mb-1 block text-muted">Email</span>
         <input
           type="email"
           autoComplete="email"
           autoFocus
           inputMode="email"
-          className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-place-text focus:border-neutral-500 focus:outline-none"
+          className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-2 text-text focus:border-neutral-500 focus:outline-none"
           aria-invalid={errors.email ? true : undefined}
           {...register('email', { required: true })}
         />
@@ -100,14 +97,12 @@ export function LoginForm({ next, syncError }: { next?: string; syncError?: bool
       </button>
       {IS_DEV ? (
         <div className="mt-4 space-y-2 border-t border-dashed border-neutral-300 pt-4">
-          <p className="text-xs text-place-text-whisper">
-            Dev only · saltea el email y entra directo.
-          </p>
+          <p className="text-xs text-muted">Dev only · saltea el email y entra directo.</p>
           <button
             type="button"
             disabled={submitting}
             onClick={onDevSignIn}
-            className="w-full rounded-md border border-neutral-400 px-4 py-2 text-sm text-place-text-soft disabled:opacity-60"
+            className="w-full rounded-md border border-neutral-400 px-4 py-2 text-sm text-muted disabled:opacity-60"
           >
             Entrar sin email (dev)
           </button>

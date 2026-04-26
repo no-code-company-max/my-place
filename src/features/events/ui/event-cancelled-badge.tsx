@@ -10,7 +10,7 @@
 export function EventCancelledBadge(): React.ReactNode {
   return (
     <span
-      className="inline-flex items-center rounded border border-place-divider bg-place-card px-2 py-0.5 text-xs italic text-place-text-soft"
+      className="inline-flex items-center rounded border border-border bg-surface px-2 py-0.5 text-xs italic text-muted"
       aria-label="Evento cancelado"
     >
       Cancelado

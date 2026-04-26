@@ -15,12 +15,8 @@ export default function RootError({ error, reset }: { error: Error; reset: () =>
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="max-w-md text-center">
         <h1 className="mb-4 font-serif text-3xl italic">Algo se rompió.</h1>
-        <p className="mb-6 text-place-text-soft">Probá de nuevo. Si sigue pasando, avisanos.</p>
-        <button
-          type="button"
-          onClick={reset}
-          className="rounded-md bg-place-mark-bg px-4 py-2 text-place-mark-fg"
-        >
+        <p className="mb-6 text-muted">Probá de nuevo. Si sigue pasando, avisanos.</p>
+        <button type="button" onClick={reset} className="rounded-md bg-accent px-4 py-2 text-bg">
           Reintentar
         </button>
       </div>

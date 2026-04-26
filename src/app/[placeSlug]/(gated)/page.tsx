@@ -8,7 +8,7 @@ export default async function PlaceHomePage({ params }: Props) {
   return (
     <main className="p-8">
       <h1 className="mb-2 font-serif text-3xl italic">{placeSlug}</h1>
-      <p className="text-place-text-soft">Portada del place. Placeholder — Fase 7 del roadmap.</p>
+      <p className="text-muted">Portada del place. Placeholder — Fase 7 del roadmap.</p>
     </main>
   )
 }

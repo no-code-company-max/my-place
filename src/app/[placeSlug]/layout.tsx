@@ -45,7 +45,7 @@ export default async function PlaceLayout({ children, params }: Props) {
   const themeConfig = (place.themeConfig ?? {}) as ThemeConfig
 
   return (
-    <div style={buildThemeVars(themeConfig)} className="min-h-screen bg-place text-place-text">
+    <div style={buildThemeVars(themeConfig)} className="min-h-screen bg-bg text-text">
       {children}
     </div>
   )

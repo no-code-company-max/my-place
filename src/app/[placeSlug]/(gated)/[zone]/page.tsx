@@ -10,7 +10,7 @@ export default async function PlaceZonePage({ params }: Props) {
       <h1 className="font-serif text-2xl italic">
         {placeSlug} · {zone}
       </h1>
-      <p className="mt-2 text-place-text-soft">Zona placeholder.</p>
+      <p className="mt-2 text-muted">Zona placeholder.</p>
     </main>
   )
 }

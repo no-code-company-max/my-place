@@ -27,7 +27,7 @@ export function FlagButton({ targetType, targetId, className }: Props): React.Re
         aria-label="Reportar este contenido"
         className={
           className ??
-          'inline-flex items-center justify-center rounded p-1 text-[color:var(--place-text-soft)] transition-colors hover:text-[color:var(--place-text)]'
+          'inline-flex items-center justify-center rounded p-1 text-muted transition-colors hover:text-text'
         }
       >
         <svg

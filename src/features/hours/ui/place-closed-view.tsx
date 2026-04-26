@@ -4,7 +4,7 @@ import { HoursPreview, humanTimezone } from './hours-preview'
 
 /**
  * Pantalla que reemplaza al contenido del place cuando está cerrado. Respeta el
- * tema del place (`bg-place`, `text-place-text` — CSS vars ya inyectadas por
+ * tema del place (`bg-place`, `text-text` — CSS vars ya inyectadas por
  * `[placeSlug]/layout.tsx`), no usa clases de color hardcoded.
  *
  * Dos variantes:
@@ -28,26 +28,26 @@ export function PlaceClosedView({ placeName, opensAt, hours, variant }: Props) {
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center gap-6 p-8 text-center">
       <header className="space-y-1">
-        <p className="text-xs uppercase tracking-wide text-place-text-soft">{placeName}</p>
+        <p className="text-xs uppercase tracking-wide text-muted">{placeName}</p>
         <h1 className="font-serif text-4xl italic">Está cerrado</h1>
       </header>
 
       <OpensAtLine opensAt={opensAt} timezone={timezone} />
 
-      <section className="w-full rounded-md border border-place-divider bg-place-card-soft p-4 text-left">
-        <p className="mb-2 text-xs uppercase tracking-wide text-place-text-soft">Horario</p>
+      <section className="w-full rounded-md border border-border bg-soft p-4 text-left">
+        <p className="mb-2 text-xs uppercase tracking-wide text-muted">Horario</p>
         <HoursPreview hours={hours} />
       </section>
 
       {variant === 'admin' ? (
         <Link
           href="/settings/hours"
-          className="rounded-md border border-place-divider px-4 py-2 text-sm text-place-text hover:border-place-text"
+          className="rounded-md border border-border px-4 py-2 text-sm text-text hover:border-text"
         >
           Ir a configuración
         </Link>
       ) : (
-        <p className="text-xs text-place-text-soft">
+        <p className="text-xs text-muted">
           Si necesitás acceso antes, contactá al admin del place.
         </p>
       )}
@@ -63,14 +63,14 @@ function OpensAtLine({
   timezone: string | undefined
 }) {
   if (!opensAt) {
-    return <p className="text-place-text-soft">Horario aún no configurado.</p>
+    return <p className="text-muted">Horario aún no configurado.</p>
   }
   if (!timezone) {
-    return <p className="text-place-text-soft">Abrimos pronto.</p>
+    return <p className="text-muted">Abrimos pronto.</p>
   }
   const label = formatOpensAt(opensAt, timezone)
   return (
-    <p className="text-place-text-soft">
+    <p className="text-muted">
       Abrimos {label} ({humanTimezone(timezone)}).
     </p>
   )

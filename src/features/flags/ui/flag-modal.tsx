@@ -77,7 +77,7 @@ export function FlagModal({ targetType, targetId, open, onOpenChange }: Props): 
         </DialogDescription>
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="flag-reason" className="text-sm text-[color:var(--place-text)]">
+            <label htmlFor="flag-reason" className="text-sm text-text">
               Motivo
             </label>
             <select
@@ -86,7 +86,7 @@ export function FlagModal({ targetType, targetId, open, onOpenChange }: Props): 
               value={reason}
               onChange={(e) => setReason(e.target.value as '' | ReasonValue)}
               disabled={pending}
-              className="rounded border border-[color:var(--place-divider)] bg-[color:var(--place-card-bg)] px-3 py-2 text-sm text-[color:var(--place-text)] focus:border-[color:var(--place-mark-fg)] focus:outline-none"
+              className="rounded border border-border bg-surface px-3 py-2 text-sm text-text focus:border-bg focus:outline-none"
             >
               <option value="" disabled>
                 Elegí un motivo
@@ -99,7 +99,7 @@ export function FlagModal({ targetType, targetId, open, onOpenChange }: Props): 
             </select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="flag-note" className="text-sm text-[color:var(--place-text)]">
+            <label htmlFor="flag-note" className="text-sm text-text">
               Nota (opcional)
             </label>
             <textarea
@@ -110,9 +110,9 @@ export function FlagModal({ targetType, targetId, open, onOpenChange }: Props): 
               onChange={(e) => setNote(e.target.value)}
               disabled={pending}
               placeholder="Agregá contexto si hace falta"
-              className="resize-none rounded border border-[color:var(--place-divider)] bg-[color:var(--place-card-bg)] px-3 py-2 text-sm text-[color:var(--place-text)] focus:border-[color:var(--place-mark-fg)] focus:outline-none"
+              className="resize-none rounded border border-border bg-surface px-3 py-2 text-sm text-text focus:border-bg focus:outline-none"
             />
-            <span className="text-xs text-[color:var(--place-text-soft)]">
+            <span className="text-xs text-muted">
               {note.length}/{FLAG_NOTE_MAX_LENGTH}
             </span>
           </div>
@@ -121,14 +121,14 @@ export function FlagModal({ targetType, targetId, open, onOpenChange }: Props): 
               type="button"
               onClick={() => onOpenChange(false)}
               disabled={pending}
-              className="rounded px-3 py-1.5 text-sm text-[color:var(--place-text-soft)] hover:text-[color:var(--place-text)]"
+              className="rounded px-3 py-1.5 text-sm text-muted hover:text-text"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={pending || !reason}
-              className="rounded bg-[color:var(--place-mark-bg)] px-3 py-1.5 text-sm font-medium text-[color:var(--place-mark-fg)] disabled:opacity-60"
+              className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-60"
             >
               {pending ? 'Enviando…' : 'Reportar'}
             </button>

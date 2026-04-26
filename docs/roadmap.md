@@ -146,7 +146,10 @@ Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`
 - **R.1 — Migración visual a tokens del rebrand F.G** ✅ (2026-04-26). Refactor mecánico de tokens `place-*` legacy → tokens canónicos (`bg`/`text`/`surface`/`muted`/`border`/`accent`/etc.) en todos los consumers del codebase (~50 archivos). Aliases `--place-*` se mantienen como compat layer en `globals.css` y `theme.ts`. Excepciones intencionales: `--place-presence` (verde fijo de presencia), `--place-unread` (naranja fijo de unread), `--place-danger` (con fallback hex), clase CSS `place-mention` (identifier semantic). Sub-fases:
   - **R.1.A** (commit `f17099b`): discussions/ui (20) + shared/ui (3 — dialog, dropdown-menu, toaster).
   - **R.1.B** (este commit): events/ui (3) + flags/ui (3) + hours/ui (1) + src/app/\* (17) + audit final + update docs/{theming,roadmap}.md.
-- **R.2 — App shell común (`_shell`)** — pendiente. Spec `docs/features/shell/spec.md` antes de código.
+- **R.2 — App shell común (`_shell`)** — sub-fase R.2.0 cerrada.
+  - **R.2.0 — Spec del shell** ✅ (2026-04-26). `docs/features/shell/spec.md` (15 secciones) + ADR `docs/decisions/2026-04-26-shell-introduction.md`. Decisiones (consultadas al user): subdomain preservado (vs path-based del handoff), dots como links a URLs existentes (swipe diferido a R.2.5), skip status bar iOS cosmético, mobile-first con `max-w-[420px] mx-auto` centrado en desktop. Mount strategy: `[placeSlug]/layout.tsx` (parent del gated, cubre `/settings/*`). Data: consume `listMyPlaces` ya disponible en `places/public.ts` — no requiere extender slice.
+  - **R.2.1+ (pendientes)**: slice `src/features/shell/` con UI primitivos puros, mount en parent layout (Promise.all + `listMyPlaces`), cleanup de headers locales redundantes en pages migradas en R.1.B. Sub-milestones detallados en `docs/features/shell/spec.md` § 15.
+  - **R.2.5 (follow-up obligatorio, separado)**: swipe horizontal real entre zonas. ADR propio cuando se planifique. Decisión arquitectónica (single-page vs SSR cross-page) requiere su propio análisis.
 - **R.3 — Home / portada (`home`)** — pendiente. Spec `docs/features/home/spec.md` antes de código.
 - **R.4 — Search (overlay global)** — pendiente. Spec `docs/features/search/spec.md` antes de código + migration DB fulltext.
 

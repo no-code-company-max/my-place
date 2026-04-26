@@ -5,7 +5,7 @@ import { prisma } from '@/db/client'
 import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { logger } from '@/shared/lib/logger'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
-import { findMemberPermissions } from '@/features/members/public'
+import { findMemberPermissions } from '@/features/members/public.server'
 import { updateHoursInputSchema } from '../schemas'
 import { findPlaceStateBySlug } from './queries'
 

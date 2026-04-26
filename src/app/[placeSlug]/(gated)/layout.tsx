@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { findOrCreateCurrentOpening } from '@/features/discussions/public'
-import { findMemberPermissions } from '@/features/members/public'
+import { findMemberPermissions } from '@/features/members/public.server'
 import { isPlaceOpen, parseOpeningHours, PlaceClosedView } from '@/features/hours/public'
 import { logger } from '@/shared/lib/logger'
 import { loadPlace } from '../layout'

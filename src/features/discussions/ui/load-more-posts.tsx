@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import type { PostListView } from '../domain/types'
 import { loadMorePostsAction } from '../server/actions/load-more'
 import type { SerializedCursor } from '../server/actions/load-more'
-import { PostCard } from './post-card'
+import { ThreadRow } from './thread-row'
 import { friendlyErrorMessage } from './utils'
 
 export function LoadMorePosts({
@@ -34,24 +34,30 @@ export function LoadMorePosts({
   }
 
   return (
-    <div className="space-y-3">
-      {items.map((post) => (
-        <PostCard key={post.id} post={post} />
-      ))}
+    <div>
+      {items.length > 0 ? (
+        <div className="divide-y divide-border border-y-[0.5px] border-border">
+          {items.map((post) => (
+            <ThreadRow key={post.id} post={post} />
+          ))}
+        </div>
+      ) : null}
       {error ? (
-        <p role="alert" aria-live="polite" className="text-sm text-amber-700">
+        <p role="alert" aria-live="polite" className="px-3 pt-2 text-sm text-amber-700">
           {error}
         </p>
       ) : null}
       {cursor ? (
-        <button
-          type="button"
-          onClick={loadMore}
-          disabled={pending}
-          className="w-full rounded-md border border-border bg-surface px-4 py-2 text-sm text-muted hover:text-text disabled:opacity-60"
-        >
-          {pending ? 'Cargando…' : 'Ver más conversaciones'}
-        </button>
+        <div className="px-3 pt-3">
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={pending}
+            className="w-full rounded-[10px] border-[0.5px] border-border bg-surface px-4 py-2 text-sm text-muted hover:text-text disabled:opacity-60 motion-safe:transition-colors"
+          >
+            {pending ? 'Cargando…' : 'Ver más discusiones'}
+          </button>
+        </div>
       ) : null}
     </div>
   )

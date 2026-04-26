@@ -13,7 +13,7 @@
  *
  * Ver `docs/decisions/2026-04-24-erasure-365d.md`.
  */
-import { runErasure } from '@/features/members/public'
+import { runErasure } from '@/features/members/public.server'
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run')

@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { serverEnv } from '@/shared/config/env'
 import { logger } from '@/shared/lib/logger'
-import { runErasure } from '@/features/members/public'
+import { runErasure } from '@/features/members/public.server'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { findMemberProfile, findMemberPermissions } from '@/features/members/public'
+import { findMemberProfile, findMemberPermissions } from '@/features/members/public.server'
 
 export const metadata: Metadata = {
   title: 'Miembro · Place',

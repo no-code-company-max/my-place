@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
-import { findMemberPermissions } from '@/features/members/public'
+import { findMemberPermissions } from '@/features/members/public.server'
 import { listMyPlaces } from '@/features/places/public'
 import { isPlaceOpen, parseOpeningHours } from '@/features/hours/public'
 import { buildThemeVars, type ThemeConfig } from '@/shared/config/theme'

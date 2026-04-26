@@ -1,11 +1,30 @@
 import type { PostListView } from '../domain/types'
-import { PostCard } from './post-card'
+import { ThreadsSectionHeader } from './threads-section-header'
+import { ThreadFilterPills } from './thread-filter-pills'
+import { FeaturedThreadCard } from './featured-thread-card'
+import { ThreadRow } from './thread-row'
+import { EmptyThreads } from './empty-threads'
 import { LoadMorePosts } from './load-more-posts'
 
 /**
- * Lista de posts del place. Renderiza la primera página server-side con
- * `PostCard`; si hay `nextCursor`, monta el Client Component `<LoadMorePosts>`
- * para extender la lista sin navegar.
+ * Lista de discusiones del place (R.6 rediseño).
+ *
+ * Composición top-down:
+ *  - `<ThreadsSectionHeader>` — chip 💬 + título "Discusiones" + CTA "Nueva".
+ *  - `<ThreadFilterPills>` — Todos / Sin respuesta / En los que participo.
+ *    Solo "Todos" funcional en R.6 (otros 2 disabled).
+ *  - Si la lista está vacía → `<EmptyThreads>` y stop.
+ *  - Si hay items: el primero como `<FeaturedThreadCard>` (bento con
+ *    border + padding 18) seguido del resto como `<ThreadRow>`s
+ *    apilados con hairline divider entre rows.
+ *  - `<LoadMorePosts>` para paginación cursor-based si hay nextCursor.
+ *
+ * El nombre del export es `PostList` (NO `ThreadList`) para
+ * preservar consumers existentes — el slice se llama `discussions` y
+ * el modelo se sigue llamando `Post` (vocabulario R.6 "thread" es solo
+ * UI-facing).
+ *
+ * Ver `docs/features/discussions/spec.md` § 21.1.
  */
 export function PostList({
   placeId,
@@ -16,20 +35,31 @@ export function PostList({
   items: PostListView[]
   nextCursor: { createdAt: string; id: string } | null
 }): React.ReactNode {
-  if (items.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-surface p-6 text-center text-sm text-muted">
-        Todavía no hay conversaciones. Arrancá vos la primera.
-      </div>
-    )
-  }
+  // Featured = primer post según lo marcado por listPostsByPlace
+  // (heurística: idx===0 && !cursor). Después del primero, todo va como
+  // ThreadRow apilado con hairline.
+  const featured = items[0] ?? null
+  const rest = items.slice(1)
 
   return (
-    <section aria-label="Lista de conversaciones" className="space-y-3">
-      {items.map((post) => (
-        <PostCard key={post.id} post={post} />
-      ))}
-      {nextCursor ? <LoadMorePosts placeId={placeId} initialCursor={nextCursor} /> : null}
+    <section aria-label="Lista de discusiones" className="flex flex-col gap-4 pb-6">
+      <ThreadsSectionHeader />
+      <ThreadFilterPills />
+      {items.length === 0 ? (
+        <EmptyThreads />
+      ) : (
+        <>
+          {featured ? <FeaturedThreadCard post={featured} /> : null}
+          {rest.length > 0 ? (
+            <div className="divide-y divide-border border-y-[0.5px] border-border">
+              {rest.map((post) => (
+                <ThreadRow key={post.id} post={post} />
+              ))}
+            </div>
+          ) : null}
+          {nextCursor ? <LoadMorePosts placeId={placeId} initialCursor={nextCursor} /> : null}
+        </>
+      )}
     </section>
   )
 }

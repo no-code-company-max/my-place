@@ -1,8 +1,24 @@
 /**
- * API pública del slice `members`. Único punto de entrada desde otras partes del sistema.
- * Ver `docs/architecture.md` § boundaries.
+ * API pública client-safe del slice `members`. Tipos, schemas Zod,
+ * Server Actions (callables desde Client Components vía RSC boundary)
+ * y componentes UI client-safe.
+ *
+ * **No** incluye queries server-only ni componentes que las usen
+ * (ver `public.server.ts`). Mismo patrón split que `flags/public.ts`
+ * + `flags/public.server.ts` (ADR `2026-04-21-flags-subslice-split.md`):
+ * Next traza re-exports al bundle cliente cuando un Server Component
+ * que viaja a un Client Component importa este archivo. Mezclar
+ * `import 'server-only'` acá rompería el build.
+ *
+ * Caso real R.6.3: `<LoadMorePosts>` ('use client') usa `<ThreadRow>`
+ * (server) que importa `MemberAvatar` via este barrel. Sin split, el
+ * bundle cliente trazaba hasta `<PendingInvitationsList>` (server-only)
+ * y rompía con "You're importing a component that needs 'server-only'".
  */
 
+// ---------------------------------------------------------------
+// Tipos del dominio
+// ---------------------------------------------------------------
 export type {
   Invitation,
   InvitationDelivery,
@@ -12,39 +28,40 @@ export type {
   MembershipRole,
   PendingInvitation,
 } from './domain/types'
+
+// ---------------------------------------------------------------
+// Schemas Zod
+// ---------------------------------------------------------------
 export {
   inviteMemberSchema,
   resendInvitationSchema,
   type InviteMemberInput,
   type ResendInvitationInput,
 } from './schemas'
+
+// ---------------------------------------------------------------
+// Server Actions (callables desde Client Components via RSC)
+// ---------------------------------------------------------------
 export {
   acceptInvitationAction,
   inviteMemberAction,
   leaveMembershipAction,
   resendInvitationAction,
 } from './server/actions'
-export {
-  findInvitationById,
-  findInvitationByToken,
-  findInviterPermissions as findMemberPermissions,
-  findMemberProfile,
-  listActiveMembers,
-  listPendingInvitationsByPlace,
-  type ActiveMember,
-  type InvitationWithDelivery,
-  type InvitationWithPlace,
-  type MemberProfile,
-} from './server/queries'
-export { InviteMemberForm } from './ui/invite-form'
+
+// ---------------------------------------------------------------
+// UI client-safe (no consumen server-only)
+// ---------------------------------------------------------------
 export { MemberAvatar } from './ui/member-avatar'
+export { InviteMemberForm } from './ui/invite-form'
 export { AcceptInvitationView } from './ui/accept-invitation-view'
 export { LeaveButton } from './ui/leave-button'
-export { PendingInvitationsList } from './ui/pending-invitations-list'
 export { ResendInvitationButton } from './ui/resend-invitation-button'
+
+// ---------------------------------------------------------------
+// Helpers puros (sin imports server-only)
+// ---------------------------------------------------------------
 export {
   RESEND_EVENT_TO_STATUS,
   canTransition as canTransitionInvitationDelivery,
 } from './server/delivery-transitions'
-export { runErasure } from './server/erasure/run-erasure'
-export type { ErasureRunResult } from './server/erasure/types'

@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/shared/lib/supabase/server'
 import { clientEnv } from '@/shared/config/env'
-import { AcceptInvitationView, findInvitationByToken } from '@/features/members/public'
+import { AcceptInvitationView } from '@/features/members/public'
+import { findInvitationByToken } from '@/features/members/public.server'
 
 export const metadata: Metadata = {
   title: 'Aceptar invitación · Place',

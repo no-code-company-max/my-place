@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { findMemberPermissions } from '@/features/members/public'
+import { findMemberPermissions } from '@/features/members/public.server'
 
 type Props = {
   children: React.ReactNode

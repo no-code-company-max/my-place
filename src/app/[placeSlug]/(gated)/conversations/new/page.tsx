@@ -35,7 +35,7 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
 
   if (!search.edit) {
     return (
-      <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+      <div className="space-y-6 p-4 md:p-8">
         <header>
           <h1 className="font-serif text-2xl italic text-text">Nueva conversación</h1>
           <p className="mt-1 text-sm text-muted">
@@ -43,7 +43,7 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
           </p>
         </header>
         <PostComposer mode={{ kind: 'create', placeId: place.id }} />
-      </main>
+      </div>
     )
   }
 
@@ -62,7 +62,7 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
   }
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <header>
         <h1 className="font-serif text-2xl italic text-text">Editar conversación</h1>
         <p className="mt-1 text-sm text-muted">
@@ -79,6 +79,6 @@ export default async function NewOrEditPostPage({ params, searchParams }: Props)
           slug: post.slug,
         }}
       />
-    </main>
+    </div>
   )
 }

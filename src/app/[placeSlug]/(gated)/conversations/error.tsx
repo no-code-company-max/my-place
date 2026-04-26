@@ -12,7 +12,7 @@ export default function ConversationsError({
   reset: () => void
 }) {
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 md:p-8">
+    <div className="space-y-4 p-4 md:p-8">
       <h1 className="font-serif text-2xl italic text-text">Algo no salió bien</h1>
       <p className="text-sm text-muted">
         No pudimos cargar las conversaciones ahora. Volvé a intentarlo en un momento.
@@ -24,6 +24,6 @@ export default function ConversationsError({
       >
         Reintentar
       </button>
-    </main>
+    </div>
   )
 }

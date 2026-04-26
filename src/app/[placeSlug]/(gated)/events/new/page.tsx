@@ -28,7 +28,7 @@ export default async function NewEventPage({ params }: Props) {
   await resolveViewerForPlace({ placeSlug })
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <header>
         <h1 className="font-serif text-2xl italic text-text">Proponer evento</h1>
         <p className="mt-1 text-sm text-muted">
@@ -39,6 +39,6 @@ export default async function NewEventPage({ params }: Props) {
         mode={{ kind: 'create', placeId: place.id }}
         allowedTimezones={ALLOWED_TIMEZONES}
       />
-    </main>
+    </div>
   )
 }

@@ -55,7 +55,7 @@ export default async function MemberProfilePage({ params }: Props) {
   const roleLabel = profile.isOwner ? 'owner' : profile.role === 'ADMIN' ? 'admin' : 'miembro'
 
   return (
-    <main className="mx-auto max-w-xl space-y-8 p-8">
+    <div className="space-y-8 p-8">
       <header className="flex items-center gap-4">
         <Avatar url={profile.user.avatarUrl} displayName={profile.user.displayName} />
         <div>
@@ -76,7 +76,7 @@ export default async function MemberProfilePage({ params }: Props) {
           Disponible cuando existan conversaciones y eventos en este place.
         </p>
       </section>
-    </main>
+    </div>
   )
 }
 

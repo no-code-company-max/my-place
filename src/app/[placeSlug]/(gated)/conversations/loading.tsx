@@ -4,7 +4,7 @@
  */
 export default function ConversationsLoading() {
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 md:p-8" aria-busy="true" aria-live="polite">
+    <div className="space-y-4 p-4 md:p-8" aria-busy="true" aria-live="polite">
       <div className="bg-accent/50 h-8 w-48 rounded" />
       <div className="bg-accent/30 h-4 w-72 rounded" />
       <div className="space-y-3 pt-6">
@@ -12,6 +12,6 @@ export default function ConversationsLoading() {
         <div className="h-20 rounded-lg border border-border bg-surface" />
         <div className="h-20 rounded-lg border border-border bg-surface" />
       </div>
-    </main>
+    </div>
   )
 }

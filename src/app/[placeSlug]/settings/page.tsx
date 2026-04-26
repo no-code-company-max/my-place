@@ -6,9 +6,9 @@ type Props = { params: Promise<{ placeSlug: string }> }
 export default async function PlaceSettingsPage({ params }: Props) {
   const { placeSlug } = await params
   return (
-    <main className="p-8">
+    <div className="p-8">
       <h1 className="font-serif text-2xl italic">Settings · {placeSlug}</h1>
       <p className="mt-2 text-muted">Configuración del place (solo admins). Placeholder.</p>
-    </main>
+    </div>
   )
 }

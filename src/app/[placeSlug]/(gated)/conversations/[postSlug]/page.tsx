@@ -94,7 +94,7 @@ export default async function PostDetailPage({ params }: Props) {
   ])
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <DwellTracker postId={post.id} />
       <ThreadPresence
         postId={post.id}
@@ -133,7 +133,7 @@ export default async function PostDetailPage({ params }: Props) {
         reactionsByKey={reactionsByKey}
         quoteStateByCommentId={quoteStateByCommentId}
       />
-    </main>
+    </div>
   )
 }
 

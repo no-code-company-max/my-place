@@ -27,7 +27,7 @@ export default async function ConversationsPage({ params }: Props) {
   })
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-serif text-2xl italic text-text">Conversaciones</h1>
@@ -50,6 +50,6 @@ export default async function ConversationsPage({ params }: Props) {
           nextCursor ? { createdAt: nextCursor.createdAt.toISOString(), id: nextCursor.id } : null
         }
       />
-    </main>
+    </div>
   )
 }

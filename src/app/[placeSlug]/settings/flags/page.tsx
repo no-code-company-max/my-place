@@ -59,7 +59,7 @@ export default async function SettingsFlagsPage({ params, searchParams }: Props)
     : null
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <header>
         <p className="text-sm text-muted">Settings · {place.name}</p>
         <h1 className="font-serif text-3xl italic text-text">Reportes</h1>
@@ -96,7 +96,7 @@ export default async function SettingsFlagsPage({ params, searchParams }: Props)
           </Link>
         </div>
       ) : null}
-    </main>
+    </div>
   )
 }
 

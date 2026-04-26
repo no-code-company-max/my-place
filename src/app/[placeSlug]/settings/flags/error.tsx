@@ -11,7 +11,7 @@ export default function SettingsFlagsError({
   reset: () => void
 }) {
   return (
-    <main className="mx-auto max-w-2xl space-y-4 p-4 md:p-8">
+    <div className="space-y-4 p-4 md:p-8">
       <h1 className="font-serif text-2xl italic text-text">No pudimos cargar los reportes</h1>
       <p className="text-sm text-muted">
         Algo salió mal al traer la cola de moderación. Reintentá en un momento.
@@ -23,6 +23,6 @@ export default function SettingsFlagsError({
       >
         Reintentar
       </button>
-    </main>
+    </div>
   )
 }

@@ -52,7 +52,7 @@ export default async function SettingsMembersPage({ params }: Props) {
     : []
 
   return (
-    <main className="mx-auto max-w-2xl space-y-10 p-8">
+    <div className="space-y-10 p-8">
       <header>
         <p className="text-sm text-neutral-500">Settings · {place.name}</p>
         <h1 className="font-serif text-3xl italic">Miembros</h1>
@@ -116,6 +116,6 @@ export default async function SettingsMembersPage({ params }: Props) {
         </p>
         <LeaveButton placeSlug={place.slug} appUrl={clientEnv.NEXT_PUBLIC_APP_URL} />
       </section>
-    </main>
+    </div>
   )
 }

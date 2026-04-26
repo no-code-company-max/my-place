@@ -53,7 +53,7 @@ export default async function EditEventPage({ params }: Props) {
   const initialDescription = extractPlainTextDescription(event.description)
 
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8">
+    <div className="space-y-6 p-4 md:p-8">
       <header>
         <h1 className="font-serif text-2xl italic text-text">Editar evento</h1>
         <p className="mt-1 text-sm text-muted">
@@ -74,7 +74,7 @@ export default async function EditEventPage({ params }: Props) {
         }}
         allowedTimezones={ALLOWED_TIMEZONES}
       />
-    </main>
+    </div>
   )
 }
 

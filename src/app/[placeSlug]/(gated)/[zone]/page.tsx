@@ -6,11 +6,11 @@ type Props = { params: Promise<{ placeSlug: string; zone: string }> }
 export default async function PlaceZonePage({ params }: Props) {
   const { placeSlug, zone } = await params
   return (
-    <main className="p-8">
+    <div className="p-8">
       <h1 className="font-serif text-2xl italic">
         {placeSlug} · {zone}
       </h1>
       <p className="mt-2 text-muted">Zona placeholder.</p>
-    </main>
+    </div>
   )
 }

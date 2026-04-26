@@ -4,7 +4,7 @@
  */
 export default function SettingsFlagsLoading() {
   return (
-    <main className="mx-auto max-w-2xl space-y-6 p-4 md:p-8" aria-busy="true" aria-live="polite">
+    <div className="space-y-6 p-4 md:p-8" aria-busy="true" aria-live="polite">
       <div className="space-y-2">
         <div className="bg-accent/30 h-4 w-40 rounded" />
         <div className="bg-accent/50 h-8 w-48 rounded" />
@@ -15,6 +15,6 @@ export default function SettingsFlagsLoading() {
         <div className="h-28 rounded-lg border border-border bg-surface" />
         <div className="h-28 rounded-lg border border-border bg-surface" />
       </div>
-    </main>
+    </div>
   )
 }

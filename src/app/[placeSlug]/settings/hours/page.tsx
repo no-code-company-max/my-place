@@ -34,7 +34,7 @@ export default async function SettingsHoursPage({ params }: Props) {
   const defaults = hoursToFormDefaults(hours)
 
   return (
-    <main className="mx-auto max-w-2xl space-y-8 p-8">
+    <div className="space-y-8 p-8">
       <header>
         <p className="text-sm text-neutral-500">Settings · {place.name}</p>
         <h1 className="font-serif text-3xl italic">Horario</h1>
@@ -49,7 +49,7 @@ export default async function SettingsHoursPage({ params }: Props) {
       </section>
 
       <HoursForm placeSlug={place.slug} defaults={defaults} />
-    </main>
+    </div>
   )
 }
 

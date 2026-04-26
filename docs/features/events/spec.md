@@ -54,12 +54,17 @@ src/features/events/
 │       ├── cancel.ts              # cancelEventAction (soft-cancel)
 │       └── rsvp.ts                # rsvpEventAction (upsert + delete)
 ├── ui/
-│   ├── event-list.tsx             # SC: lista próximos + collapsed pasados
-│   ├── event-list-item.tsx        # SC: card individual
-│   ├── event-detail.tsx           # SC: full info + RSVPButton + RsvpList
+│   ├── event-list.tsx             # SC: BentoGrid hero + 2col, próximos + collapsed pasados
+│   ├── event-list-item.tsx        # SC: BentoCard con OverlineTag + serif title (F.G)
+│   ├── event-metadata-header.tsx  # SC: header montado arriba del thread (F.F+F.G)
+│   ├── event-date-tile.tsx        # SC: calendar tile 56×60 (F.G)
+│   ├── attendee-avatars.tsx       # SC: avatares overlap "Quién viene" (F.G)
 │   ├── event-form.tsx             # CC: create + edit (Zod + react-hook-form)
-│   ├── rsvp-button.tsx            # CC: 4 estados + textfield condicional
-│   ├── rsvp-list.tsx              # SC: "quién viene" (sólo GOING + GOING_CONDITIONAL)
+│   ├── rsvp-button.tsx            # CC: 4 estados + textfield condicional, layout 2x2/1x4 (F.G)
+│   ├── cancel-event-button.tsx    # CC: confirm inline + soft-cancel
+│   ├── format-event-time.ts       # helpers: formatEventCompactDate, formatEventTimeRange, formatEventDateParts
+│   ├── rsvp-labels.ts             # mapping RSVPState → copy + textfield hints
+│   ├── errors.ts                  # friendlyEventErrorMessage
 │   └── event-cancelled-badge.tsx  # SC: badge en detail + en thread asociado
 └── __tests__/                     # ver § 12
 ```
@@ -296,11 +301,33 @@ Flujo detallado en `spec-rsvp.md`. Resumen:
 
 Página `/[placeSlug]/events`:
 
-- **Próximos** (estado `upcoming` + `happening`): sección abierta arriba, ordenado por `startsAt ASC`.
-- **Pasados** (estado `past`): collapsed bajo disclosure, ordenado por `startsAt DESC`.
-- **Cancelados**: aparecen en su sección original (próximo o pasado) con badge.
+- **Layout** (F.G): `BentoGrid` 2-col. Primer item de "Próximos" en
+  modo `hero` (col-span-2, padding 16px, emoji 36px, título 20px).
+  Resto en celdas 1-col (padding 14px, emoji 26px, título 14px). Border
+  card 14px, border-[0.5px] border-border, bg-surface.
+- **Próximos** (estado `upcoming` + `happening`): sección abierta
+  arriba, ordenado por `startsAt ASC`. Header `<SectionHead emoji="📅"
+meta="Próximos" />`.
+- **Pasados** (estado `past`): collapsed bajo `<details>`, ordenado por
+  `startsAt DESC`. Bento dentro del disclosure.
+- **Cancelados**: aparecen en su sección original con
+  `<EventCancelledBadge />`.
 
-Sin scroll infinito. Paginación cursor `(startsAt, id)` cuando se supere 20 items por sección (mismo patrón discussions).
+Cada `BentoCard` (F.G):
+
+- Emoji decorativo arriba (F1: hardcoded `📅`; `Event.emoji?` post-F1).
+- `<OverlineTag>` con date+time compactos: `"Sáb 27 Abr · 10:00–14:00"`.
+  Date format **siempre absoluto** — sin "HOY"/"MAÑANA" (alineado con
+  "sin urgencia artificial").
+- Título serif (`font-title font-bold`).
+- Subtítulo: `location` o `authorSnapshot.displayName` + (en hero) `· van {N}`
+  donde `{N}` SIN bold (alineado con "sin métricas vanidosas").
+- Si tiene RSVP propio: línea pequeña "Tu respuesta: {label}".
+- Linkea a `/conversations/[postSlug]` (F.F: el evento ES el thread).
+  Si no tiene postSlug (caso defensivo), card no-clickeable.
+
+Sin scroll infinito. Paginación cursor `(startsAt, id)` cuando se
+supere 20 items por sección (mismo patrón discussions).
 
 Filtros F1: ninguno. Búsqueda por título: post-F1.
 
@@ -336,7 +363,77 @@ Reusan `shared/errors/domain-error.ts` existente. Sin clases nuevas en F1.
 
 **Botón crear en list**: "Proponer evento" (no "Crear"; refuerza "es una invitación").
 
+**Counts de attendees** (F.G — alineado con "sin métricas vanidosas"):
+
+- En cards de listado: `"van 23"` con el número SIN bold ni tipografía
+  destacada — formato calmo, no social-proof.
+- En event metadata header: idem (`van {N}`).
+- En tooltip de avatar GOING_CONDITIONAL: `"voy si {note}"` (HTML
+  nativo `title=`).
+- NO se exponen counts agregados de NOT_GOING ni
+  NOT_GOING_CONTRIBUTING (privados — sólo el viewer ve su propia
+  respuesta).
+
 Detalle completo del copy RSVP + razones ontológicas en `spec-rsvp.md`.
+
+## 10.5. Componentes UI y design system (rebrand F.G)
+
+**Tokens** (vivos en `docs/theming.md` § "Design tokens (rebrand F.G)"):
+
+- Paleta warm: `--bg`, `--surface`, `--soft`, `--text`, `--muted`,
+  `--border`, `--dot`, `--accent` (#b5633a), `--accent-soft` (alpha
+  14%).
+- Density: `--pad` (14px), `--radius-card` (16px).
+- Type: `--title-font` (Fraunces), `--body-font` (Inter), `--mono-font`.
+- Member palette: `--member-1` … `--member-8` (8 colores fijos para
+  Avatar determinístico).
+
+Cada place puede sobrescribir tokens via `Place.themeConfig` JSONB
+(extendido en F.G-1).
+
+**Primitivos shared** (en `src/shared/ui/`, reusables transversales):
+
+- `<Avatar>` — `imageUrl` precede sobre `initials + colorKey + palette`
+  (no rompe avatares reales). Sin conocimiento de "member" — `palette`
+  es prop genérica.
+- `<SectionHead meta emoji>` — overline accent + emoji opcional.
+- `<BentoGrid>` + `<BentoCard hero>` — wrapper grid 2-col; card con
+  `rounded-card border-border bg-surface`. Hero variant `col-span-2 p-4`.
+- `<OverlineTag emoji>` — texto uppercase tracking-wider accent.
+
+**Wrappers domain-specific** (boundary clean):
+
+- `<MemberAvatar>` (en `members/public.ts`) — wrappea `<Avatar>`
+  pasando `MEMBER_PALETTE` desde `var(--member-1..8)`. `userId` es
+  `colorKey` determinístico.
+
+**Components específicos del slice events** (en `events/ui/`):
+
+- `<EventMetadataHeader>` — header completo del evento (montado arriba
+  del thread cuando `Post.event` poblado). Compone `<EventDateTile>` +
+  `<AttendeeAvatars>` + `<RSVPButton>` + `<CancelEventButton>`.
+- `<EventDateTile>` — calendar tile 56×60, `bg-soft`, radius 10. Render
+  month uppercase + day big serif + dow uppercase. Usa
+  `formatEventDateParts(date, tz)`.
+- `<AttendeeAvatars max={4}>` — lista de `<MemberAvatar>` overlap
+  (-space-x-1.5), ring-2 surface. Overflow muestra `+{N}` con bg-soft.
+  Tooltip nativo `title="{displayName} — voy si {note}"` para
+  GOING_CONDITIONAL.
+- `<EventListItem hero?>` — card del listado.
+- `<RSVPButton>` — grid 2x2 mobile, 1x4 sm+. Active: `bg-text text-bg`
+  con `<Check>` (lucide) en GOING. Inactive: `bg-soft text-text`.
+  `motion-safe:transition-colors`. Textfield condicional inline para
+  GOING_CONDITIONAL / NOT_GOING_CONTRIBUTING.
+
+**Iconos**: `lucide-react` para nuevos componentes. SVG inline
+existente (ej: `FlagButton`) migra oportunísticamente al tocar el
+componente, no en barrido masivo.
+
+**`prefers-reduced-motion`**: respetado via `motion-safe:`.
+
+**Browser support**: `oklch()` y `color-mix()` requieren Safari 16.4+,
+Chrome 111+, Firefox 113+. Fallbacks hex en `globals.css` via
+`@supports` para browsers viejos.
 
 ## 11. Out of scope explícito (proteger scope F1)
 

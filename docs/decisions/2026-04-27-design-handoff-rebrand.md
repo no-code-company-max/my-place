@@ -3,7 +3,7 @@
 **Fecha:** 2026-04-27
 **Milestone:** Fase 6 / F.G (apply design handoff a events + rebrand global)
 **Autor:** Max
-**Estado:** Draft (se completa en F.G-7)
+**Estado:** Aprobado (cerrado en F.G-7)
 
 ## Contexto
 
@@ -199,6 +199,85 @@ puede sobrescribir `memberPalette` via `themeConfig`.
 - `docs/decisions/2026-04-26-events-as-thread-unified-url.md` (F.F)
 - Plan: `~/.claude/plans/tidy-stargazing-summit.md` § F.G
 
-## Verificación post-F.G-7 (a completar al cierre)
+## Verificación post-F.G-7
 
-(Sección a expandir en F.G-7 con resultados reales.)
+Resultado de la verificación full al cierre de F.G:
+
+- `pnpm typecheck`: ✓ limpio.
+- `pnpm test`: ✓ 723 tests verdes (+25 nuevos en F.G):
+  - `src/shared/ui/__tests__/avatar.test.tsx` (9): precedencia
+    imageUrl, palette/colorKey determinismo, hashToIndex bounds.
+  - `src/features/events/__tests__/format-event-time.test.ts` (8):
+    helpers compactDate/timeRange/dateParts per timezone, stripping
+    locale es-AR.
+  - `src/features/events/__tests__/event-date-tile.test.tsx` (2):
+    parts per timezone, cross-day cerca de medianoche.
+  - `src/features/events/__tests__/attendee-avatars.test.tsx` (6):
+    overflow, tooltip GOING_CONDITIONAL incluye nota, aria-label
+    refleja count total.
+- `pnpm vitest run tests/boundaries.test.ts`: ✓ 3 verdes (Avatar puro
+  preserva boundary; MemberAvatar wrapper en members correcto).
+- `pnpm lint`: ✓ 0 warnings (handoff/ excluido).
+- `pnpm build`: ✓ limpio.
+- Manual QA visual: pendiente run `pnpm dev` con `rm -rf .next` para
+  validar warm rebrand en todas las pages principales (`/`, `/login`,
+  `/conversations`, `/conversations/[slug]`, `/settings/hours`,
+  `/settings/members`, `/settings/flags`, `/events`, `/events/new`).
+
+## Cambios deliverados
+
+**NEW**:
+
+- `src/shared/ui/avatar.tsx` (+test) — Avatar puro con palette por prop.
+- `src/shared/ui/section-head.tsx` — heading discreto.
+- `src/shared/ui/bento.tsx` — BentoGrid + BentoCard polimórfica.
+- `src/shared/ui/overline-tag.tsx` — etiqueta tipográfica liviana.
+- `src/features/members/ui/member-avatar.tsx` — wrapper con
+  MEMBER_PALETTE.
+- `src/features/events/ui/event-date-tile.tsx` (+test) — calendar tile
+  56×60.
+- `src/features/events/ui/attendee-avatars.tsx` (+test) — stack
+  overlap + tooltip nativo.
+- `src/features/events/__tests__/format-event-time.test.ts` — 8 tests
+  per timezone.
+
+**MOD**:
+
+- `src/shared/config/theme.ts` — ThemeConfig extendido + buildThemeVars.
+- `src/app/globals.css` — tokens nuevos + @supports fallbacks.
+- `tailwind.config.ts` — colors/borderRadius/spacing/fontFamily extend.
+- `src/features/events/ui/format-event-time.ts` — 3 helpers nuevos.
+- `src/features/events/ui/event-list.tsx` — BentoGrid + SectionHead.
+- `src/features/events/ui/event-list-item.tsx` — BentoCard + hero.
+- `src/features/events/ui/event-metadata-header.tsx` — calendar tile +
+  attendees + RSVP layout handoff.
+- `src/features/events/ui/rsvp-button.tsx` — 4 estados con layout
+  compact (grid-cols-2 sm:grid-cols-4).
+- `src/features/events/ui/rsvp-labels.ts` — comment update (sin RsvpList).
+- `src/features/members/public.ts` — export MemberAvatar.
+- `package.json` — +lucide-react.
+- `eslint.config.mjs` — handoff/ excluido.
+- `tsconfig.json` — handoff/ excluido (en F.G-0).
+- `docs/features/events/spec.md` § 3, § 8, § 10, § 10.5 (en F.G-0).
+- `docs/theming.md` — sección "Design tokens (rebrand F.G)" (en F.G-0).
+- `docs/roadmap.md` — entrada F.G.
+
+**DEL**:
+
+- `src/features/events/ui/rsvp-list.tsx` — reemplazado por
+  AttendeeAvatars en EventMetadataHeader.
+
+## Commits (F.G-0 → F.G-7)
+
+- `75f3156` docs(events): spec § 3+§8+§10+§10.5 + theming.md + ADR
+  draft (F.G-0)
+- `08f41a5` refactor(theme): rebrand global tokens + ThemeConfig
+  extendido (F.G-1)
+- `de64915` feat(shared/ui): primitivos del rebrand handoff (F.G-2)
+- `ae57bcc` feat(members): MemberAvatar wrapper sobre shared/ui Avatar
+  (F.G-3)
+- `ec51740` feat(events): rediseño del listado bento (F.G-4)
+- `30e7475` feat(events): rediseño del metadata header del thread
+  (F.G-5)
+- `9b9f37b` feat(events): RSVPButton restyle compact (F.G-6)
+- (este commit) docs(events): cleanup + ADR final + roadmap (F.G-7)

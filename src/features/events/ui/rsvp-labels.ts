@@ -1,7 +1,7 @@
 /**
  * Mapping de RSVPState → copy visible. Centralizado para garantizar
- * consistencia entre `RSVPButton`, `RsvpList`, `EventListItem` y
- * `EventDetail`.
+ * consistencia entre `RSVPButton`, `EventListItem` y
+ * `EventMetadataHeader`.
  *
  * Ver `docs/features/events/spec-rsvp.md § 2`.
  */

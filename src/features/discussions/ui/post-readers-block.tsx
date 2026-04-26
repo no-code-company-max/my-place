@@ -1,13 +1,19 @@
 import Link from 'next/link'
 import type { PostReader } from '../server/queries'
-import { listReadersByPost } from '../server/queries'
-import { findOrCreateCurrentOpening } from '../server/place-opening'
 
 const MAX_VISIBLE = 8
 
 /**
  * Bloque "Leyeron:" que corona el hero del thread junto a `ThreadPresence`.
  * Muestra quién leyó el post durante la apertura actual del place.
+ *
+ * **Pure Server Component**: recibe `readers` como prop. Las queries que
+ * resuelven la apertura actual (`findOrCreateCurrentOpening`) y la lista
+ * de lectores (`listReadersByPost`) las hace el page composer
+ * (`/conversations/[postSlug]/page.tsx`) dentro de su Promise.all, así
+ * el critical path no las paga secuencialmente al final del request
+ * (mejora de performance ~2 RTT). El page filtra al viewer y maneja el
+ * caso "place sin opening" pasando `readers=[]`.
  *
  * Diferencia con `ThreadPresence`:
  * - Presence = quién está mirando AHORA (live WS, avatar con borde verde).
@@ -20,34 +26,13 @@ const MAX_VISIBLE = 8
  * invisible."
  *
  * Render rules:
- * - `findOrCreateCurrentOpening` null (place unconfigured) → null.
- * - `listReadersByPost` vacío → null (simetría con ThreadPresence, sin
- *   texto "aún nadie leyó" — silencio coherente con "nada demanda
- *   atención").
+ * - `readers` vacío → null (silencio coherente con "nada demanda
+ *   atención"; cubre tanto "place unconfigured" como "ningún lector").
  * - Hasta 8 avatares visibles; overflow `+N más`.
  * - Cada avatar es `<Link href="/m/<userId>" prefetch={false}>` con
  *   `aria-label={displayName}`.
- * - Viewer filtrado a nivel query — no se ve a sí mismo en la lista.
  */
-export async function PostReadersBlock({
-  postId,
-  placeId,
-  viewerUserId,
-}: {
-  postId: string
-  placeId: string
-  placeSlug: string
-  viewerUserId: string
-}): Promise<React.ReactNode> {
-  const opening = await findOrCreateCurrentOpening(placeId)
-  if (!opening) return null
-
-  const readers = await listReadersByPost({
-    postId,
-    placeId,
-    placeOpeningId: opening.id,
-    excludeUserId: viewerUserId,
-  })
+export function PostReadersBlock({ readers }: { readers: PostReader[] }): React.ReactNode {
   if (readers.length === 0) return null
 
   const visible = readers.slice(0, MAX_VISIBLE)

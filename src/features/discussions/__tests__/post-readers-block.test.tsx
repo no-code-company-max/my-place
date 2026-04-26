@@ -1,22 +1,9 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-const { listReadersByPostMock, findOrCreateCurrentOpeningMock } = vi.hoisted(() => ({
-  listReadersByPostMock: vi.fn(),
-  findOrCreateCurrentOpeningMock: vi.fn(),
-}))
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('server-only', () => ({}))
 
-vi.mock('../server/queries', () => ({
-  listReadersByPost: listReadersByPostMock,
-}))
-
-vi.mock('../server/place-opening', () => ({
-  findOrCreateCurrentOpening: findOrCreateCurrentOpeningMock,
-}))
-
-// Next.js Link se mockea a un <a> simple para poder aserci­onar props en el DOM.
+// Next.js Link se mockea a un <a> simple para poder asercionar props en el DOM.
 vi.mock('next/link', () => ({
   default: ({
     children,
@@ -36,6 +23,16 @@ vi.mock('next/link', () => ({
 
 import { PostReadersBlock } from '../ui/post-readers-block'
 
+// Shape mínimo del PostReader. El tipo canónico vive en
+// `../server/queries` pero importarlo arrastra el chain de Prisma+env
+// al test runtime. Acá replicamos el shape (es estable, sin métodos).
+type PostReader = {
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  readAt: Date
+}
+
 function makeReader(
   overrides: Partial<{
     userId: string
@@ -43,7 +40,7 @@ function makeReader(
     avatarUrl: string | null
     readAt: Date
   }> = {},
-) {
+): PostReader {
   return {
     userId: overrides.userId ?? 'u-1',
     displayName: overrides.displayName ?? 'Max',
@@ -52,57 +49,25 @@ function makeReader(
   }
 }
 
-async function renderBlock(props?: Partial<React.ComponentProps<typeof PostReadersBlock>>) {
-  const rendered = await PostReadersBlock({
-    postId: 'post-1',
-    placeId: 'place-1',
-    placeSlug: 'the-place',
-    viewerUserId: 'viewer-1',
-    ...props,
-  })
-  return render(<>{rendered}</>)
+function renderBlock(readers: PostReader[]) {
+  return render(<PostReadersBlock readers={readers} />)
 }
 
-describe('PostReadersBlock', () => {
-  beforeEach(() => {
-    listReadersByPostMock.mockReset()
-    findOrCreateCurrentOpeningMock.mockReset()
-  })
-
+describe('PostReadersBlock (pure component)', () => {
   afterEach(() => {
     cleanup()
   })
 
-  it('retorna null cuando no hay apertura actual (place unconfigured)', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue(null)
-    const { container } = await renderBlock()
-    expect(container).toBeEmptyDOMElement()
-    expect(listReadersByPostMock).not.toHaveBeenCalled()
-  })
-
-  it('retorna null cuando no hay lectores en la apertura actual', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([])
-    const { container } = await renderBlock()
+  it('retorna null cuando readers es vacío (place unconfigured o sin lectores)', () => {
+    const { container } = renderBlock([])
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('rendea lista con avatares hasta 8 + overflow "+N más"', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue(
-      Array.from({ length: 10 }).map((_, i) =>
-        makeReader({ userId: `u-${i}`, displayName: `User ${i}` }),
-      ),
+  it('rendea lista con avatares hasta 8 + overflow "+N más"', () => {
+    const readers = Array.from({ length: 10 }).map((_, i) =>
+      makeReader({ userId: `u-${i}`, displayName: `User ${i}` }),
     )
-    await renderBlock()
+    renderBlock(readers)
 
     const list = screen.getByLabelText('Lectores de la apertura')
     expect(list).toBeInTheDocument()
@@ -112,94 +77,45 @@ describe('PostReadersBlock', () => {
     expect(screen.getByText('+2 más')).toBeInTheDocument()
   })
 
-  it('sin overflow cuando hay ≤8 lectores', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([
+  it('sin overflow cuando hay ≤8 lectores', () => {
+    renderBlock([
       makeReader({ userId: 'u-1', displayName: 'Max' }),
       makeReader({ userId: 'u-2', displayName: 'Lucía' }),
     ])
-    await renderBlock()
 
     expect(screen.queryByText(/\+\d+ más/)).not.toBeInTheDocument()
   })
 
-  it('cada lector es link a /m/<userId> con prefetch=false y aria-label', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([makeReader({ userId: 'u-abc', displayName: 'Lucía' })])
-    await renderBlock()
+  it('cada lector es link a /m/<userId> con prefetch=false y aria-label', () => {
+    renderBlock([makeReader({ userId: 'u-abc', displayName: 'Lucía' })])
 
     const link = screen.getByRole('link', { name: 'Lucía' })
     expect(link).toHaveAttribute('href', '/m/u-abc')
     expect(link).toHaveAttribute('data-prefetch', 'false')
   })
 
-  it('avatar con URL: <img> con alt + title = displayName', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([
+  it('avatar con URL: <img> con alt + title = displayName', () => {
+    renderBlock([
       makeReader({
         userId: 'u-1',
         displayName: 'Max',
         avatarUrl: 'https://cdn/a.png',
       }),
     ])
-    await renderBlock()
 
     const img = screen.getByAltText('Max') as HTMLImageElement
     expect(img.src).toBe('https://cdn/a.png')
     expect(img.title).toBe('Max')
   })
 
-  it('avatar sin URL: inicial del displayName', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([
-      makeReader({ userId: 'u-1', displayName: 'lucía', avatarUrl: null }),
-    ])
-    await renderBlock()
+  it('avatar sin URL: inicial del displayName', () => {
+    renderBlock([makeReader({ userId: 'u-1', displayName: 'lucía', avatarUrl: null })])
 
     expect(screen.getByText('L')).toBeInTheDocument()
   })
 
-  it('pasa excludeUserId = viewerUserId al query', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-42',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([])
-    await renderBlock({ viewerUserId: 'viewer-xyz', postId: 'post-zz', placeId: 'place-zz' })
-
-    expect(listReadersByPostMock).toHaveBeenCalledWith({
-      postId: 'post-zz',
-      placeId: 'place-zz',
-      placeOpeningId: 'opening-42',
-      excludeUserId: 'viewer-xyz',
-    })
-  })
-
-  it('label visible "Leyeron:" junto a los avatares', async () => {
-    findOrCreateCurrentOpeningMock.mockResolvedValue({
-      id: 'opening-1',
-      startAt: new Date(),
-      endAt: null,
-    })
-    listReadersByPostMock.mockResolvedValue([makeReader()])
-    await renderBlock()
+  it('label visible "Leyeron:" junto a los avatares', () => {
+    renderBlock([makeReader()])
 
     expect(screen.getByText('Leyeron:')).toBeInTheDocument()
   })

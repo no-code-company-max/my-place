@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/db/client'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
+import { logger } from '@/shared/lib/logger'
 import {
   CommentThread,
   DwellTracker,
@@ -8,10 +9,13 @@ import {
   PostReadersBlock,
   ThreadPresence,
   aggregateReactions,
+  findOrCreateCurrentOpening,
   findPostBySlug,
   listCommentsByPost,
+  listReadersByPost,
   reactionMapKey,
   resolveViewerForPlace,
+  type PostReader,
   type ReactionAggregationMap,
 } from '@/features/discussions/public'
 import type { QuoteTargetState } from '@/features/discussions/public'
@@ -33,9 +37,17 @@ export default async function PostDetailPage({ params }: Props) {
   // Paralelizamos lo que no tiene dependencia entre sí. `resolveViewerForPlace`
   // internamente comparte el cache de `loadPlaceBySlug` (React.cache) — no
   // duplica queries (ver discussions/server/actor.ts:48-93).
-  const [post, viewer] = await Promise.all([
+  // `findOrCreateCurrentOpening` también va acá porque solo depende de
+  // place.id; está cached por request, así que no se duplica con el
+  // fire-and-forget del (gated)/layout. El catch convierte el error a null
+  // para preservar el comportamiento "sin opening → sin readers" como hoy.
+  const [post, viewer, opening] = await Promise.all([
     findPostBySlug(place.id, postSlug),
     resolveViewerForPlace({ placeSlug }),
+    findOrCreateCurrentOpening(place.id).catch((err: unknown) => {
+      logger.error({ err, placeId: place.id }, 'failed to materialize opening')
+      return null
+    }),
   ])
   if (!post) notFound()
   if (post.hiddenAt && !viewer.isAdmin) notFound()
@@ -59,7 +71,10 @@ export default async function PostDetailPage({ params }: Props) {
       : Promise.resolve(null),
   ])
 
-  const [reactionsByKey, quoteStateByCommentId] = await Promise.all([
+  // Group 3: reactions + quoteState + readers. `listReadersByPost` depende
+  // de post.id y opening.id, ambos ya disponibles. Si no hay opening,
+  // pasamos array vacío (el componente devuelve null en ese caso).
+  const [reactionsByKey, quoteStateByCommentId, readers] = await Promise.all([
     aggregateReactions({
       targets: [
         { type: 'POST', id: post.id },
@@ -68,6 +83,14 @@ export default async function PostDetailPage({ params }: Props) {
       viewerUserId: viewer.actorId,
     }) as Promise<ReactionAggregationMap>,
     resolveQuoteTargetStates(comments),
+    opening
+      ? listReadersByPost({
+          postId: post.id,
+          placeId: place.id,
+          placeOpeningId: opening.id,
+          excludeUserId: viewer.actorId,
+        })
+      : Promise.resolve([] as PostReader[]),
   ])
 
   return (
@@ -81,12 +104,7 @@ export default async function PostDetailPage({ params }: Props) {
           avatarUrl: viewer.user.avatarUrl,
         }}
       />
-      <PostReadersBlock
-        postId={post.id}
-        placeId={viewer.placeId}
-        placeSlug={viewer.placeSlug}
-        viewerUserId={viewer.actorId}
-      />
+      <PostReadersBlock readers={readers} />
       {eventDetail ? (
         <EventMetadataHeader
           event={eventDetail}

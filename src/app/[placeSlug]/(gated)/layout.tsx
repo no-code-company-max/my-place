@@ -26,8 +26,10 @@ type Props = {
 export default async function GatedLayout({ children, params }: Props) {
   const { placeSlug } = await params
 
-  const auth = await getCurrentAuthUser()
-  const place = await loadPlace(placeSlug)
+  // Mismo patrón que el parent layout: auth y place son independientes.
+  // React.cache hace que las llamadas dentro de este request hagan hit
+  // si el parent ya las disparó (lo más común).
+  const [auth, place] = await Promise.all([getCurrentAuthUser(), loadPlace(placeSlug)])
   if (!auth || !place) {
     notFound()
   }

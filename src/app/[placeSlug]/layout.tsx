@@ -25,12 +25,14 @@ type Props = {
 export default async function PlaceLayout({ children, params }: Props) {
   const { placeSlug } = await params
 
-  const auth = await getCurrentAuthUser()
+  // auth y place son independientes (cada uno solo necesita el slug y
+  // la cookie). Paralelizamos para eliminar 1 RTT del critical path —
+  // ambos están cached por React.cache, así que llamadas posteriores
+  // en el mismo render son hits.
+  const [auth, place] = await Promise.all([getCurrentAuthUser(), loadPlaceBySlug(placeSlug)])
   if (!auth) {
     redirect(`/login?next=/${placeSlug}`)
   }
-
-  const place = await loadPlaceBySlug(placeSlug)
   if (!place || place.archivedAt) {
     notFound()
   }

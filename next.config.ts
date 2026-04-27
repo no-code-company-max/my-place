@@ -36,6 +36,21 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   outputFileTracingRoot: path.join(__dirname),
   allowedDevOrigins: ['lvh.me', '*.lvh.me'],
+  // R.2.5: opt-in al comportamiento Next 14 del route cache.
+  // Next 15 default = 0s para dinámicas → cada navegación re-fetcha,
+  // rompiendo el modelo "cache warm sin re-fetch" del swiper de zonas.
+  // Con `dynamic: 30`, los swipes rápidos entre zonas dentro de 30s son
+  // cache hit (cero queries Prisma); >30s dispara refresh automático
+  // vía `shouldRefreshZone` en `shell/domain/swiper-snap.ts`.
+  // Estáticas a 180s (default Next 15 = 300s; bajamos para no perder
+  // revalidate semánticos demasiado tiempo).
+  // Ver `docs/decisions/2026-04-26-zone-swiper.md` § Decisión 5.
+  experimental: {
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

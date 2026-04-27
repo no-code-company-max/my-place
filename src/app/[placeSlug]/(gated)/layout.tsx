@@ -4,6 +4,7 @@ import { findOrCreateCurrentOpening } from '@/features/discussions/public'
 import { findMemberPermissions } from '@/features/members/public.server'
 import { isPlaceOpen, parseOpeningHours, PlaceClosedView } from '@/features/hours/public'
 import { logger } from '@/shared/lib/logger'
+import { ZoneSwiper } from '@/features/shell/public'
 import { loadPlace } from '../layout'
 
 type Props = {
@@ -46,7 +47,11 @@ export default async function GatedLayout({ children, params }: Props) {
     findOrCreateCurrentOpening(place.id).catch((err) => {
       logger.error({ err, placeId: place.id }, 'failed to materialize opening')
     })
-    return <>{children}</>
+    // R.2.5: el ZoneSwiper se monta acá envolviendo el contenido de las
+    // zonas. En zonas root (`/`, `/conversations`, `/events`) habilita
+    // el swipe horizontal; en sub-pages es pass-through automático.
+    // Ver `docs/features/shell/spec.md` § 16.2.
+    return <ZoneSwiper>{children}</ZoneSwiper>
   }
 
   const variant: 'admin' | 'member' = perms.isOwner || perms.role === 'ADMIN' ? 'admin' : 'member'

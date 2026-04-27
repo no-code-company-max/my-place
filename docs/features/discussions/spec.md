@@ -1110,10 +1110,10 @@ Member A flaggea Comment C reportado por B como `HARASSMENT` con nota. Admin ent
 Estructura top-down:
 
 - **Section header** (`<ThreadsSectionHeader>`):
-  - Chip 56×56, `bg-surface`, `border-[0.5px] border-border`, radius 14, emoji 💬 centrado 32px.
+  - `<PageIcon>` shared (44×44, radius 12, `bg-surface`, border 0.5px, sombra dual `0 4px 14px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)`, emoji 24px line-height 1) con emoji 💬. Mismo primitive usado en home (🏠) y eventos (🎉) para unidad visual del "page icon" en cada zona.
   - Título "Discusiones" en `font-title font-bold text-[26px] tracking-[-0.6px]` — tipografía unificada con la home (nombre del place) y la page de eventos. Ajuste 2026-04-26 (revisión visual del user): el 38px original del handoff dominaba demasiado al lado del chip; 26px da balance editorial sin perder presencia.
   - CTA "Nueva conversación" a la derecha del título (botón discreto, no fab) — único punto de entrada para crear posts F1.
-  - Padding 24px desde top viewport, 18px gap chip-título, 12px padding horizontal sides (`px-3` consistente con el resto de zonas).
+  - Padding 24px desde top viewport, 12px gap chip-título, 12px padding horizontal sides (`px-3` consistente con el resto de zonas).
 
 - **Filter pills** (`<ThreadFilterPills>`, client component):
   - 3 pills: `Todos` (default activo), `Sin respuesta`, `En los que participo`.

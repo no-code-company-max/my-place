@@ -15,9 +15,9 @@
 export default function ConversationsLoading() {
   return (
     <div className="flex flex-col gap-4 pb-6" aria-busy="true" aria-live="polite">
-      {/* Section header: chip + título + CTA */}
-      <div className="flex items-center gap-[18px] px-3 pt-6">
-        <div className="h-14 w-14 shrink-0 rounded-[14px] border-[0.5px] border-border bg-soft" />
+      {/* Section header: chip 44×44 + título + CTA */}
+      <div className="flex items-center gap-3 px-3 pt-6">
+        <div className="h-11 w-11 shrink-0 rounded-[12px] border-[0.5px] border-border bg-soft" />
         <div className="h-9 flex-1 rounded bg-soft" />
         <div className="h-9 w-16 shrink-0 rounded-[10px] border-[0.5px] border-border bg-soft" />
       </div>

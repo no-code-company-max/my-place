@@ -1,13 +1,11 @@
 import Link from 'next/link'
+import { PageIcon } from '@/shared/ui/page-icon'
 
 /**
  * Header de la sección "Discusiones" en la lista (R.6).
  *
- * Composición (handoff threads/, ajustado a tipografía unificada de
- * zonas — home, conversaciones, eventos comparten el mismo H1 26/700/
- * Fraunces/-0.6):
- *  - Chip 56×56 con emoji 💬 (32px) centrado, `bg-surface` border-0.5px,
- *    radius 14.
+ * Composición unificada con home y eventos:
+ *  - `<PageIcon>` 44×44 con emoji 💬 (specs en page-icon.tsx).
  *  - Título "Discusiones" en `font-title text-[26px] font-bold
  *    tracking-[-0.6px]`.
  *  - CTA "Nueva conversación" como botón discreto a la extrema derecha
@@ -22,13 +20,8 @@ import Link from 'next/link'
  */
 export function ThreadsSectionHeader(): React.ReactNode {
   return (
-    <header className="flex items-center gap-[18px] px-3 pt-6">
-      <span
-        aria-hidden="true"
-        className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-border bg-surface text-[32px] leading-none"
-      >
-        💬
-      </span>
+    <header className="flex items-center gap-3 px-3 pt-6">
+      <PageIcon emoji="💬" />
       <h1 className="flex-1 font-title text-[26px] font-bold tracking-[-0.6px] text-text">
         Discusiones
       </h1>

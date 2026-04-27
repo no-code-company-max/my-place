@@ -27,10 +27,10 @@ export default async function EventsPage({ params }: Props) {
   })
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
+    <div className="space-y-6 px-3 py-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="font-serif text-2xl italic text-text">Eventos</h1>
+          <h1 className="font-title text-[26px] font-bold tracking-[-0.6px] text-text">Eventos</h1>
           <p className="mt-1 text-sm text-muted">
             Momentos compartidos del place. Sin urgencia, sin tickets.
           </p>

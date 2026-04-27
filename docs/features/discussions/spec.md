@@ -1258,17 +1258,15 @@ Notas de producto registradas durante R.6 para no perder contexto. **Cada
 follow-up requiere su propio mini-spec + ADR antes de implementarse** — la
 anotación acá no es decisión, es memoria.
 
-- **FAB "+" cross-zona** — reemplazar las CTAs "Nueva" por SectionHeader
-  (conversaciones, eventos, etc.) por un único botón flotante "+" en el shell.
-  Al tocarlo, abre un menú con las acciones disponibles según la zona y los
-  permisos del usuario ("Nueva discusión", "Proponer evento", "Subir
-  documento", etc.). Vive en `shared/ui/` como primitivo `<FAB>` + un slice
-  `actions/` que registra las opciones por zona. Reemplaza el CTA actual
-  embebido en `<ThreadsSectionHeader>` (R.6.3). Implementación post-R.6 con
-  spec + ADR propios; el ADR debe resolver: cómo se registran las acciones
-  por zona, posicionamiento (bottom-right respetando safe-area iOS + sin
-  tapar composer del thread detail), accesibilidad (focus trap del menú,
-  ESC para cerrar), variantes por permiso (member vs admin/owner).
+- **FAB cross-zona** ✅ (R.2.6, 2026-04-26) — reemplazadas las CTAs
+  "Nueva" / "Proponer evento" embebidas en SectionHeaders por un único
+  botón flotante en el shell. Implementado como `<FAB>` shared
+  primitive + `<ZoneFab>` orquestador en shell — sin slice `actions/`
+  (overhead injustificado para 2 acciones; diferido a Library R.5).
+  Ícono `Sparkles` (no `+` ni hamburger por escalabilidad a perfil/
+  settings + no chocar con swipe). Solo zonas root vía
+  `isZoneRootPath`. Specs en `docs/features/shell/spec.md` § 17 + ADR
+  `docs/decisions/2026-04-26-zone-fab.md`.
 - **Filtros reales en `<ThreadFilterPills>`** — extender `listPostsByPlace`
   para aceptar `filter: 'all' | 'unanswered' | 'mine'` y desbloquear las
   pills hoy `aria-disabled`. Spec menor + extensión de tests del query.

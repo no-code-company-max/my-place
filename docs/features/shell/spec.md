@@ -239,16 +239,18 @@ function deriveActiveZone(pathname: string): ZoneIndex | null {
 
 Orden completo del z-index del producto post-R.2:
 
-| Capa                        | z-index | Notas                   |
-| --------------------------- | ------- | ----------------------- |
-| Section viewport            | auto    | Default                 |
-| Section dots                | 20      | Static, no overlap      |
-| TopBar                      | 30      | Static, no overlap      |
-| Backdrop dropdown           | 40      | Fixed, full-bleed       |
-| Dropdown panel              | 41      | Fixed, sobre backdrop   |
-| Dialog (Radix)              | 50      | Modales del producto    |
-| Toaster (sonner)            | 60      | Sobre todo              |
-| Search overlay (R.4 futuro) | 60      | Mismo nivel que toaster |
+| Capa                        | z-index | Notas                                  |
+| --------------------------- | ------- | -------------------------------------- |
+| Section viewport            | auto    | Default                                |
+| Section dots                | 20      | Static, no overlap                     |
+| TopBar                      | 30      | Static, no overlap                     |
+| ZoneFab trigger (R.2.6)     | 30      | Fixed bottom-right, mismo nivel TopBar |
+| Backdrop dropdown           | 40      | Fixed, full-bleed                      |
+| Dropdown panel              | 41      | Fixed, sobre backdrop                  |
+| Dialog (Radix)              | 50      | Modales del producto                   |
+| FAB menu Portal (Radix)     | 50      | Vía DropdownMenuContent                |
+| Toaster (sonner)            | 60      | Sobre todo                             |
+| Search overlay (R.4 futuro) | 60      | Mismo nivel que toaster                |
 
 ## 8. Accesibilidad
 
@@ -666,3 +668,189 @@ Patrón estándar en SPAs (Twitter, Instagram tabs).
 - **Dot hover prefetch en mobile**: el `onMouseEnter` no dispara en
   touch — solo en desktop. En mobile, el prefetch de vecinos vive en
   `onPanStart` del swiper (mismo efecto, momento distinto).
+
+## 17. FAB cross-zona con menú contextual (R.2.6)
+
+> Agregado el 2026-04-26. Implementa el follow-up FAB anotado en
+> `docs/features/discussions/spec.md` § 21.8: reemplaza las CTAs
+> "Nueva" embebidas en los headers de zona por un único botón
+> flotante en el shell con menú contextual. Decisiones formalizadas
+> en ADR `docs/decisions/2026-04-26-zone-fab.md`.
+
+### 17.1 Objetivos
+
+1. **Punto único de entrada para crear** — antes había "Nueva" en
+   threads header y "Proponer evento" en events header (CTAs
+   dispersos). Ahora un solo botón cross-zona.
+2. **Escalable a acciones futuras** — perfil, settings,
+   compartir, etc. (esto último es follow-up; MVP solo crear).
+3. **Production-robust** — Radix DropdownMenu maduro (focus trap +
+   ARIA + ESC + Portal); zero atajos.
+4. **Cozytech** — sin pulse, sin badges, sin urgencia. Sombra sutil
+   alineada con `<PageIcon>`.
+
+### 17.2 Arquitectura — 2 capas
+
+**`<FAB>` en `src/shared/ui/fab.tsx`** — primitivo agnóstico al
+dominio. Recibe `icon`, `triggerLabel` (aria) y `children` (items
+del menú). NO conoce zonas, places, ni rutas. Mismo nivel que
+`<Avatar>`, `<BackButton>`, `<TopProgressBar>`.
+
+**`<ZoneFab>` en `src/features/shell/ui/zone-fab.tsx`** — Client
+Component orquestador. Lee `pathname`, decide visibilidad
+(`isZoneRootPath` reusado de `swiper-snap.ts`), arma items con paths
+hardcoded MVP (`/conversations/new`, `/events/new`). Wrappea
+`<FAB>`. Single responsibility: traducir contexto del shell a
+acciones del FAB.
+
+**NO se crea `src/features/actions/` slice** (anotado en § 21.8 como
+aspiracional pero overhead sin tracción para 2 acciones). Diferir
+registry pattern a Library R.5 (cuando sumen zonas + acciones
+dinámicas por permiso).
+
+**Boundary check**: `zone-fab.tsx` NO importa de `discussions` ni
+`events` slices — los paths son strings literales (no type imports).
+Cero violación de aislamiento.
+
+### 17.3 Specs visuales
+
+- **Tamaño**: 56×56 (`h-14 w-14`), `rounded-full`.
+- **Background**: `bg-surface` — NO accent. Alineado con "presencia
+  silenciosa", no grita atención.
+- **Border**: `0.5px border` (mismo border-radius/border que
+  `<PageIcon>`).
+- **Sombra**: dual sutil — `0 4px 14px rgba(0,0,0,0.06), 0 1px 2px
+rgba(0,0,0,0.04)` (idéntica a `<PageIcon>` para consistencia).
+- **Icono**: `Sparkles` lucide 20px, `text-text` (full opacity).
+- **Hover**: `bg-soft` suave; `motion-safe:transition-colors`.
+- **Focus**: ring accent (a11y).
+- **Sin animación de entrada**, sin pulse, sin badges, sin
+  contadores.
+
+### 17.4 Posicionamiento — alineado a la columna del shell
+
+**Problema** (gap descubierto en audit): `fixed bottom-6 right-3`
+ancla a la viewport, NO a la columna `max-w-[420px] mx-auto` del
+shell. En desktop el FAB queda flotando en el espacio negativo a la
+derecha de la columna.
+
+**Solución**: wrapper de 2 niveles que mirrors la columna:
+
+```tsx
+<div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center">
+  <div className="pointer-events-none relative w-full max-w-[420px]">
+    <button
+      className="pointer-events-auto absolute bottom-6 right-3 ..."
+      style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      ...
+    >
+      {icon}
+    </button>
+  </div>
+</div>
+```
+
+`pointer-events-none` en el wrapper para no bloquear interacciones
+del shell por debajo; el botón captura clicks vía `pointer-events-auto`.
+
+`safe-area-inset-bottom` para iOS notch / home bar.
+
+### 17.5 Visibilidad
+
+- **Solo zonas root** (`/`, `/conversations`, `/events`) — vía
+  `isZoneRootPath(pathname, ZONE_PATHS)` (reusa la utility del
+  swiper).
+- **NO en sub-pages** (thread detail, event detail, /m/, new forms).
+- **NO en `/settings/*`** — el FAB se monta en `(gated)/layout.tsx`,
+  settings está fuera del gated.
+- **NO cuando place cerrado** — `(gated)/layout.tsx` retorna
+  `<PlaceClosedView>` antes de mountar el swiper + FAB.
+
+### 17.6 Menú — items MVP
+
+Mismo set en las 3 zonas (no zona-aware en MVP — costo cognitivo de
+"el menú cambia según donde estoy" supera el beneficio para una app
+de 150 members):
+
+```tsx
+<FAB icon={<Sparkles size={20} aria-hidden />} triggerLabel="Acciones">
+  <DropdownMenuItem asChild>
+    <Link href="/conversations/new">Nueva discusión</Link>
+  </DropdownMenuItem>
+  <DropdownMenuItem asChild>
+    <Link href="/events/new">Proponer evento</Link>
+  </DropdownMenuItem>
+</FAB>
+```
+
+Vocabulario "Nueva discusión" matching la wording del user en su
+solicitud + section header "Discusiones". Existe inconsistencia
+producto-wide entre "conversaciones" (dot label) y "discusiones"
+(section header) — unificación queda como follow-up de producto.
+
+### 17.7 Accesibilidad
+
+- **`aria-label="Acciones"`** en el trigger.
+- **Keyboard navigation** (Radix nativo): Tab al FAB, Enter abre,
+  Arrow keys navegan items, Enter activa, Escape cierra y focus
+  vuelve al trigger.
+- **`prefers-reduced-motion`**: Radix respeta nativo via
+  `data-[state=open]:animate-in data-[state=closed]:animate-out`.
+- **Items son `<Link>` semánticos** dentro de `<DropdownMenuItem
+asChild>` — no `<div onClick>`. URL canónica preservada.
+- **Portal mount** en `document.body` — no bloqueado por overflow
+  del shell viewport.
+
+### 17.8 Z-index (ver § 7 actualizado)
+
+- Trigger FAB: **z-30** (mismo nivel que TopBar; ambos `fixed` en
+  posiciones distintas, sin colisión visual).
+- Menú abierto: z-50 vía `DropdownMenuContent` Portal — arriba de
+  Dialog (z-50, mismo nivel; conviven sin overlap por context).
+- Toaster (z-60) sigue por encima de todo.
+
+### 17.9 Conflictos potenciales y mitigaciones
+
+- **CommentComposer** del thread detail (R.6.4) está `fixed bottom-0
+z-30`. Sin colisión: composer solo en sub-pages (`/conversations/
+[postSlug]`), FAB solo en zona roots — son mutuamente exclusivos.
+- **Sonner Toaster** (`position="bottom-right"` z-60): puede cubrir
+  el FAB visualmente cuando aparece un toast. Funcionalmente OK
+  (toast captura clicks durante 4s; FAB sigue tappable después).
+  UX subóptima si overlap exacto. Mitigación diferida a manual QA
+  R.2.6.3 — opciones: mover toaster a `top-right` (cambio en
+  `toaster.tsx`) o subir FAB a `bottom-24`.
+- **PlaceClosedView**: cubierto por mount strategy, no monta.
+
+### 17.10 Componentes nuevos / modificados
+
+**Nuevos**:
+
+- `src/shared/ui/fab.tsx` (primitivo).
+- `src/features/shell/ui/zone-fab.tsx` (orquestador).
+- Tests: `src/shared/ui/__tests__/fab.test.tsx` +
+  `src/features/shell/__tests__/zone-fab.test.tsx`.
+
+**Modificados**:
+
+- `src/app/[placeSlug]/(gated)/layout.tsx`: mount `<ZoneFab />`
+  sibling al `<ZoneSwiper>` (R.2.6.2).
+- `src/features/shell/public.ts`: export `ZoneFab`.
+- `src/features/discussions/ui/threads-section-header.tsx`: remover
+  el `<Link>` "Nueva" (R.2.6.2).
+- `src/app/[placeSlug]/(gated)/events/page.tsx`: remover el
+  `<Link>` "Proponer evento" (R.2.6.2).
+- `src/app/[placeSlug]/(gated)/conversations/loading.tsx` +
+  `events/loading.tsx`: skeleton del CTA en header desaparece.
+- `tests/e2e/flows/{post-crud,events-create-rsvp}.spec.ts`: assert
+  links → assert FAB + menú (R.2.6.2).
+- Nuevo `tests/e2e/flows/zone-fab.spec.ts`.
+
+### 17.11 Sub-fases (R.2.6.0 → R.2.6.3)
+
+| Sub         | Deliverable                                                                                                                         |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **R.2.6.0** | Spec § 17 (este doc, MOD) + ADR (NEW) + § 21.8 ✅ + roadmap (MOD).                                                                  |
+| **R.2.6.1** | Componentes (FAB + ZoneFab) + tests unit. Sin mountar.                                                                              |
+| **R.2.6.2** | Mount + remove CTAs + update skeletons + update E2E (post-crud, events-create-rsvp + nuevo zone-fab.spec.ts + extender hours-gate). |
+| **R.2.6.3** | Cleanup + verificación full + manual QA (incluida decisión sobre toaster overlap si aplica) + roadmap R.2.6 ✅.                     |

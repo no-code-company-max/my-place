@@ -8,4 +8,5 @@
  */
 
 export { AppShell } from './ui/app-shell'
+export { ZoneSwiper } from './ui/zone-swiper'
 export { ZONES, deriveActiveZone, type Zone, type ZoneIndex } from './domain/zones'

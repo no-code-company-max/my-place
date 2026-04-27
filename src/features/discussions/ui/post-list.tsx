@@ -51,7 +51,7 @@ export function PostList({
         <>
           {featured ? <FeaturedThreadCard post={featured} /> : null}
           {rest.length > 0 ? (
-            <div className="divide-y divide-border border-y-[0.5px] border-border">
+            <div className="mx-3 divide-y divide-border border-y-[0.5px] border-border">
               {rest.map((post) => (
                 <ThreadRow key={post.id} post={post} />
               ))}

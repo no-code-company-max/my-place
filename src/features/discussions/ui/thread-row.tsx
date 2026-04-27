@@ -11,9 +11,11 @@ import { isDormant } from '../domain/invariants'
  * posts excepto el primero (que va en `<FeaturedThreadCard>`).
  *
  * Layout (handoff threads/):
- *  - Sin card chrome (no border individual). Padding 14px vertical /
- *    12px horizontal. El divider hairline entre rows lo manda el
- *    contenedor `<ThreadList>` con `divide-y divide-border`.
+ *  - Sin card chrome (no border individual). Padding solo vertical
+ *    (14px). El padding lateral (12px) lo aplica el contenedor padre
+ *    (`<PostList>` agrega `mx-3` al wrapper `divide-y`) — así los
+ *    divider lines respetan el inset 12px sin doblar el padding del
+ *    contenido.
  *  - Author row: MemberAvatar 24×24 + nombre + tiempo.
  *  - Título Fraunces 17 con dot unread inline.
  *  - Snippet 1 line clamp.
@@ -39,7 +41,7 @@ export function ThreadRow({ post }: { post: PostListView }): React.ReactNode {
     <article className={dormant ? 'opacity-75' : ''}>
       <Link
         href={`/conversations/${post.slug}`}
-        className="block px-3 py-3.5 focus:outline-none focus-visible:bg-soft"
+        className="block py-3.5 focus:outline-none focus-visible:bg-soft"
       >
         <header className="flex items-center gap-2">
           <MemberAvatar

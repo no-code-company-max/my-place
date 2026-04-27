@@ -14,8 +14,9 @@ import { isDormant } from '../domain/invariants'
  *  - Author row: MemberAvatar 24×24 + nombre + tiempo relativo.
  *  - Título Fraunces 22 con dot unread inline si aplica.
  *  - Snippet 2 lines clamp.
- *  - Footer: ReaderStack 4 readers + count "{n} respuestas" sin bold
- *    (alineado con principio "sin métricas vanidosas").
+ *  - Footer: ReaderStack 4 readers (sin contador de respuestas
+ *    desde 2026-04-27 — alineado con principio "sin métricas
+ *    vanidosas" de CLAUDE.md).
  *
  * Click → navegación al thread. Posts dormidos (≥30 días sin actividad)
  * con opacity reducida — señal visual sin grito.
@@ -68,12 +69,11 @@ export function FeaturedThreadCard({ post }: { post: PostListView }): React.Reac
           </p>
         ) : null}
       </Link>
-      <footer className="mt-3 flex items-center justify-between gap-3">
-        <ReaderStack readers={post.readerSample} max={4} size={22} />
-        <span className="font-body text-xs text-muted">
-          {post.commentCount === 1 ? '1 respuesta' : `${post.commentCount} respuestas`}
-        </span>
-      </footer>
+      {post.readerSample.length > 0 ? (
+        <footer className="mt-3 flex items-center gap-3">
+          <ReaderStack readers={post.readerSample} max={4} size={22} />
+        </footer>
+      ) : null}
     </article>
   )
 }

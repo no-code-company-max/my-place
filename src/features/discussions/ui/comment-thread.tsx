@@ -8,8 +8,13 @@ import { CommentThreadLive } from './comment-thread-live'
 import { LoadMoreComments } from './load-more-comments'
 
 /**
- * Thread completo (R.6.4 layout): divider + label "{n} respuestas" caps +
- * lista (SSR + live wrapper) + load-more + composer.
+ * Thread completo (R.6.4 layout): divider + lista (SSR + live wrapper) +
+ * load-more + composer.
+ *
+ * El label "{n} RESPUESTAS" se removió 2026-04-27 (alineado con
+ * principio "sin métricas vanidosas" de CLAUDE.md). El divider
+ * hairline antes del primer comment ya separa visualmente la zona de
+ * comments del contenido del post/evento.
  *
  * El composer ahora es sticky bottom (`<CommentComposer>` se posiciona
  * `fixed`); por eso se monta FUERA de la sección scrollable. Ver
@@ -44,12 +49,6 @@ export function CommentThread({
 }): React.ReactNode {
   return (
     <section aria-label="Comentarios" className="mt-6">
-      <div className="mx-3 border-t-[0.5px] border-border py-3">
-        <span className="font-body text-[11px] font-semibold tracking-[0.06em] text-muted">
-          {items.length} {items.length === 1 ? 'RESPUESTA' : 'RESPUESTAS'}
-        </span>
-      </div>
-
       <CommentThreadLive
         postId={postId}
         placeSlug={placeSlug}

@@ -19,8 +19,10 @@ import { isDormant } from '../domain/invariants'
  *  - Author row: MemberAvatar 24×24 + nombre + tiempo.
  *  - Título Fraunces 17 con dot unread inline.
  *  - Snippet 1 line clamp.
- *  - Footer: ReaderStack 3 readers + count "{n} respuestas {N}
- *    lectores" sin bold.
+ *  - Footer: ReaderStack 3 readers (sin contador de respuestas
+ *    desde 2026-04-27 — alineado con principio "sin métricas
+ *    vanidosas" de CLAUDE.md). Si no hay readers, footer no
+ *    renderiza.
  *
  * Full-row tap target via `<Link>`. Posts dormidos opacity reducida.
  *
@@ -33,8 +35,6 @@ export function ThreadRow({ post }: { post: PostListView }): React.ReactNode {
   const lastReadMs = post.lastReadAt ? new Date(post.lastReadAt).getTime() : 0
   const hasUnread = new Date(post.lastActivityAt).getTime() > lastReadMs
   const authorUserId = post.authorUserId ?? `ex-${post.id}`
-  // Para el footer: si el post tiene readers, mostramos "respuestas + lectores";
-  // sino solo "respuestas".
   const readerCount = post.readerSample.length
 
   return (
@@ -65,12 +65,9 @@ export function ThreadRow({ post }: { post: PostListView }): React.ReactNode {
         {post.snippet ? (
           <p className="mt-0.5 line-clamp-1 font-body text-[13.5px] text-muted">{post.snippet}</p>
         ) : null}
-        {readerCount > 0 || post.commentCount > 0 ? (
+        {readerCount > 0 ? (
           <footer className="mt-2 flex items-center gap-3">
-            {readerCount > 0 ? <ReaderStack readers={post.readerSample} max={3} size={20} /> : null}
-            <span className="font-body text-xs text-muted">
-              {post.commentCount === 1 ? '1 respuesta' : `${post.commentCount} respuestas`}
-            </span>
+            <ReaderStack readers={post.readerSample} max={3} size={20} />
           </footer>
         ) : null}
       </Link>

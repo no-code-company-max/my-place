@@ -13,8 +13,11 @@ import { ChevronLeft } from 'lucide-react'
  * (incluyendo scroll restoration). Si no hay history (deep link, primera
  * page del session), navega al `fallbackHref` con `router.push`.
  *
- * Visual: chip 36×36, `bg-surface` con `border-[0.5px] border-border`,
- * radius full, icono `ChevronLeft` lucide 18px. Hover suave a `bg-soft`.
+ * Visual: chip cuadrado 36×36 con bordes redondeados (radius 12),
+ * `bg-surface` con `border-[0.5px] border-border`, icono
+ * `ChevronLeft` lucide 18px. Hover suave a `bg-soft`. (2026-04-27:
+ * pasado de `rounded-full` a `rounded-[12px]` por feedback visual —
+ * matching estilo `<PageIcon>` y otros chips del shell.)
  *
  * Genérico (shared/ui): no acoplado a un dominio específico. Las pages
  * que lo monten pasan su propio `fallbackHref` y `label` para
@@ -49,7 +52,7 @@ export function BackButton({
       aria-label={label}
       onClick={handleClick}
       className={[
-        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[0.5px] border-border bg-surface text-text hover:bg-soft motion-safe:transition-colors',
+        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border-[0.5px] border-border bg-surface text-text hover:bg-soft motion-safe:transition-colors',
         className,
       ]
         .filter(Boolean)
@@ -82,7 +85,7 @@ export function BackLink({
       href={href}
       aria-label={label}
       className={[
-        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[0.5px] border-border bg-surface text-text hover:bg-soft motion-safe:transition-colors',
+        'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] border-[0.5px] border-border bg-surface text-text hover:bg-soft motion-safe:transition-colors',
         className,
       ]
         .filter(Boolean)

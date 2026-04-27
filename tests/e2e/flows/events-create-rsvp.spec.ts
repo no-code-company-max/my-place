@@ -35,13 +35,20 @@ test.describe('Events F.D — Palermo', () => {
   test.describe('como memberA (active member)', () => {
     test.use({ storageState: storageStateFor('memberA') })
 
-    test('lista de eventos: header + botón "Proponer evento" visibles', async ({ page }) => {
+    test('lista de eventos: header + FAB visible (CTA inline removido R.2.6.2)', async ({
+      page,
+    }) => {
       await page.goto(placeUrl(palermoSlug, '/events'))
       await expect(page.getByRole('heading', { name: /^Eventos$/i })).toBeVisible()
-      await expect(page.getByRole('link', { name: /Proponer evento/i })).toBeVisible()
+      // R.2.6.2: el CTA "Proponer evento" inline se removió. Punto de
+      // entrada para crear es el FAB (aria-label="Acciones") cross-zona.
+      await expect(page.getByRole('button', { name: /Acciones/i })).toBeVisible()
     })
 
     test('crear evento: redirect al thread con EventMetadataHeader visible', async ({ page }) => {
+      // R.2.6.2: navegamos directo a /events/new (el form interno mantiene
+      // su botón submit "Proponer evento"; lo que se removió fue el CTA
+      // inline del header de la lista).
       await page.goto(placeUrl(palermoSlug, '/events/new'))
       await expect(page.getByRole('heading', { name: /^Proponer evento$/i })).toBeVisible()
 

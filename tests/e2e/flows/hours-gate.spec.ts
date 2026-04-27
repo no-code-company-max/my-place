@@ -23,18 +23,27 @@ test.describe('Hours gate — Belgrano', () => {
   test.describe('como memberB (miembro activo)', () => {
     test.use({ storageState: storageStateFor('memberB') })
 
-    test('place cerrado → ve "Está cerrado" en lugar del contenido', async ({ page }) => {
+    test('place cerrado → ve "Está cerrado" + FAB NO visible (R.2.6)', async ({ page }) => {
       await setPlaceClosedByKey(belgranoId)
       await page.goto(placeUrl(belgranoSlug, '/conversations'))
       await expect(page.getByRole('heading', { name: /Está cerrado/ })).toBeVisible()
-      await expect(page.getByRole('heading', { name: /^Conversaciones$/ })).toHaveCount(0)
+      // R.6.3 renombró el header a "Discusiones" (era "Conversaciones").
+      // Cuando place cerrado, ningún header de zona renderiza.
+      await expect(page.getByRole('heading', { name: /^Discusiones$/ })).toHaveCount(0)
+      // R.2.6: el FAB no renderiza tampoco — (gated)/layout retorna
+      // <PlaceClosedView> antes de mountar ZoneSwiper + ZoneFab.
+      await expect(page.getByRole('button', { name: /Acciones/i })).toHaveCount(0)
     })
 
-    test('place reabierto → vuelve a ver la lista de conversaciones', async ({ page }) => {
+    test('place reabierto → vuelve a ver la lista de conversaciones + FAB visible', async ({
+      page,
+    }) => {
       await setPlaceAlwaysOpen(belgranoId)
       await page.goto(placeUrl(belgranoSlug, '/conversations'))
-      await expect(page.getByRole('heading', { name: /^Conversaciones$/ })).toBeVisible()
+      await expect(page.getByRole('heading', { name: /^Discusiones$/ })).toBeVisible()
       await expect(page.getByRole('heading', { name: /Está cerrado/ })).toHaveCount(0)
+      // R.2.6: place abierto → FAB cross-zona visible.
+      await expect(page.getByRole('button', { name: /Acciones/i })).toBeVisible()
     })
   })
 

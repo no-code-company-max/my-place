@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { resolveViewerForPlace } from '@/features/discussions/public.server'
@@ -11,8 +10,12 @@ type Props = { params: Promise<{ placeSlug: string }> }
 /**
  * Lista de eventos del place. Próximos arriba, pasados collapsed.
  *
- * Linkea a `/events/new` para proponer. F1 sin paginación; futuro cursor
- * cuando supere ~100 eventos.
+ * F1 sin paginación; futuro cursor cuando supere ~100 eventos.
+ *
+ * El CTA "Proponer evento" se removió en R.2.6.2 — el único punto
+ * de entrada para crear ahora es el FAB cross-zona montado en el
+ * shell. Ver `docs/features/shell/spec.md` § 17 + ADR
+ * `docs/decisions/2026-04-26-zone-fab.md`.
  *
  * Ver `docs/features/events/spec.md § 8`.
  */
@@ -34,12 +37,6 @@ export default async function EventsPage({ params }: Props) {
         <h1 className="flex-1 font-title text-[26px] font-bold tracking-[-0.6px] text-text">
           Eventos
         </h1>
-        <Link
-          href="/events/new"
-          className="shrink-0 rounded-md bg-accent px-3 py-2 text-sm text-bg hover:opacity-90"
-        >
-          Proponer evento
-        </Link>
       </header>
       <p className="text-sm text-muted">
         Momentos compartidos del place. Sin urgencia, sin tickets.

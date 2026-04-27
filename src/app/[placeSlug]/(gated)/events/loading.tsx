@@ -12,11 +12,10 @@
 export default function EventsLoading() {
   return (
     <div className="flex flex-col gap-6 px-3 py-6" aria-busy="true" aria-live="polite">
-      {/* Header: chip 44×44 + título + CTA */}
+      {/* Header: chip 44×44 + título (CTA removido R.2.6.2 — vive en FAB) */}
       <div className="flex items-center gap-3">
         <div className="h-11 w-11 shrink-0 rounded-[12px] border-[0.5px] border-border bg-soft" />
         <div className="h-9 flex-1 rounded bg-soft" />
-        <div className="h-9 w-32 shrink-0 rounded-md bg-soft" />
       </div>
 
       {/* Subtítulo */}

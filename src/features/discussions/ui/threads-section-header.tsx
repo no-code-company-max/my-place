@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { PageIcon } from '@/shared/ui/page-icon'
 
 /**
@@ -8,9 +7,11 @@ import { PageIcon } from '@/shared/ui/page-icon'
  *  - `<PageIcon>` 44×44 con emoji 💬 (specs en page-icon.tsx).
  *  - Título "Discusiones" en `font-title text-[26px] font-bold
  *    tracking-[-0.6px]`.
- *  - CTA "Nueva conversación" como botón discreto a la extrema derecha
- *    (link a `/conversations/new`). Único punto de entrada para crear
- *    posts en F1 — no es FAB.
+ *
+ * El CTA "Nueva conversación" se removió en R.2.6.2 — el único punto
+ * de entrada para crear ahora es el FAB cross-zona montado en el
+ * shell. Ver `docs/features/shell/spec.md` § 17 + ADR
+ * `docs/decisions/2026-04-26-zone-fab.md`.
  *
  * Padding lateral 12px (`px-3`) consistente con el resto de zonas.
  *
@@ -25,12 +26,6 @@ export function ThreadsSectionHeader(): React.ReactNode {
       <h1 className="flex-1 font-title text-[26px] font-bold tracking-[-0.6px] text-text">
         Discusiones
       </h1>
-      <Link
-        href="/conversations/new"
-        className="shrink-0 rounded-[10px] border-[0.5px] border-border bg-surface px-3 py-2 font-body text-[13px] font-medium text-text hover:bg-soft motion-safe:transition-colors"
-      >
-        Nueva
-      </Link>
     </header>
   )
 }

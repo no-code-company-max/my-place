@@ -30,9 +30,12 @@ test.describe('Post CRUD — Palermo', () => {
       await expect(page.getByText(/Post baseline Palermo/)).toBeVisible()
     })
 
-    test('link "Nueva conversación" visible en header', async ({ page }) => {
+    test('FAB "Acciones" visible (CTA inline removido R.2.6.2)', async ({ page }) => {
+      // R.2.6.2: el link "Nueva conversación" inline en
+      // <ThreadsSectionHeader> se removió. Punto de entrada para crear
+      // es el FAB cross-zona montado en el shell (aria-label="Acciones").
       await page.goto(placeUrl(palermoSlug, '/conversations'))
-      await expect(page.getByRole('link', { name: /Nueva conversación/i })).toBeVisible()
+      await expect(page.getByRole('button', { name: /Acciones/i })).toBeVisible()
     })
 
     test('post >60s: botón Editar NO aparece para el autor (edit window expiró)', async ({

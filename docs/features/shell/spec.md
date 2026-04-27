@@ -103,7 +103,11 @@ Comparación con paradigmas alternativos (descartados):
 
 ### Section viewport
 
-- `flex-1` con `{children}`. Sin swipe.
+- `flex-1` con `{children}`. `overflow-x-hidden` (vertical libre, body
+  scrollea — el cambio respecto al `overflow-hidden` original se hizo
+  en R.6.4 para liberar `position: fixed/sticky` del CommentComposer
+  del thread detail).
+- Swipe horizontal real entre zonas: ver § 16 (R.2.5).
 - Cada page child gestiona su propio scroll vertical interno.
 - NO requiere `pt-[80px]` magic numbers (shell es static, no fixed).
 
@@ -113,7 +117,7 @@ Comparación con paradigmas alternativos (descartados):
 <div className="mx-auto flex min-h-screen max-w-[420px] flex-col bg-bg">
   <TopBar ... />
   <SectionDots ... />
-  <main className="flex-1 overflow-hidden">{children}</main>
+  <main className="flex-1 overflow-x-hidden">{children}</main>
 </div>
 ```
 
@@ -400,7 +404,240 @@ consume `listMyPlaces` via parent layout).
   ("Conversaciones", "Eventos", etc.) duplicado. El nombre de la
   zona vive en el chrome ahora, no en cada page.
 - **R.2.4** (opcional): test E2E del flow completo cross-subdomain.
-- **R.2.5** (post, separado, su propio ADR): swipe horizontal real
-  entre zonas. Refactor con framer-motion o react-swipeable.
-  Decisión arquitectónica (single-page swipeable vs SSR cross-page)
-  en su propio documento.
+- **R.2.5**: swipe horizontal real entre zonas. Spec completa en § 16
+  - ADR `docs/decisions/2026-04-26-zone-swiper.md`. Sub-fases R.2.5.0
+    → R.2.5.5.
+
+## 16. Swipe horizontal entre zonas (R.2.5)
+
+> Agregado el 2026-04-26. Documenta el rediseño del navegador entre
+> zonas: dejar de ser `<Link>` puro (skeleton + cross-page nav) para
+> ser un swipe gesture nativo + transición fluida sin skeleton.
+> Decisiones formalizadas en ADR
+> `docs/decisions/2026-04-26-zone-swiper.md`.
+
+### 16.1 Objetivos
+
+1. **Production-robust** — gesture handling con librería madura
+   (framer-motion@^11), sin reinventar touch events.
+2. **Reactivo** — al cambiar de zona, ver contenido fresco; sin
+   quedarse con datos cacheados de hace minutos.
+3. **Fluido como app, sin skeleton** — la transición debe sentirse
+   instantánea; el `loading.tsx` actual rompe la sensación de "una
+   sola app".
+4. **Sin desperdicio de bandwidth** — no refresh-on-every-swipe ni
+   Realtime per-zona (queda follow-up post-R.2.5).
+
+### 16.2 Modelo de routing — route-based + swiper wrapper
+
+NO se usan parallel routes (sub-pages como
+`/conversations/[postSlug]` rompen el modelo + library R.5 escala
+mal). Cada zona conserva su URL canónica (`/`, `/conversations`,
+`/events`). El swiper es un Client Component que envuelve `{children}`
+y maneja gesture + transición. Cuando el swipe completa, dispara
+`router.push(targetUrl, { scroll: false })`.
+
+```
+src/app/[placeSlug]/(gated)/layout.tsx
+  ├── hard gate (PlaceClosedView)
+  └── <ZoneSwiper>
+       └── {children}    ← contenido SSR de la zona actual
+```
+
+Mounting **solo en `(gated)/layout.tsx`**, no en
+`[placeSlug]/layout.tsx`. Settings no es zona del producto — es
+panel admin paralelo. Swipe entre `/settings/hours` y `/conversations`
+sería confuso UX.
+
+### 16.3 Componente `<ZoneSwiper>`
+
+Vive en `src/features/shell/ui/zone-swiper.tsx`. Reusa
+`deriveActiveZone(pathname)` ya existente en `shell/domain/zones.ts`.
+
+**Comportamiento del gesture** (framer-motion):
+
+- `<motion.div drag="x" dragConstraints={...} dragElastic={0.2}
+onDragEnd={...}>`.
+- Threshold de snap: 40% del ancho viewport, o velocity > 500 px/s.
+- `dragElastic={0.2}` da el bounce visual en bordes (zone 0 hacia
+  izq, zone 2 hacia der) sin permitir snap fuera de rango.
+- Transición de snap: spring `stiffness: 350, damping: 35` — natural
+  y rápido sin overshoot exagerado (alineado con cozytech tranquilo).
+- Durante el drag, el viewport translate3d el `<children>` actual;
+  zonas adyacentes NO se renderizan en DOM (solo el current).
+
+**Pass-through** (cuando NO actuar):
+
+- Sub-pages (`/conversations/[postSlug]`, `/events/[id]`,
+  `/m/[userId]`, `/conversations/new`, etc.): `deriveActiveZone()`
+  retorna `null` → swiper retorna `<>{children}</>` sin envolver.
+- `/settings/*`: el swiper ni siquiera se monta (vive en
+  `(gated)/layout`, settings es sibling).
+- PlaceClosedView: `(gated)/layout` retorna directamente
+  `<PlaceClosedView>` antes de alcanzar el swiper.
+
+### 16.4 Eliminación del skeleton
+
+**Problema actual**: `router.push` dispara navegación; `loading.tsx`
+de la zona destino renderiza skeleton mientras Next streamea RSC.
+
+**Solución**:
+
+1. **Prefetch on dot focus/hover** (`section-dots.tsx` modificación):
+   `<Link onMouseEnter={() => router.prefetch(zone.path)} onFocus=...>`.
+   Idéntico para el swiper: `onPanStart` dispara
+   `router.prefetch(adjacentZonePath)` para preloadear vecinos.
+2. **`startTransition` envolviendo `router.push`** — React mantiene el
+   UI viejo hasta que el nuevo esté listo. Sin skeleton intermedio.
+3. **Eliminar `loading.tsx` de las 3 zonas root** (`/`,
+   `/conversations`, `/events`). El swiper maneja la espera con
+   `<TopProgressBar>` propio (2px del color accent, fade in/out solo
+   si `isPending` > 200ms — evita flicker en la mayoría de las nav).
+4. **Sub-pages mantienen su `loading.tsx`** intacto — el swiper no
+   actúa ahí, navegación es full-page con skeleton aceptable.
+
+**Resultado UX**: tap dot o swipe completa → contenido nuevo aparece
+"al instante" si el route cache está warm; si está stale (>30s) o
+nunca prefetcheado, top progress bar discreta mientras Next streamea.
+Sin skeleton de página completa.
+
+### 16.5 Reactividad sin desperdicio (Next 15 staleTimes)
+
+**⚠ Gap crítico de Next 15**: el default de route cache (RSC payload)
+para rutas dinámicas pasó de 30s (Next 14) a **0s (Next 15)**. Sin
+configuración explícita, cada navegación re-fetcha — defeats el
+"fluido" goal. Estáticas siguen en 5 minutos.
+
+**Configuración requerida en `next.config.ts`** (R.2.5.2):
+
+```ts
+experimental: {
+  staleTimes: {
+    dynamic: 30,   // 30s — opt-in al comportamiento Next 14
+    static: 180,   // 3 min para estáticas (default Next 15: 5)
+  },
+}
+```
+
+Validar antes de adoptar: en R.2.5.1, antes de tocar config,
+instrumentar el swiper con `console.log` para confirmar el
+comportamiento actual del cache. Si `experimental.staleTimes` no es
+estable en la versión exacta de Next que usamos (15.5.15), evaluar
+fallback `revalidate: 30` exportado por cada page de zona.
+
+**Refuerzo manual: `router.refresh()` condicional**:
+
+- El swiper trackea `lastVisitedAt[zone]` en un Map en useRef.
+- Cuando el snap completa, comparar `Date.now() - lastVisitedAt[zone]`.
+- Si > 30s → `router.refresh()` post-push (forza re-render aunque
+  cache esté warm, garantiza datos fresh).
+- Si ≤ 30s → confiar en route cache + lo que SSR ya entregó.
+
+**Bandwidth/cost analysis** (place de 150 members, asumiendo
+`staleTimes.dynamic: 30`):
+
+- ~70% de los swipes (rapid hopping) son cache hits, cero queries.
+- 30% restantes hacen 1 RSC request.
+- Net: **menos load que hoy** (la skeleton actual ya implica full
+  RSC fetch en cada nav).
+
+**Realtime per-zona DIFERIDO**: 5K mensajes WS extra/place no se
+justifican en R.2.5. Si producto pide updates push-based al ver
+contenido nuevo de otros members en vivo dentro de la lista, se
+agrega como follow-up con su propio ADR.
+
+### 16.6 Per-zona scroll position
+
+**Problema**: con `scroll: false`, Next NO scrollea al cambiar de
+ruta. Si user scrolleó deep en `/conversations` y swipea a `/events`,
+la nueva page renderea al MISMO scrollY (no 0). UX rota.
+
+**Solución**: `<ZoneSwiper>` mantiene un `scrollByZone:
+Map<ZoneIndex, number>` en useRef:
+
+- En `onSnap` (justo antes de `router.push`): guardar `window.scrollY`
+  en `scrollByZone[currentZone]`.
+- Después del push (en `useEffect` que reacciona al cambio de
+  `pathname`): leer `scrollByZone[newZone] ?? 0` y `window.scrollTo(0,
+scrollY)`.
+- Reset al volver al place: el ref se re-inicializa al desmontar el
+  swiper (cambio cross-place).
+
+Patrón estándar en SPAs (Twitter, Instagram tabs).
+
+### 16.7 Accesibilidad
+
+- **`prefers-reduced-motion`**: si el user tiene esta preferencia
+  activa, el swipe sigue funcionando (gesture válido) pero la spring
+  animation se reemplaza por una transition lineal de 0ms — snap
+  instantáneo. framer-motion respeta esto via `useReducedMotion()`.
+- **Keyboard**: dots siguen siendo `<Link>` accesibles via Tab.
+  Arrow keys (←/→) NO se mapean a swipe en R.2.5 — los dots ya
+  cubren keyboard nav.
+- **`aria-current="page"`** en el dot activo se mantiene (R.2.1 ya
+  lo tiene). El swiper no afecta esto.
+- **Lectores de pantalla**: el swipe gesture no anuncia cambio de
+  zona; la URL change + `<title>` per-zona ya lo señalan al lector.
+- **`touch-action: pan-y`** en el viewport del swiper: bloquea
+  browser back-gesture (iOS Safari swipe edge) y scroll horizontal
+  nativo. `overscroll-behavior-x: contain` adicional para prevenir
+  pull-to-refresh side-effects en Chrome Android.
+
+### 16.8 Robustez de producción
+
+- **Error boundary**: el `<ZoneSwiper>` se envuelve en un React Error
+  Boundary que, si framer-motion crashea o el snap falla, degrada a
+  pass-through `{children}` + log via pino. Los dots Link siguen
+  funcionando. Cero downtime UX.
+- **Bundle size impact**: framer-motion ~30KB gz. Validar en R.2.5.1
+  con `pnpm build` + comparar bundle antes/después; si el delta es
+  > 10% del First Load JS, evaluar dynamic import del swiper.
+- **`framer-motion@^11`**: pinear major version explícitamente. APIs
+  cambiaron entre v10 y v11.
+
+### 16.9 Componentes nuevos / modificados
+
+**Nuevos**:
+
+- `<ZoneSwiper>` en `src/features/shell/ui/zone-swiper.tsx` (Client).
+- `<SwiperViewport>` en `src/features/shell/ui/swiper-viewport.tsx`
+  (Client interno, framer-motion).
+- `<TopProgressBar>` en `src/shared/ui/top-progress-bar.tsx`
+  (Client, primitivo agnóstico reusable).
+
+**Modificados**:
+
+- `src/app/[placeSlug]/(gated)/layout.tsx`: envolver `{children}`
+  con `<ZoneSwiper>`.
+- `src/features/shell/ui/section-dots.tsx`: agregar
+  `onMouseEnter`/`onFocus` con `router.prefetch`.
+- `src/features/shell/public.ts`: export `<ZoneSwiper>`.
+- `next.config.ts`: agregar `experimental.staleTimes`.
+
+**Eliminados** (verificar cuáles existen en R.2.5.1):
+
+- `src/app/[placeSlug]/(gated)/conversations/loading.tsx` — confirmado
+  desde R.6.3.
+- `src/app/[placeSlug]/(gated)/events/loading.tsx` — por verificar.
+- `src/app/[placeSlug]/(gated)/loading.tsx` — por verificar.
+
+### 16.10 Sub-fases de implementación (R.2.5.0 → R.2.5.5)
+
+| Sub         | Deliverable                                                                                                                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **R.2.5.0** | Spec § 16 (este doc, MOD) + ADR (NEW) + roadmap (MOD).                                                                                                                                                      |
+| **R.2.5.1** | `pnpm add framer-motion@^11`. Crear componentes nuevos + tests unit (snap derivation, prefetch wiring, lastVisitedAt, scrollByZone). Gesture testing diferido a Playwright (R.2.5.4). Validar bundle delta. |
+| **R.2.5.2** | Configurar `experimental.staleTimes` (validar antes en dev). Mount `<ZoneSwiper>` en `(gated)/layout`. Remover `loading.tsx` de zonas root.                                                                 |
+| **R.2.5.3** | Prefetch on dot focus/hover (modificación section-dots) + `lastVisitedAt` cache + `router.refresh()` condicional al snap. Per-zona scroll preservation.                                                     |
+| **R.2.5.4** | E2E Playwright `zone-swipe.spec.ts` (touch.dispatch\* events) + manual QA en mobile real (iOS Safari + Chrome Android) + ajustes de spring config + edge cases.                                             |
+| **R.2.5.5** | Cleanup + docs + spec § 16 actualizado con realidad implementada + roadmap R.2.5 ✅ + memory feedback si aplica.                                                                                            |
+
+### 16.11 Excepciones (NO migrar al modelo literal del handoff)
+
+- **No share button entre zonas**: SKIP, fuera de scope F1.
+- **No haptic feedback**: SKIP. Cozytech tranquilo, sin vibración.
+- **No sound effects**: SKIP. "Presencia silenciosa".
+- **No "swipe hint"** animation al primer mount: SKIP. Sin grito visual.
+- **Dot hover prefetch en mobile**: el `onMouseEnter` no dispara en
+  touch — solo en desktop. En mobile, el prefetch de vecinos vive en
+  `onPanStart` del swiper (mismo efecto, momento distinto).

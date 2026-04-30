@@ -83,6 +83,19 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
     const trimmedTitle = values.title.trim()
     const coverUrl = values.coverUrl.trim() === '' ? null : values.coverUrl.trim()
 
+    // Logs de diagnóstico (R.7.X debugging). Visibles en DevTools
+    // Console del browser. Imprimimos el body shape exacto que se
+    // envía al server — útil para identificar nodos TipTap fuera del
+    // allowlist (hardBreak, attrs extra, etc.) si la validación Zod
+    // del server falla con "Datos inválidos".
+    console.log('[LibraryItemForm] submit', {
+      mode: mode.kind,
+      title: trimmedTitle,
+      coverUrl,
+      bodyTypes: collectNodeTypes(body),
+      body,
+    })
+
     startTransition(async () => {
       try {
         if (mode.kind === 'create') {
@@ -93,7 +106,7 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
             body,
             coverUrl,
           })
-          // Redirect a la URL canónica del item.
+          console.log('[LibraryItemForm] create OK', result)
           router.replace(`/library/${result.categorySlug}/${result.postSlug}`)
         } else {
           const result = await updateLibraryItemAction({
@@ -102,10 +115,16 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
             body,
             coverUrl,
           })
+          console.log('[LibraryItemForm] update OK', result)
           router.replace(`/library/${result.categorySlug}/${result.postSlug}`)
           router.refresh()
         }
       } catch (err) {
+        console.error('[LibraryItemForm] submit failed', {
+          name: err instanceof Error ? err.name : typeof err,
+          message: err instanceof Error ? err.message : String(err),
+          err,
+        })
         setFeedback({ kind: 'err', message: friendlyLibraryErrorMessage(err) })
       }
     })
@@ -190,4 +209,22 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
       </div>
     </form>
   )
+}
+
+/**
+ * Recorre el AST del body y devuelve el set de tipos de nodos
+ * presentes — útil para diagnosticar rápidamente si hay un nodo
+ * TipTap fuera del allowlist del schema Zod del server.
+ */
+function collectNodeTypes(node: unknown): string[] {
+  const types = new Set<string>()
+  function walk(n: unknown): void {
+    if (!n || typeof n !== 'object') return
+    const obj = n as { type?: unknown; content?: unknown; marks?: unknown }
+    if (typeof obj.type === 'string') types.add(obj.type)
+    if (Array.isArray(obj.content)) obj.content.forEach(walk)
+    if (Array.isArray(obj.marks)) obj.marks.forEach(walk)
+  }
+  walk(node)
+  return [...types].sort()
 }

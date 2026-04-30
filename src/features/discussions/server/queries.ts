@@ -12,6 +12,7 @@ import type {
   RichTextDocument,
 } from '../domain/types'
 import { richTextExcerpt } from '../domain/rich-text'
+import type { PostListFilter } from '../domain/filter'
 import { findOrCreateCurrentOpening } from './place-opening'
 
 /**
@@ -83,7 +84,19 @@ export async function listPostsByPlace(params: {
   includeHidden?: boolean
   pageSize?: number
   viewerUserId?: string
+  filter?: PostListFilter
 }): Promise<{ items: PostListView[]; nextCursor: Cursor | null }> {
+  const filter: PostListFilter = params.filter ?? 'all'
+
+  // Defensive: `participating` requiere viewerUserId. En la práctica,
+  // /conversations es gated así que el viewer siempre existe. Pero si
+  // algún caller invoca sin viewer + filter='participating', devolver
+  // lista vacía sin error en vez de filtrar por null (que matchearía
+  // posts de ex-miembros — semánticamente incorrecto).
+  if (filter === 'participating' && !params.viewerUserId) {
+    return { items: [], nextCursor: null }
+  }
+
   const pageSize = params.pageSize ?? POST_PAGE_SIZE
   const where: Prisma.PostWhereInput = {
     placeId: params.placeId,
@@ -99,6 +112,7 @@ export async function listPostsByPlace(params: {
           ],
         }
       : {}),
+    ...buildFilterWhere(filter, params.viewerUserId),
   }
 
   const rows = await prisma.post.findMany({
@@ -143,6 +157,47 @@ export async function listPostsByPlace(params: {
   const last = items[items.length - 1]
   const nextCursor = hasMore && last ? { createdAt: last.lastActivityAt, id: last.id } : null
   return { items, nextCursor }
+}
+
+/**
+ * Construye el `WHERE` parcial según el filter activo. Pure (no Prisma
+ * client). Combinado con el `where` base via spread en `listPostsByPlace`.
+ *
+ * - `all`: sin filter adicional.
+ * - `unanswered`: posts sin comments activos (`deletedAt IS NULL`).
+ *   Prisma traduce a `NOT EXISTS (SELECT 1 FROM "Comment" WHERE
+ *   "postId" = "Post"."id" AND "deletedAt" IS NULL)`. Cubierto por
+ *   índice `Comment(postId)` existente.
+ * - `participating`: viewer es autor del post O hizo al menos un comment
+ *   activo. Prisma traduce a `WHERE "authorUserId" = $1 OR EXISTS
+ *   (SELECT 1 FROM "Comment" WHERE "postId" = "Post"."id" AND
+ *   "authorUserId" = $1 AND "deletedAt" IS NULL)`. Asume `viewerUserId`
+ *   defined (gateado en `listPostsByPlace`).
+ */
+function buildFilterWhere(
+  filter: PostListFilter,
+  viewerUserId: string | undefined,
+): Prisma.PostWhereInput {
+  switch (filter) {
+    case 'all':
+      return {}
+    case 'unanswered':
+      return { comments: { none: { deletedAt: null } } }
+    case 'participating': {
+      // Gateado en `listPostsByPlace`: si filter='participating' y
+      // viewerUserId es undefined, retornamos `{items:[], nextCursor:null}`
+      // antes de invocar este helper. Asserción defensiva acá para
+      // satisfacer el typecheck de Prisma (no acepta `undefined`,
+      // espera `string | null`).
+      if (!viewerUserId) return {}
+      return {
+        OR: [
+          { authorUserId: viewerUserId },
+          { comments: { some: { authorUserId: viewerUserId, deletedAt: null } } },
+        ],
+      }
+    }
+  }
 }
 
 /**

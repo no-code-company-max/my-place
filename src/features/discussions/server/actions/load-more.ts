@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { prisma } from '@/db/client'
 import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import type { PostListView } from '@/features/discussions/domain/types'
+import { postListFilterSchema } from '@/features/discussions/domain/filter'
 import { resolveActorForPlace } from '../actor'
 import { listCommentsByPost, listPostsByPlace, type CommentView } from '../queries'
 
@@ -29,6 +30,10 @@ const loadMoreCommentsInputSchema = z.object({
 const loadMorePostsInputSchema = z.object({
   placeId: z.string().min(1),
   cursor: cursorSchema.nullable().optional(),
+  // R.6 follow-up: filter activo en la lista. Default 'all' via
+  // `.catch('all')` en el schema — si el client manda un valor
+  // inválido (XSS/scrape), se neutraliza al default.
+  filter: postListFilterSchema.optional(),
 })
 
 /**
@@ -104,6 +109,7 @@ export async function loadMorePostsAction(input: unknown): Promise<{
     cursor,
     includeHidden: actor.isAdmin,
     viewerUserId: actor.actorId,
+    ...(data.filter ? { filter: data.filter } : {}),
   })
 
   return {

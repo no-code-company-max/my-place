@@ -129,6 +129,13 @@ export { markPostReadAction } from './server/actions/reads'
 
 export { RESERVED_POST_SLUGS, generatePostSlug } from './domain/slug'
 
+export {
+  POST_LIST_FILTERS,
+  parsePostListFilter,
+  postListFilterSchema,
+  type PostListFilter,
+} from './domain/filter'
+
 export { CommentThread } from './ui/comment-thread'
 export { DwellTracker } from './ui/dwell-tracker'
 export { PostComposer } from './ui/post-composer'

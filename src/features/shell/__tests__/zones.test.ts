@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { ZONES, deriveActiveZone } from '../domain/zones'
 
 describe('ZONES', () => {
-  it('contiene 3 zonas (Inicio, Conversaciones, Eventos) en orden', () => {
-    expect(ZONES).toHaveLength(3)
+  it('contiene 4 zonas (Inicio, Conversaciones, Eventos, Biblioteca) en orden', () => {
+    expect(ZONES).toHaveLength(4)
     expect(ZONES[0]?.label).toBe('Inicio')
     expect(ZONES[1]?.label).toBe('Conversaciones')
     expect(ZONES[2]?.label).toBe('Eventos')
+    expect(ZONES[3]?.label).toBe('Biblioteca')
   })
 
   it('cada zona tiene index match con su posición', () => {
@@ -15,9 +16,9 @@ describe('ZONES', () => {
     })
   })
 
-  it('library NO está en zones (diferida)', () => {
-    expect(ZONES.find((z) => z.label.toLowerCase().includes('library'))).toBeUndefined()
-    expect(ZONES.find((z) => z.label.toLowerCase().includes('biblioteca'))).toBeUndefined()
+  it('biblioteca tiene path `/library`', () => {
+    const lib = ZONES.find((z) => z.label === 'Biblioteca')
+    expect(lib?.path).toBe('/library')
   })
 })
 
@@ -41,6 +42,12 @@ describe('deriveActiveZone', () => {
     expect(deriveActiveZone('/events')).toBe(2)
     expect(deriveActiveZone('/events/abc/edit')).toBe(2)
     expect(deriveActiveZone('/events/new')).toBe(2)
+  })
+
+  it('"/library" y sub-paths → 3', () => {
+    expect(deriveActiveZone('/library')).toBe(3)
+    expect(deriveActiveZone('/library/recetas')).toBe(3)
+    expect(deriveActiveZone('/library/')).toBe(3)
   })
 
   it('paths fuera de zonas devuelven null (settings, m, etc.)', () => {

@@ -204,23 +204,25 @@ describe('shouldRefreshZone', () => {
 })
 
 describe('isZoneRootPath', () => {
-  const ZONE_PATHS = ['/', '/conversations', '/events']
+  const ZONE_PATHS = ['/', '/conversations', '/events', '/library']
 
   it('zona root exacta → true', () => {
     expect(isZoneRootPath('/', ZONE_PATHS)).toBe(true)
     expect(isZoneRootPath('/conversations', ZONE_PATHS)).toBe(true)
     expect(isZoneRootPath('/events', ZONE_PATHS)).toBe(true)
+    expect(isZoneRootPath('/library', ZONE_PATHS)).toBe(true)
   })
 
   it('zona root con trailing slash → true (tolera)', () => {
     expect(isZoneRootPath('/conversations/', ZONE_PATHS)).toBe(true)
   })
 
-  it('sub-page (thread detail, event detail) → false', () => {
+  it('sub-page (thread detail, event detail, library category) → false', () => {
     expect(isZoneRootPath('/conversations/abc-slug', ZONE_PATHS)).toBe(false)
     expect(isZoneRootPath('/conversations/new', ZONE_PATHS)).toBe(false)
     expect(isZoneRootPath('/events/evt-1', ZONE_PATHS)).toBe(false)
     expect(isZoneRootPath('/events/new', ZONE_PATHS)).toBe(false)
+    expect(isZoneRootPath('/library/recetas', ZONE_PATHS)).toBe(false)
   })
 
   it('settings y otras rutas no-zona → false', () => {
@@ -231,13 +233,14 @@ describe('isZoneRootPath', () => {
 })
 
 describe('shouldShowShellChrome', () => {
-  const ZONE_PATHS = ['/', '/conversations', '/events']
+  const ZONE_PATHS = ['/', '/conversations', '/events', '/library']
 
   describe('SÍ muestra chrome', () => {
     it('zonas root', () => {
       expect(shouldShowShellChrome('/', ZONE_PATHS)).toBe(true)
       expect(shouldShowShellChrome('/conversations', ZONE_PATHS)).toBe(true)
       expect(shouldShowShellChrome('/events', ZONE_PATHS)).toBe(true)
+      expect(shouldShowShellChrome('/library', ZONE_PATHS)).toBe(true)
     })
 
     it('zona root con trailing slash', () => {
@@ -266,6 +269,10 @@ describe('shouldShowShellChrome', () => {
     it('sub-pages de events (detail + edit)', () => {
       expect(shouldShowShellChrome('/events/evt-1', ZONE_PATHS)).toBe(false)
       expect(shouldShowShellChrome('/events/evt-1/edit', ZONE_PATHS)).toBe(false)
+    })
+
+    it('sub-pages de library (categoría)', () => {
+      expect(shouldShowShellChrome('/library/recetas', ZONE_PATHS)).toBe(false)
     })
 
     it('member profile', () => {

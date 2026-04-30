@@ -94,9 +94,25 @@ test.describe('ZoneSwiper navigation — Palermo', () => {
       'aria-current',
       'page',
     )
+    await expect(page.getByRole('link', { name: 'Ir a Biblioteca' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 
-  test('nav cíclica vuelve al estado correcto (Inicio → Conversaciones → Eventos → Inicio)', async ({
+  test('library: dot de Biblioteca activa en `/library` (R.5)', async ({ page }) => {
+    await page.goto(placeUrl(palermoSlug, '/library'))
+    await expect(page.getByRole('link', { name: 'Ir a Biblioteca' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    await expect(page.getByRole('link', { name: 'Ir a Eventos' })).not.toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+  })
+
+  test('nav cíclica vuelve al estado correcto (Inicio → Conversaciones → Eventos → Biblioteca → Inicio)', async ({
     page,
   }) => {
     await page.goto(placeUrl(palermoSlug, '/'))
@@ -106,6 +122,9 @@ test.describe('ZoneSwiper navigation — Palermo', () => {
 
     await page.getByRole('link', { name: 'Ir a Eventos' }).click()
     await page.waitForURL(/\/events$/)
+
+    await page.getByRole('link', { name: 'Ir a Biblioteca' }).click()
+    await page.waitForURL(/\/library$/)
 
     await page.getByRole('link', { name: 'Ir a Inicio' }).click()
     await page.waitForURL((url) => url.pathname === '/')

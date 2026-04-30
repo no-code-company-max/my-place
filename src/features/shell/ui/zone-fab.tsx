@@ -13,8 +13,8 @@ import { isZoneRootPath } from '../domain/swiper-snap'
  * `<FAB>` con la lógica de visibilidad y los items del menú.
  *
  * Visibilidad:
- *  - Solo zonas root (`/`, `/conversations`, `/events`) vía
- *    `isZoneRootPath` reusado de R.2.5 (mismo gate del swiper).
+ *  - Solo zonas root (`/`, `/conversations`, `/events`, `/library`)
+ *    vía `isZoneRootPath` reusado de R.2.5 (mismo gate del swiper).
  *  - Sub-pages (thread detail, event detail, /m/, new forms): retorna
  *    null. El user está enfocado en algo específico, "Nueva
  *    discusión" sería ruido.
@@ -27,10 +27,11 @@ import { isZoneRootPath } from '../domain/swiper-snap'
  *  - "Nueva discusión" → `/conversations/new`.
  *  - "Proponer evento" → `/events/new`.
  *
- * Mismo set en las 3 zonas (no zona-aware en MVP — costo cognitivo
+ * Mismo set en las 4 zonas (no zona-aware en MVP — costo cognitivo
  * de "el menú cambia según donde estoy" supera el beneficio para una
  * app de 150 members). Futuro: si producto pide priorizar acción de
- * la zona actual, agregar reorder/highlight (no breaking).
+ * la zona actual, agregar reorder/highlight (no breaking). R.5.X
+ * sumará "Subir documento" cuando uploads existan.
  *
  * Boundary: NO importa de `discussions` ni `events` — los paths son
  * strings literales. Cero violación de aislamiento.

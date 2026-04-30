@@ -37,6 +37,11 @@ test.describe('ZoneFab — Palermo', () => {
       await page.goto(placeUrl(palermoSlug, '/events'))
       await expect(page.getByRole('button', { name: /Acciones/i })).toBeVisible()
     })
+
+    test('en `/library` el FAB es visible (R.5)', async ({ page }) => {
+      await page.goto(placeUrl(palermoSlug, '/library'))
+      await expect(page.getByRole('button', { name: /Acciones/i })).toBeVisible()
+    })
   })
 
   test.describe('pass-through — sub-pages no muestran FAB', () => {

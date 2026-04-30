@@ -35,12 +35,13 @@ afterEach(() => {
 })
 
 describe('SectionDots', () => {
-  it('renderiza 3 dots con aria-label de cada zona', () => {
+  it('renderiza 4 dots con aria-label de cada zona', () => {
     usePathnameMock.mockReturnValue('/')
     render(<SectionDots />)
     expect(screen.getByLabelText('Ir a Inicio')).toBeInTheDocument()
     expect(screen.getByLabelText('Ir a Conversaciones')).toBeInTheDocument()
     expect(screen.getByLabelText('Ir a Eventos')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ir a Biblioteca')).toBeInTheDocument()
   })
 
   it('"/" marca el dot de Inicio como aria-current="page"', () => {
@@ -63,6 +64,14 @@ describe('SectionDots', () => {
     expect(screen.queryByLabelText('Ir a Inicio')).not.toHaveAttribute('aria-current')
     expect(screen.queryByLabelText('Ir a Conversaciones')).not.toHaveAttribute('aria-current')
     expect(screen.queryByLabelText('Ir a Eventos')).not.toHaveAttribute('aria-current')
+    expect(screen.queryByLabelText('Ir a Biblioteca')).not.toHaveAttribute('aria-current')
+  })
+
+  it('"/library" marca Biblioteca como current', () => {
+    usePathnameMock.mockReturnValue('/library')
+    render(<SectionDots />)
+    expect(screen.getByLabelText('Ir a Biblioteca')).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText('Ir a Eventos')).not.toHaveAttribute('aria-current')
   })
 
   it('disabled=true agrega clase pointer-events-none + opacity-50', () => {
@@ -79,6 +88,7 @@ describe('SectionDots', () => {
     expect(screen.getByLabelText('Ir a Inicio')).toHaveAttribute('href', '/')
     expect(screen.getByLabelText('Ir a Conversaciones')).toHaveAttribute('href', '/conversations')
     expect(screen.getByLabelText('Ir a Eventos')).toHaveAttribute('href', '/events')
+    expect(screen.getByLabelText('Ir a Biblioteca')).toHaveAttribute('href', '/library')
   })
 
   describe('prefetch on hover/focus (R.2.5.3)', () => {

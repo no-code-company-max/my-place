@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { Fragment, type ReactNode } from 'react'
+import { ExternalLink, FileText, Link as LinkIcon } from 'lucide-react'
 import type {
   RichTextBlockNode,
   RichTextCodeBlock,
   RichTextDocument,
+  RichTextEmbed,
   RichTextInlineNode,
   RichTextListItem,
   RichTextMark,
@@ -71,7 +73,99 @@ function renderBlock(node: RichTextBlockNode, placeSlug?: string): ReactNode {
       )
     case 'codeBlock':
       return renderCodeBlock(node)
+    case 'embed':
+      return renderEmbed(node)
   }
+}
+
+/**
+ * Render SSR del embed node. La URL canonical ya viene guardada en
+ * `attrs.url` (post-parse en EmbedToolbar de library) — el renderer
+ * usa el switch de provider directo sin parser. Genérico: discussions
+ * NO importa de library, solo conoce el shape del nodo.
+ */
+function renderEmbed(node: RichTextEmbed): ReactNode {
+  const { url, provider, title } = node.attrs
+  const safeTitle = title?.trim() ?? ''
+
+  switch (provider) {
+    case 'youtube':
+    case 'vimeo':
+    case 'gdoc':
+    case 'gsheet':
+      return (
+        <div className="my-3 overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="aspect-video w-full bg-bg">
+            <iframe
+              src={url}
+              title={safeTitle || url}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="h-full w-full"
+              loading="lazy"
+            />
+          </div>
+        </div>
+      )
+    case 'drive':
+      return (
+        <EmbedExternalCard
+          icon={<FileText size={20} aria-hidden="true" />}
+          providerLabel="Google Drive"
+          title={safeTitle || url}
+          url={url}
+        />
+      )
+    case 'dropbox':
+      return (
+        <EmbedExternalCard
+          icon={<FileText size={20} aria-hidden="true" />}
+          providerLabel="Dropbox"
+          title={safeTitle || url}
+          url={url}
+        />
+      )
+    case 'generic':
+    default:
+      return (
+        <EmbedExternalCard
+          icon={<LinkIcon size={20} aria-hidden="true" />}
+          providerLabel="Link"
+          title={safeTitle || url}
+          url={url}
+        />
+      )
+  }
+}
+
+function EmbedExternalCard({
+  icon,
+  providerLabel,
+  title,
+  url,
+}: {
+  icon: ReactNode
+  providerLabel: string
+  title: string
+  url: string
+}): ReactNode {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="my-3 flex items-center gap-3 overflow-hidden rounded-lg border border-border bg-surface px-4 py-3 hover:bg-soft"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-bg text-muted">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-text">{title}</p>
+        <p className="truncate text-xs text-muted">{providerLabel}</p>
+      </div>
+      <ExternalLink size={16} aria-hidden="true" className="shrink-0 text-muted" />
+    </a>
+  )
 }
 
 function renderListItems(items: RichTextListItem[], placeSlug?: string): ReactNode {

@@ -43,28 +43,49 @@ type Cursor = { createdAt: Date; id: string }
 export async function findPostById(postId: string): Promise<Post | null> {
   const row = await prisma.post.findUnique({
     where: { id: postId },
-    include: { event: { select: { id: true, title: true, cancelledAt: true } } },
+    include: {
+      event: { select: { id: true, title: true, cancelledAt: true } },
+      libraryItem: {
+        select: {
+          id: true,
+          archivedAt: true,
+          category: { select: { slug: true } },
+        },
+      },
+    },
   })
   if (!row) return null
-  return mapPostWithEvent(row, row.event)
+  return mapPostWithEvent(row, row.event, row.libraryItem)
 }
 
 /**
  * Lookup por unique `(placeId, slug)`. Retorna `null` si no existe; la page
  * de detalle lanza `notFound()` desde ahí.
  *
- * Incluye la relación inversa `Post.event` para que `PostDetail` pueda
- * renderizar el header "Conversación del evento: …" + badge "Cancelado"
- * sin round-trips adicionales (F.E Fase 6 — relación bidireccional
- * Event↔Post). En posts standalone `event` es null.
+ * Incluye relaciones inversas:
+ *  - `Post.event` para que `PostDetail` renderice el header del evento.
+ *  - `Post.libraryItem` (R.7.9) para que la page de discusiones haga
+ *    redirect 308 a la URL canónica `/library/[cat]/[slug]` cuando el
+ *    Post es un item de biblioteca.
+ *
+ * En posts standalone ambos son null.
  */
 export async function findPostBySlug(placeId: string, slug: string): Promise<Post | null> {
   const row = await prisma.post.findUnique({
     where: { placeId_slug: { placeId, slug } },
-    include: { event: { select: { id: true, title: true, cancelledAt: true } } },
+    include: {
+      event: { select: { id: true, title: true, cancelledAt: true } },
+      libraryItem: {
+        select: {
+          id: true,
+          archivedAt: true,
+          category: { select: { slug: true } },
+        },
+      },
+    },
   })
   if (!row) return null
-  return mapPostWithEvent(row, row.event)
+  return mapPostWithEvent(row, row.event, row.libraryItem)
 }
 
 /**
@@ -458,16 +479,26 @@ type PostRow = Prisma.PostGetPayload<Record<string, never>>
 type CommentRow = Prisma.CommentGetPayload<Record<string, never>>
 
 function mapPost(row: PostRow): Post {
-  return mapPostWithEvent(row, null)
+  return mapPostWithEvent(row, null, null)
+}
+
+type LibraryItemJoinRow = {
+  id: string
+  archivedAt: Date | null
+  category: { slug: string }
 }
 
 /**
- * Mapper extendido que incluye la relación inversa `Post.event`. Cuando el
- * caller hace `include: { event: ... }` y obtiene la subselección, la pasa
- * acá. Si no se pidió la relación, `event` es null por default — la UI lo
- * trata como Post standalone.
+ * Mapper extendido que incluye relaciones inversas `Post.event` y
+ * `Post.libraryItem` (R.7.9). Cuando el caller hace `include: { … }` y
+ * obtiene la subselección, la pasa acá. Sin la relación, ambos son null
+ * por default — la UI los trata como Post standalone.
  */
-function mapPostWithEvent(row: PostRow, event: PostEventLink | null): Post {
+function mapPostWithEvent(
+  row: PostRow,
+  event: PostEventLink | null,
+  libraryItem: LibraryItemJoinRow | null,
+): Post {
   return {
     id: row.id,
     placeId: row.placeId,
@@ -482,6 +513,13 @@ function mapPostWithEvent(row: PostRow, event: PostEventLink | null): Post {
     lastActivityAt: row.lastActivityAt,
     version: row.version,
     event,
+    libraryItem: libraryItem
+      ? {
+          id: libraryItem.id,
+          categorySlug: libraryItem.category.slug,
+          archivedAt: libraryItem.archivedAt,
+        }
+      : null,
   }
 }
 

@@ -47,6 +47,7 @@ export type RichTextBlockNode =
   | RichTextOrderedList
   | RichTextBlockquote
   | RichTextCodeBlock
+  | RichTextEmbed
 
 export type RichTextParagraph = {
   type: 'paragraph'
@@ -82,6 +83,17 @@ export type RichTextBlockquote = {
 export type RichTextCodeBlock = {
   type: 'codeBlock'
   content?: Array<{ type: 'text'; text: string }>
+}
+
+/** Embed: block atomic genérico de TipTap (R.7.7+). El render real
+ *  vive en el slice library (`<EmbedNodeView>` para edit + read mode). */
+export type RichTextEmbed = {
+  type: 'embed'
+  attrs: {
+    url: string
+    provider: 'youtube' | 'vimeo' | 'gdoc' | 'gsheet' | 'drive' | 'dropbox' | 'generic'
+    title?: string
+  }
 }
 
 export type RichTextInlineNode = RichTextText | RichTextMention
@@ -196,6 +208,21 @@ export type Post = {
    *  Posts standalone. Se popula sólo en queries que lo solicitan vía
    *  `include: { event: ... }` (ver `findPostBySlug`). */
   event: PostEventLink | null
+  /** Relación inversa al item de biblioteca cuando este Post es un thread
+   *  documento (R.7.5+). Null si no es item. Se popula sólo en queries
+   *  que la solicitan (ver `findPostBySlug`). Discusiones la usa para
+   *  redirect 308 cross-zona a la URL canónica `/library/[cat]/[slug]`. */
+  libraryItem: PostLibraryItemLink | null
+}
+
+/**
+ * Subset del LibraryItem asociado a un Post. Discussions no conoce la
+ * tabla — solo el shape mínimo para construir la URL canónica del item.
+ */
+export type PostLibraryItemLink = {
+  id: string
+  categorySlug: string
+  archivedAt: Date | null
 }
 
 /**

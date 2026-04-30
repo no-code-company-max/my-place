@@ -52,7 +52,11 @@ export function EmbedToolbar({ editor }: Props): React.ReactNode {
         .insertContent({
           type: 'embed',
           attrs: {
-            url: values.url.trim(),
+            // Persistimos la URL canonical (post-parse) en el AST: para
+            // YouTube/Vimeo/Gdoc/Gsheet ya viene en formato embed.
+            // Drive/Dropbox/generic la dejan tal cual. Beneficio: el
+            // renderer SSR no necesita re-parsear por cada render.
+            url: parsed.canonicalUrl,
             provider: parsed.provider,
             title,
           },

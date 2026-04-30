@@ -101,6 +101,10 @@ export { EmbedToolbar } from './ui/embed-toolbar'
 export { LibraryItemEditor } from './ui/library-item-editor'
 export { LibraryItemForm } from './ui/library-item-form'
 
+// Item detail UI (R.7.9)
+export { ItemAdminMenu } from './ui/item-admin-menu'
+export { LibraryItemHeader } from './ui/library-item-header'
+
 export { CategoryCard } from './ui/category-card'
 export { CategoryGrid } from './ui/category-grid'
 export { CategoryHeaderBar } from './ui/category-header-bar'

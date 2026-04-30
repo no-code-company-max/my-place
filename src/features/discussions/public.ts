@@ -18,6 +18,7 @@ export type {
   PlaceOpeningSource,
   Post,
   PostId,
+  PostLibraryItemLink,
   PostListView,
   PostRead,
   PostReadId,

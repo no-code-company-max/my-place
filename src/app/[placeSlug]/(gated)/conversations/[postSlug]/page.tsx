@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import { prisma } from '@/db/client'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { logger } from '@/shared/lib/logger'
@@ -62,6 +62,16 @@ export default async function PostDetailPage({ params }: Props) {
   ])
   if (!post) notFound()
   if (post.hiddenAt && !viewer.isAdmin) notFound()
+
+  // R.7.9: cross-zona redirect. Si el Post es un thread documento de
+  // biblioteca, la URL canónica vive bajo /library/[cat]/[slug]. Esto
+  // preserva enlaces externos a /conversations/[slug] (autocompleto del
+  // search overlay R.4 podría apuntar acá) — `permanentRedirect` (308)
+  // refleja que la canónica es estable. Asimétrico con eventos por
+  // diseño (spec § 13.1: items pertenecen a una sub-zona, eventos no).
+  if (post.libraryItem) {
+    permanentRedirect(`/library/${post.libraryItem.categorySlug}/${post.slug}`)
+  }
 
   // F.F: el evento ES el thread. Si el Post fue auto-creado por un evento
   // (`post.event` poblado en `findPostBySlug`), levantamos el detalle

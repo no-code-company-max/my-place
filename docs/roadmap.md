@@ -141,7 +141,7 @@ Implementar según `docs/ontologia/eventos.md`. Spec canónico:
 
 ## Roadmap macro post-F.G — Replicar handoff/ en el producto
 
-Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`. Define las fases R.1 → R.4 que llevan el producto del estado post-F.G al diseño completo del `handoff/`. Library/library-category diferidos por decisión de producto.
+Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`. Define las fases R.1 → R.6 que llevan el producto del estado post-F.G al diseño completo del `handoff/`. R.5 (Library) re-activado en 2026-04-30 como UI-only — backend, uploads e item detail diferidos a R.5.X follow-ups.
 
 - **R.1 — Migración visual a tokens del rebrand F.G** ✅ (2026-04-26). Refactor mecánico de tokens `place-*` legacy → tokens canónicos (`bg`/`text`/`surface`/`muted`/`border`/`accent`/etc.) en todos los consumers del codebase (~50 archivos). Aliases `--place-*` se mantienen como compat layer en `globals.css` y `theme.ts`. Excepciones intencionales: `--place-presence` (verde fijo de presencia), `--place-unread` (naranja fijo de unread), `--place-danger` (con fallback hex), clase CSS `place-mention` (identifier semantic). Sub-fases:
   - **R.1.A** (commit `f17099b`): discussions/ui (20) + shared/ui (3 — dialog, dropdown-menu, toaster).
@@ -165,6 +165,20 @@ Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`
     - **R.2.6.3 — Cleanup + roadmap** ✅. Sub-fases marcadas; manual QA del overlap con Sonner toaster bottom-right pending (depende de device real — opciones de mitigación documentadas en spec § 17.9: mover toaster a top-right o subir FAB a bottom-24).
 - **R.3 — Home / portada (`home`)** — pendiente. Spec `docs/features/home/spec.md` antes de código.
 - **R.4 — Search (overlay global)** — pendiente. Spec `docs/features/search/spec.md` antes de código + migration DB fulltext.
+- **R.5 — Library UI scaffold (zona + categoría)** ✅ (2026-04-30). Slice nuevo `src/features/library/` UI-only (decisión user: solo UI hoy, backend cuando exista lo conectamos sin tocar componentes). 4ª zona "Biblioteca" sumada al shell — accesible por dot + swipe. Spec en `docs/features/library/spec.md` (9 secciones documentando scope, componentes, empty states, R.5.X follow-ups). Sub-fases:
+  - **R.5.0 — Plan + decisiones del user** ✅ (2026-04-30). Plan `~/.claude/plans/tidy-stargazing-summit.md` (R.5). Decisiones consultadas al user: empty state sin CTA "Subir el primero" (no inducimos a accionar uploads que no existen), label "Biblioteca" (español alineado con resto del shell), sin stubs de queries (UI pura hasta que exista backend).
+  - **R.5.1 — Spec + slice scaffolding** ✅. `docs/features/library/spec.md` NEW. Slice `src/features/library/` con `domain/types.ts` (`DocType`, `LibraryCategory`, `LibraryDoc`) + 11 componentes UI (Server Components salvo `<TypeFilterPills>` Client) + 5 tests unit + `public.ts`. Reuso de primitives existentes (`<PageIcon>`, `<BackButton>`, `<TimeAgo>`, divider patterns, URL state pattern de `<ThreadFilterPills>`).
+  - **R.5.2 — Routes + 4ª zona** ✅. `ZONES` extendido a 4 con `{index:3, label:'Biblioteca', path:'/library'}`. `ZoneIndex` literal `0|1|2|3`. `deriveActiveZone` reconoce `/library*`. Routes nuevos: `/library/page.tsx` (estructura JSX completa con conditionals, hardcoded `categories: []` + `recents: []` → renderiza `<EmptyLibrary>` hoy) y `/library/[categorySlug]/page.tsx` (`notFound()` directo sin backend; spec documenta el shape completo para cuando exista). Tests del shell actualizados (`zones.test`, `swiper-snap.test`, `section-dots.test`). E2E `zone-swipe.spec` + `zone-fab.spec` cubren `/library`. ZoneFab automáticamente visible en la nueva zona (consume `ZONES.map(z=>z.path)`).
+  - **R.5.3 — Cleanup + roadmap** ✅. Verificación final: typecheck + lint + 906 tests + boundaries + build prod limpios.
+  - **R.5.X follow-ups (post-R.5, pendientes)**:
+    - **Backend**: schema Prisma `LibraryCategory` + `LibraryDoc` + migrations + RLS + queries + server actions. Cuando exista, el page `/library` swappea hardcoded `[]` por `await listLibraryCategories(place.id)` / `listRecentDocs(place.id)` — UI estructura intacta. `/library/[categorySlug]` cambia `notFound()` directo por `findCategoryBySlug` real.
+    - **Uploads**: integración Supabase Storage. Permission gating (decisión producto: ¿solo admin? ¿cualquier miembro?). Type detection con fallback. Tamaño máximo. `<ZoneFab>` suma item "Subir documento".
+    - **Item detail page** (`/library/[categorySlug]/[itemSlug]`): sin design del handoff todavía. Comportamiento por type (preview embed para PDF/image, abrir link en nueva tab, descarga directa o redirect a Workspace para doc/sheet).
+    - **Search integration**: cuando R.4 search overlay esté activo, indexar title + categoría de cada doc.
+    - **Admin CRUD categorías**: crear / editar emoji+título / archivar. Reordering manual con drag &amp; drop.
+    - **Bulk actions** (admin): mover docs entre categorías, archivar bulk.
+    - **Stats internas** (no user-facing — solo admin): docs más abiertos por mes para audit, NO para gamificación.
+    - **CTA "Subir el primero"** en empty states 1 y 2: re-evaluar cuando uploads existan.
 - **R.6 — Rediseño layout threads (handoff threads + threads-detail)** ✅ (2026-04-26).
   - **R.6.0 — Spec del rediseño** ✅. `docs/features/discussions/spec.md` § 21 + ADR `docs/decisions/2026-04-26-threads-layout-redesign.md`. Decisiones consultadas al user: 6 emojis preservados (F.A) vs ♥ del handoff; featured heurístico (primer thread por `lastActivityAt`) sin admin pinning; filtros incrementales (solo "Todos" funcional); header detail dentro del shell. Cierra el gap del roadmap macro original (R.1 fue solo tokens, no layout).
   - **R.6.1 — Data shape extendida** ✅. `PostListView` agrega `snippet` (richTextExcerpt 140 chars), `commentCount` (excluye soft-deleted), `readerSample` (top 4 readers de la apertura), `isFeatured` (derivado, primer post por `lastActivityAt`). `listPostsByPlace` extendido con sub-queries paralelas vía `Promise.all`.
@@ -200,7 +214,7 @@ Documento de planificación maestra: `~/.claude/plans/tidy-stargazing-summit.md`
 
 Explícito para proteger scope. Cada cosa acá es tentación que hay que resistir:
 
-- **Biblioteca de documentos.** Fuera del core, queda para v2.
+- **Biblioteca de documentos (uploads + queries reales).** UI scaffolded en R.5 (2026-04-30) — empty state visible en producción, componentes listos para data real. Backend (schema, migrations, uploads, item detail) diferido a R.5.X follow-ups; se construye cuando producto priorice.
 - **DMs entre miembros.** Mencionado en la ontología pero no MVP.
 - **Cursos o módulos educativos.**
 - **Integración con calendario externo** (Google Calendar, Apple Calendar).

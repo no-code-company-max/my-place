@@ -1,58 +1,123 @@
 # Biblioteca — Especificación
 
-> **Alcance v1 (R.5.1, 2026-04-30)**: UI scaffold sin backend.
-> Construye los componentes y la zona en el shell para que estén
-> listos cuando se sume el backend (R.5.X follow-up). Hoy solo el
-> empty state se ve en producción.
+> **Alcance v1 (R.5, 2026-04-30)**: UI scaffold sin backend. Empty
+> state production-ready en `/library`; componentes UI listos para
+> recibir data real.
+
+> **Alcance v2 (R.7, spec 2026-04-30 → implementación en sub-fases
+> R.7.1 → R.7.11)**: backend completo + admin CRUD de categorías +
+> items editoriales tipo "thread documento" (Post enriquecido con
+> cover + categoría) con embeds intercalados via TipTap custom node.
+> Sin uploads — los recursos descargables/visualizables son embeds
+> de provider externo (YouTube, Vimeo, Drive, Dropbox, Google
+> Doc/Sheet, link genérico). Storage propio diferido a R.7.X
+> (decisión user 2026-04-30: evitar costos incrementales de storage
+> hasta integrar BYO storage tipo Wasabi).
 
 > **Referencias:** `handoff/library/`, `handoff/library-category/`
-> (design canónico), `docs/architecture.md`, `docs/features/shell/spec.md`
-> § 16 (zonas + swipe), `CLAUDE.md` (principios no negociables).
+> (design canónico R.5), `docs/architecture.md`,
+> `docs/features/shell/spec.md` § 16 (zonas + swipe),
+> `docs/features/discussions/spec.md` (TipTap editor + Post +
+> Comments — reuse masivo en R.7),
+> `docs/features/events/spec.md` § F.F (precedente "evento ES
+> thread", patrón cross-zona reusado),
+> `CLAUDE.md` (principios no negociables).
 
 ## 1. Modelo mental
 
-La Biblioteca es la **memoria compartida** del place — recursos
-relevantes (links, PDFs, imágenes, docs) organizados por categorías
-que el admin define. NO es un drive ni un wiki — es una colección
-curada y modesta de cosas útiles que el lugar quiere preservar.
+La Biblioteca es la **memoria compartida** del place — contenido
+editorial (guías, tutoriales, cursos) y recursos referenciados por
+embed externo (videos, docs descargables, links útiles) organizados
+por categorías que el admin define. NO es un drive ni un wiki — es
+una colección curada y modesta de cosas útiles que el lugar quiere
+preservar.
+
+**El item ES thread documento.** Cada item de biblioteca es un
+`Post` enriquecido con metadata de biblioteca (categoría + cover
+opcional). Reusa toda la infraestructura de discusiones: editor
+TipTap, comments, reactions, reading presence, erasure 365d, slugs,
+snapshots. Los embeds (videos, links a docs) viven intercalados en
+el body como nodos custom de TipTap — el author escribe contexto +
+embed + más contexto + embed, en lugar de tener attachments
+separados sin contexto. Mismo patrón conceptual que F.F en eventos
+("evento ES thread"), aplicado a la biblioteca.
 
 Tres niveles previstos:
 
 1. **Zona Biblioteca** (`/library`): grid de categorías + bento
-   "Recientes" con últimos docs.
-2. **Categoría** (`/library/[categorySlug]`): lista de docs en
-   esa categoría, filtrable por tipo.
-3. **Item detail** (`/library/[categorySlug]/[itemSlug]`): vista
-   del recurso (preview / descarga / link). **NO incluido en R.5**
-   (sin design del handoff).
+   "Recientes" con últimos items.
+2. **Categoría** (`/library/[categorySlug]`): lista de items en
+   esa categoría.
+3. **Item detail** (`/library/[categorySlug]/[itemSlug]`): el
+   thread documento — header (categoría + cover desktop +
+   título + author) + body TipTap con embeds intercalados +
+   comments + reactions + readers.
 
 NO es:
 
-- Un sistema de uploads abierto donde cualquiera sube. Quién puede
-  subir lo decide producto cuando se sume backend.
-- Un buscador. La búsqueda viene con R.4 (search overlay global).
+- Un sistema de uploads de archivos al storage propio. Los
+  recursos viven en provider externo (YouTube, Drive, Dropbox,
+  etc.) referenciados por URL. R.7.X+ puede sumar BYO storage
+  (Wasabi) si producto lo prioriza.
+- Un buscador. La búsqueda viene con R.4 (search overlay global)
+  e indexará title + body de cada item (los nodos TipTap
+  estándar son texto plano; embed nodes se indexan por su
+  `title` interno).
 - Un feed con timeline. Recientes muestra solo top-N globales,
   sin paginación infinita.
+- Un sistema versionado. Editar un item modifica `updatedAt` y
+  pisa el body — sin historial. Si producto pide versionado,
+  R.7.X+.
 
 ## 2. Vocabulario
 
-- **Categoría**: agrupador con emoji + título. Único per-place.
-  Slug inmutable (mismo patrón que Place.slug, Post.slug).
-- **Recurso / Doc**: cualquier item subido (PDF, link, imagen,
-  Google Doc, Google Sheet). El handoff usa "doc" como término
-  abreviado; "recurso" en copy user-facing.
-- **Tipo / DocType**: discriminador de UI — `pdf | link | image |
-doc | sheet`.
-- **Recientes**: top-N docs globales del place ordenados por
-  `uploadedAt DESC`.
+- **Categoría** (`LibraryCategory`): agrupador con emoji +
+  título. Único per-place. Slug inmutable (mismo patrón que
+  Place.slug, Post.slug). Tiene `contributionPolicy` que define
+  quién puede crear items dentro.
+- **Item** (`LibraryItem`): un thread documento dentro de una
+  categoría. Es un `Post` (FK `Post.libraryItemId`) con metadata
+  extra (categoría + cover). **Author** = creador del item; en
+  el spec usamos siempre "author" — reservamos "owner" para el
+  rol del place (evita ambigüedad).
+- **Embed**: referencia a un recurso externo (video, doc, link)
+  intercalado en el body TipTap como nodo custom. Vive en el
+  AST de `Post.body`, no en tabla aparte. Atributos: `url`,
+  `provider`, `title`. Provider:
+  `youtube | vimeo | drive | dropbox | gdoc | gsheet | generic`.
+- **Cover**: imagen opcional de portada del item. Guardada en
+  DB (`coverUrl`), **no renderizada en mobile** — reservada
+  para futura UI desktop. Decisión user 2026-04-30 (Place se
+  consume mayoritariamente desde mobile; cover en mobile suma
+  ruido sin valor).
+- **Contribution policy**: quién puede crear items en una
+  categoría — `admin_only | designated | members_open`. Default
+  `admin_only`. `designated` requiere lista de `userId`s
+  habilitados via tabla `LibraryCategoryContributor`.
+- **Recientes**: top-N items globales del place ordenados por
+  `Post.lastActivityAt DESC` (no por `createdAt` — refleja
+  actividad real, mismo criterio que en discusiones).
+
+**Doc / Recurso (vocabulario R.5 vs R.7)**: el handoff R.5 usa
+"doc" para nombrar items. R.7 lo reemplaza por "item" en código
+(`LibraryItem`). El término "recurso" sigue existiendo en copy
+user-facing genérico ("Tu comunidad todavía no agregó recursos")
+pero el modelo de datos lo refleja como `LibraryItem`.
+
+**DocType (deprecated en R.7)**: el discriminador
+`pdf | link | image | doc | sheet` del handoff R.5 desaparece —
+todo item es un thread documento. El "tipo" de un embed lo
+define `provider` y se resuelve a un icono visual, no a un kind
+ontológico.
 
 **Idioma**: UI en español ("Biblioteca", "Recursos", "Recientes",
-"Sin resultados"). Código en inglés (`LibraryCategory`, `DocType`,
-`uploadedAt`, etc.).
+"Sin resultados", "Insertar contenido", "Quién puede crear acá").
+Código en inglés (`LibraryCategory`, `LibraryItem`,
+`contributionPolicy`, `embedNode`, etc.).
 
 ## 3. Scope v1 (R.5.1) — UI-only
 
-**Sí en v1**:
+**Sí en v1 (R.5)** ✅ entregado:
 
 - Slice `src/features/library/` con tipos del dominio
   (`LibraryCategory`, `LibraryDoc`, `DocType`) + componentes UI
@@ -67,89 +132,176 @@ doc | sheet`.
 - TypeFilterPills con URL state (`?type=`), pattern idéntico a
   `<ThreadFilterPills>` de discussions.
 
-**NO en v1** (deferred a R.5.X follow-ups, listados explícitos):
+**NO en v1, sí en v2 (R.7)** — planeado en este spec:
 
-- **Backend**: schema Prisma `LibraryCategory`/`LibraryDoc`,
-  migrations, queries, server actions, RLS. Cuando se sume, se
-  agrega `src/features/library/server/queries.ts` con las queries
-  reales y se actualizan las pages para llamarlas.
-- **Uploads**: storage Supabase, file processing, type detection,
-  permission gating (¿quién puede subir?).
-- **Item detail**: `/library/[categorySlug]/[itemSlug]/page.tsx`.
-  Sin design del handoff. Cuando producto lo defina, se agrega.
-- **Open behavior por type**: el handoff define preview / abrir
-  link / descargar según type. Vive con backend (URLs reales).
-- **`<ZoneFab>` item "Subir documento"**: se suma cuando uploads
-  existan.
-- **Search en library**: depende de R.4 search overlay.
-- **Realtime** (lectura en vivo, contadores en vivo).
-- **Admin CRUD de categorías** (crear / editar / archivar).
-- **Reordering manual**: orden de categorías default ASC por slug
-  o creación; admin reordering vía drag &amp; drop diferido.
+- Backend completo: schemas Prisma `LibraryCategory` +
+  `LibraryItem` + `LibraryCategoryContributor`, migrations, RLS
+  policies, queries, server actions.
+- Admin CRUD de categorías en `/settings/library` (crear,
+  editar emoji+título, archivar, reordering manual,
+  contribution policy + designated contributors).
+- Compositor de items con TipTap + embed custom node intercalado
+  en el body.
+- Item detail page (`/library/[categorySlug]/[itemSlug]`) con
+  TipTap renderer + comments + reactions (reuse de discusiones).
+- Conexión zona `/library` con backend real: cuando hay
+  categorías, `<CategoryGrid>` toma data real; cuando hay
+  items recientes, `<RecentsList>` se monta.
+- Cross-zona: redirect 308 desde `/conversations/[itemSlug]` a
+  la URL canónica `/library/[cat]/[itemSlug]`. El item aparece
+  en listado de discusiones igual que un evento (es un Post).
+
+**NO en R.7, deferred a R.7.X follow-ups**:
+
+- **Storage propio (uploads de archivos)**: integración Wasabi
+  o similar BYO storage. Los items v2 solo aceptan embeds
+  (URLs externas). Decisión user 2026-04-30: evita costos
+  incrementales hasta validar producto.
+- **`TypeFilterPills` con filtros funcionales**: como ya no hay
+  `DocType`, el componente queda en el slice como referencia
+  R.5 pero el page no lo monta. R.7.X+ podría sumar filtros
+  semánticos ("Mis aportes" / "De los demás") similar a
+  `<ThreadFilterPills>` de discussions — fuera de scope R.7.
+- **Lección con progress gating**: variante futura del embed
+  custom node (atributo `requiresPreviousCompletion: bool` +
+  tracking per-user). El embed básico v2 deja la base lista —
+  extender es agregar atributos + NodeView, no rehacer schema.
+- **Versionado de body**: editar pisa el body actual sin
+  historial. R.7.X+ si producto pide.
+- **Bulk actions admin**: mover items entre categorías,
+  archivar bulk.
+- **Realtime** (presence en vivo en item, contadores en vivo).
+- **Search en library**: depende de R.4 search overlay global.
+- **Cover desktop rendering**: `coverUrl` se guarda pero mobile
+  no renderiza. La UI desktop que use el cover llega cuando
+  exista layout desktop específico.
+- **Stats internas** (admin-only): items más leídos por mes
+  para audit, NO para gamificación.
 
 ## 4. Routes y comportamiento
 
 ### `/library` (zona root)
 
 Server Component. Estructura JSX completa con conditionals para
-pluggear backend mañana sin cambios en componentes:
+pluggear backend en R.7 sin cambios en componentes.
+
+**R.5 (entregado)**: data hardcoded como arrays vacíos →
+renderiza `<EmptyLibrary>`.
+
+**R.7 (planeado)**: el page llama `listLibraryCategories(place.id)`
+y `listRecentItems(place.id, { limit: 5 })`. Estructura JSX
+intacta:
 
 ```tsx
-const categories: LibraryCategory[] = [] // future: await listLibraryCategories(place.id)
-const recents: LibraryDoc[] = [] // future: await listRecentDocs(place.id)
+const categories = await listLibraryCategories(place.id)
+const recents = await listRecentItems(place.id, { limit: 5 })
 
 return (
   <section className="flex flex-col gap-4 pb-6">
     <LibrarySectionHeader />
     {categories.length === 0 ? <EmptyLibrary /> : <CategoryGrid categories={categories} />}
-    {recents.length > 0 ? <RecentsList docs={recents} /> : null}
+    {recents.length > 0 ? <RecentsList items={recents} /> : null}
   </section>
 )
 ```
 
-Hoy: solo `<LibrarySectionHeader>` + `<EmptyLibrary>`. Cuando
-backend exista, sin cambios estructurales — solo el data source.
+Renombrado interno: el prop de `<RecentsList>` pasa de `docs` a
+`items` (alineado con el rename `LibraryDoc → LibraryItem`).
 
-### `/library/[categorySlug]` (sub-page)
+### `/library/[categorySlug]` (categoría)
 
-Server Component. Hoy llama `notFound()` directo (no hay backend
-para resolver slug). Cuando exista backend:
+Server Component.
+
+**R.5 (entregado)**: `notFound()` directo (sin backend, ningún
+slug es válido).
+
+**R.7 (planeado)**:
 
 ```tsx
+const place = await loadPlaceBySlug(placeSlug)
+if (!place) notFound()
 const category = await findCategoryBySlug(place.id, categorySlug)
-if (!category) notFound()
+if (!category || category.archivedAt) notFound()
 
-const docs = await listCategoryDocs(category.id)
-const filter = parseTypeFilter(searchParams.get('type'))
-const filteredDocs = applyTypeFilter(docs, filter)
-const availableTypes = computeAvailableTypes(docs)
+const items = await listItemsByCategory(category.id)
+const viewer = await resolveViewerForPlace({ placeSlug })
+const canCreate = canCreateInCategory(category, viewer)
 
 return (
   <div className="pb-6">
-    <CategoryHeaderBar />
+    <CategoryHeaderBar
+      rightSlot={canCreate ? <NewItemButton categorySlug={category.slug} /> : null}
+    />
     <header className="mt-4 px-3">
-      <h1 className="font-title text-[28px] font-bold text-text">{category.title}</h1>
-      <p className="mt-1 text-sm text-muted">{docs.length} documentos</p>
+      <h1 className="font-title text-[28px] font-bold text-text">
+        {category.emoji} {category.title}
+      </h1>
+      <p className="mt-1 text-sm text-muted">{items.length} recursos</p>
     </header>
-    <TypeFilterPills available={availableTypes} />
-    {filteredDocs.length === 0 ? (
-      <EmptyDocList hasFilter={filter !== 'all'} />
-    ) : (
-      <DocList docs={filteredDocs} />
-    )}
+    {items.length === 0 ? <EmptyItemList hasFilter={false} /> : <ItemList items={items} />}
   </div>
 )
 ```
 
-### `/library/[categorySlug]/[itemSlug]`
+`<EmptyItemList>` reusa el componente `<EmptyDocList>` de R.5
+(rename interno) — los dos casos del prop `hasFilter` siguen
+existiendo en el código aunque hoy v2 no monte filter pills.
 
-NO existe la route en R.5. Next devuelve 404 standard si el user
-intenta acceder via URL manual.
+### `/library/[categorySlug]/[itemSlug]` (item detail)
+
+**R.5**: route inexistente (404 de Next).
+
+**R.7**: Server Component que renderiza el thread documento. Es
+la **URL canónica del item** — ver § 13 sobre cross-zona.
+
+```tsx
+const item = await findItemBySlug(place.id, categorySlug, itemSlug)
+if (!item || item.archivedAt) notFound()
+
+const post = await loadPostByLibraryItem(item.id) // discussions slice
+const comments = await listCommentsByPost(post.id)
+const readers = await listPostReaders(post.id, { limit: 5 })
+
+return (
+  <div className="pb-24">
+    <ThreadHeaderBar /* reuse de discussions */
+      rightSlot={<ItemAdminMenu item={item} viewer={viewer} />}
+    />
+    <LibraryItemHeader item={item} category={category} post={post} />
+    <PostBodyRenderer body={post.body} /> /* reuse + embed nodes */
+    <ReactionBar postId={post.id} /> /* reuse de discussions */
+    <PostReadersBlock readers={readers} /> /* reuse */
+    <CommentThread comments={comments} /> /* reuse */
+    <CommentComposer postId={post.id} /> /* reuse */
+  </div>
+)
+```
+
+**Cross-zona (R.7)**: la route `/conversations/[itemSlug]` detecta
+que el `Post` tiene `libraryItemId` poblado y devuelve
+**redirect 308** a `/library/[cat]/[itemSlug]` — la URL
+canónica del item es la de biblioteca. Asimétrico con eventos
+(F.F: canónica conversations) — documentado en § 13.
+
+### `/library/[categorySlug]/new` (compositor de item, R.7)
+
+Server Component padre que valida permisos (`canCreateInCategory`)
+y renderiza un Client Component `<LibraryItemForm>` con TipTap
+editor + embed toolbar + cover picker.
+
+### `/settings/library` (admin CRUD, R.7)
+
+Server Component bajo el gate admin/owner heredado del layout
+`/settings`. Listado de categorías + form crear/editar inline +
+acción archivar + sub-flujo "Quién puede crear acá" (designated
+contributors). Ver § 11 + § 14.
 
 ## 5. Componentes UI
 
 Listado completo en `src/features/library/ui/`. Server Components
 salvo `<TypeFilterPills>` (usa `useSearchParams` + `useRouter`).
+
+**Componentes R.5 (entregados)**:
 
 | Componente             | Tipo   | Props                    | Reuse                                      |
 | ---------------------- | ------ | ------------------------ | ------------------------------------------ |
@@ -165,21 +317,56 @@ salvo `<TypeFilterPills>` (usa `useSearchParams` + `useRouter`).
 | `TypeFilterPills`      | Client | `available: DocType[]`   | URL state pattern de `<ThreadFilterPills>` |
 | `EmptyDocList`         | Server | `hasFilter?=false`       | layout EmptyThreads                        |
 
+**Componentes R.7 (planeados)** — se suman al slice cuando
+aterrice cada sub-fase:
+
+| Componente            | Tipo   | Props                            | Reuse                                               |
+| --------------------- | ------ | -------------------------------- | --------------------------------------------------- |
+| `LibraryItemHeader`   | Server | `item`, `category`, `post`       | `<MemberAvatar>`, `<TimeAgo>`                       |
+| `ItemList`            | Server | `items`                          | reusa `<RecentDocRow>` (renombrado)                 |
+| `EmptyItemList`       | Server | `hasFilter?`                     | layout EmptyThreads (rename de `EmptyDocList`)      |
+| `NewItemButton`       | Server | `categorySlug`                   | `<Link>` con estilo accent                          |
+| `LibraryItemForm`     | Client | `mode`, `categoryId`, `initial?` | TipTap editor (reuse discussions/ui), embed toolbar |
+| `EmbedNodeView`       | Client | TipTap NodeViewProps             | iframe / link según provider                        |
+| `EmbedToolbar`        | Client | `editor: Editor`                 | nuevo (botón "Insertar contenido")                  |
+| `ItemAdminMenu`       | Client | `item`, `viewer`                 | reusa `<DropdownMenu>` patrón `<PostAdminMenu>`     |
+| `CategoryListAdmin`   | Server | `categories`                     | nuevo (settings)                                    |
+| `CategoryFormDialog`  | Client | `mode`, `initial?`               | reusa `<Dialog>` shared                             |
+| `ContributorsManager` | Client | `category`, `contributors`       | reusa `<MemberAvatar>` + autocomplete               |
+
 **Reuse de primitives existentes**:
 
-- `<PageIcon>` de `shared/ui/page-icon.tsx`.
-- `<BackButton>` de `shared/ui/back-button.tsx`.
-- `<TimeAgo>` de `shared/ui/time-ago.tsx`.
-- Patrón `useSearchParams + router.replace` para filter pills.
-- Patrón `mx-3 divide-y divide-border` (DocList) idéntico al
+- `<PageIcon>`, `<BackButton>`, `<TimeAgo>`, `<Dialog>`,
+  `<DropdownMenu>` (shared).
+- `<ThreadHeaderBar>`, `<PostBodyRenderer>` (renombre de
+  `<PostBody>`), `<ReactionBar>`, `<PostReadersBlock>`,
+  `<CommentThread>`, `<CommentItem>`, `<CommentComposer>` —
+  desde `discussions/public.ts` o `public.server.ts` según
+  client/server.
+- `<MemberAvatar>` desde `members/public.ts`.
+- TipTap config base desde `discussions/ui/post-composer.tsx`
+  (extensión + extender con `EmbedNode`).
+- Patrón `mx-3 divide-y divide-border` (ItemList) idéntico al
   ThreadRow listado.
 
-**Cross-slice imports**: library NO importa de discussions/events/
-members. Solo de `shared/`. `tests/boundaries.test.ts` enforce.
+**Cross-slice imports (R.7)**: library importa de:
+
+- `shared/` (libre).
+- `discussions/public(.server)` para `<ThreadHeaderBar>`,
+  `<PostBodyRenderer>`, `<CommentThread>`, etc. + helper
+  `createPostFromSystemHelper` para crear el Post asociado al
+  LibraryItem en una tx atómica (precedente F.C / F.E /
+  eventos).
+- `members/public(.server)` para `<MemberAvatar>` y
+  permisos.
+
+discussions/events/members NO importan de library. La regla se
+mantiene unidireccional. `tests/boundaries.test.ts` se actualiza
+para aceptar las nuevas dependencias library → discussions/members.
 
 ## 6. Empty states
 
-3 escenarios:
+**R.5 (vigente hasta que R.7 conecte backend)**: 3 escenarios.
 
 1. **Zona vacía** (`/library` sin categorías):
    - Emoji 📭, título "Tu comunidad todavía no agregó recursos",
@@ -195,9 +382,22 @@ members. Solo de `shared/`. `tests/boundaries.test.ts` enforce.
    - Emoji 🔎, título "Sin resultados", subtitle "Probá con otro
      filtro o quitá los filtros". **Sin CTA**.
 
-CTAs ausentes alineadas con la decisión user 2026-04-30 — no
-inducimos a accionar uploads que aún no existen. Cuando uploads
-lleguen, evaluar agregar CTA "Subir el primero" en los casos 1 y 2.
+**R.7 — ajustes**:
+
+- Empty 1 (zona vacía) se mantiene como está. Sigue **sin CTA**
+  para member común (un member que no es designated/policy=open
+  no puede crear categoría — la categoría es decisión admin). El
+  admin que entra a `/library` con cero categorías ve el mismo
+  empty pero con un CTA secundario "Crear primera categoría →
+  Settings" (link a `/settings/library`).
+- Empty 2 (categoría vacía) **suma CTA condicional** "Crear el
+  primero →" cuando el viewer puede crear en esa categoría
+  según `canCreateInCategory(category, viewer)`. Si no puede,
+  empty queda sin CTA — el contenido lo trae quien tiene
+  permiso, el resto espera.
+- Empty 3 (filter sin matches): no aplica en R.7 porque no hay
+  filter pills funcionales. Si R.7.X reintroduce filtros
+  ("Mis aportes" / "De los demás"), el empty state vuelve.
 
 ## 7. Principios no negociables aplicados (CLAUDE.md)
 
@@ -218,38 +418,677 @@ lleguen, evaluar agregar CTA "Subir el primero" en los casos 1 y 2.
 - **"Customización activa, no algorítmica"**: las categorías y
   emojis son decisión del admin (cuando exista CRUD).
 
-## 8. Sub-fases de implementación
+## 8. Sub-fases R.5 (cerradas)
 
 | Sub       | Deliverable                                                                                        | Estado          |
 | --------- | -------------------------------------------------------------------------------------------------- | --------------- |
 | **R.5.0** | Plan + decisiones del user.                                                                        | ✅ (2026-04-30) |
-| **R.5.1** | Spec (este doc) + slice scaffolding (domain/types + 11 componentes UI + 5 tests + public.ts).      | en curso        |
-| **R.5.2** | Routes `/library` + `/library/[categorySlug]` + 4ª zona en `ZONES` + tests del shell actualizados. | pendiente       |
-| **R.5.3** | Cleanup + roadmap.md con R.5 ✅.                                                                   | pendiente       |
+| **R.5.1** | Spec (este doc, v1) + slice scaffolding (domain/types + 11 componentes UI + 5 tests + public.ts).  | ✅ (2026-04-30) |
+| **R.5.2** | Routes `/library` + `/library/[categorySlug]` + 4ª zona en `ZONES` + tests del shell actualizados. | ✅ (2026-04-30) |
+| **R.5.3** | Cleanup + roadmap.md con R.5 ✅.                                                                   | ✅ (2026-04-30) |
 
-## 9. R.5.X follow-ups (post-R.5)
+## 9. R.5.X follow-ups que entran en R.7
 
-Para que el PM/dev futuro tenga contexto cuando llegue el momento:
+R.5 dejó listada una lista de follow-ups. R.7 (este spec extendido)
+entrega los siguientes:
 
-- **Backend**: schema Prisma `LibraryCategory` (id, placeId, slug,
-  emoji, title, position, createdAt) + `LibraryDoc` (id,
-  categoryId, slug, type, title, url/storagePath, uploadedByUserId,
-  uploadedAt + authorSnapshot para erasure 365d). Migrations + RLS
-  policies + queries + server actions.
-- **Uploads**: integración Supabase Storage. Permission gating
-  (¿solo admin? ¿cualquier miembro? — decisión producto). Type
-  detection con fallback. Tamaño máximo por archivo.
-- **Item detail page**: `/library/[categorySlug]/[itemSlug]`.
-  Diseño aún no entregado por handoff. Comportamiento por type
-  (preview embed para PDF/image, abrir link en nueva tab para
-  link, descarga directa o redirect a Workspace para doc/sheet).
-- **`<ZoneFab>` item "Subir documento"**: se suma cuando uploads
-  existan. URL: `/library/upload` (o flow modal — decisión UX).
-- **Admin CRUD categorías**: crear / editar emoji+título /
-  archivar. Reordering manual con drag &amp; drop.
-- **Search integration**: cuando R.4 search overlay esté activo,
-  indexar title + categoría de cada doc + body si type permite.
-- **Bulk actions** (admin): mover docs entre categorías,
-  archivar bulk.
-- **Stats internas** (no user-facing — solo admin): docs más
-  abiertos por mes para audit, NO para gamificación.
+- ✓ **Backend** completo (schemas, migrations, RLS, queries,
+  actions) — ahora con modelo unificado `LibraryItem` (no
+  `LibraryDoc + DocType`).
+- ✓ **Item detail page** — implementada como thread documento con
+  reuse de discusiones.
+- ✓ **Admin CRUD categorías** — CRUD + contribution policy +
+  designated contributors. Reordering manual con drag & drop
+  queda en R.7.5 (UI admin).
+
+**R.5.X que SIGUEN deferred** (post-R.7):
+
+- **Uploads de archivos al storage propio**: queda como BYO
+  storage (Wasabi/etc) en R.7.X+. Hoy todo es embed externo.
+- **`<ZoneFab>` item "Crear recurso en biblioteca"**: el FAB hoy
+  ofrece "Nueva discusión" + "Proponer evento". Sumar "Crear
+  recurso" obliga a elegir categoría primero — UX requiere
+  diseño. Decisión: **NO en R.7** — el flow de creación arranca
+  desde la categoría (`/library/[cat]/new`) o desde el botón
+  "Crear el primero" del empty state. R.7.X+ puede sumar el
+  item al FAB con un sub-modal "elegí categoría".
+- **Search integration**: depende de R.4.
+- **Stats internas admin-only**.
+- **TypeFilterPills funcional con semántica nueva** ("Mis
+  aportes" / "De los demás"): existente en código R.5 sin
+  montar; reactivar en R.7.X si producto pide.
+- **Bulk actions admin**.
+- **Realtime presence en item detail**.
+
+## 10. Modelo de datos (R.7)
+
+### 10.1 Tablas nuevas
+
+```prisma
+model LibraryCategory {
+  id                  String   @id @default(cuid())
+  placeId             String
+  slug                String                            // auto desde title, inmutable
+  emoji               String                            // 1 char emoji
+  title               String                            // 1..60 chars
+  position            Int                               // orden manual; default = max+1
+  contributionPolicy  ContributionPolicy @default(ADMIN_ONLY)
+  archivedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  place               Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  contributors        LibraryCategoryContributor[]
+  items               LibraryItem[]
+
+  @@unique([placeId, slug])
+  @@index([placeId, archivedAt])
+  @@index([placeId, position])
+}
+
+enum ContributionPolicy {
+  ADMIN_ONLY
+  DESIGNATED
+  MEMBERS_OPEN
+}
+
+model LibraryCategoryContributor {
+  categoryId       String
+  userId           String
+  invitedByUserId  String
+  invitedAt        DateTime @default(now())
+
+  category         LibraryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user             User            @relation("LibraryContributor",     fields: [userId],          references: [id], onDelete: Cascade)
+  invitedBy        User            @relation("LibraryContributorInvitedBy", fields: [invitedByUserId], references: [id])
+
+  @@id([categoryId, userId])
+  @@index([userId])
+}
+
+model LibraryItem {
+  id          String   @id @default(cuid())
+  placeId     String                                    // denormalizado para RLS performante
+  categoryId  String
+  postId      String   @unique                          // 1:1 con Post — el thread documento
+  coverUrl    String?                                   // mobile no renderiza; reservado desktop futuro
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  place       Place           @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  category    LibraryCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  post        Post            @relation("PostLibraryItem", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([placeId, archivedAt])
+  @@index([categoryId, archivedAt])
+}
+```
+
+### 10.2 Extensión a tabla existente
+
+```prisma
+model Post {
+  // ... campos existentes
+  libraryItemId  String?       @unique
+  libraryItem    LibraryItem?  @relation("PostLibraryItem")
+}
+```
+
+`Post.libraryItemId` es **opcional** y mutuamente exclusivo con
+`Post.eventId`: un Post no puede ser simultáneamente un evento y
+un item de biblioteca. Constraint a nivel domain (`invariants.ts`)
+
+- test integración. Postgres no tiene un native XOR check pero
+  podemos sumar un `CHECK (NOT (eventId IS NOT NULL AND libraryItemId
+IS NOT NULL))` en la migration.
+
+### 10.3 Snapshots y erasure 365d
+
+Un `LibraryItem` no necesita su propio `authorSnapshot` — el Post
+asociado ya lo tiene (`Post.authorSnapshot`). Cuando el cron de
+erasure corre, renombra el `displayName` a "ex-miembro" en el
+Post; el item de biblioteca lo muestra automáticamente vía join.
+
+`runErasure` debe extenderse para considerar `LibraryItem` solo
+si el Post ya está siendo procesado (no es trabajo extra — el
+Post ES el item).
+
+### 10.4 RLS — políticas resumidas
+
+- **`LibraryCategory` SELECT**: cualquier miembro del place ve las
+  categorías no archivadas.
+- **`LibraryCategory` INSERT/UPDATE/DELETE**: solo admin/owner del
+  place (vía claim `is_admin_in_place`).
+- **`LibraryCategoryContributor` SELECT**: cualquier miembro del
+  place ve la lista (transparente).
+- **`LibraryCategoryContributor` INSERT/DELETE**: solo admin/owner.
+- **`LibraryItem` SELECT**: cualquier miembro del place ve los
+  items no archivados (la membership al place ya garantiza
+  acceso al contenido — no hay items "privados" dentro de un
+  place).
+- **`LibraryItem` INSERT**: el viewer puede crear si
+  `canCreateInCategory(category, viewer)` retorna true (admin u
+  owner; o policy=members_open; o policy=designated y el viewer
+  está en la tabla contributors).
+- **`LibraryItem` UPDATE**: admin/owner del place o author del
+  Post asociado.
+- **`LibraryItem` DELETE**: nunca — solo soft delete via
+  `archivedAt`. La política bloquea DELETE físico salvo cron de
+  erasure por place archive.
+
+Tests RLS en `tests/rls/library-*.test.ts` cubren al menos: 5
+casos de SELECT (member ve, no-member no ve, archivada oculta,
+contributor ve sus categorías, ex-miembro 365d), 4 casos de
+INSERT/UPDATE (admin sí, member no, designated en su categoría
+sí, designated en otra categoría no), y matrices de archivar.
+
+## 11. Permisos (matriz canónica)
+
+Vocabulario:
+
+- **place admin/owner**: rol del miembro en el place
+  (`Member.role IN ('OWNER', 'ADMIN')`). El owner tiene un poder
+  adicional para transferir ownership; en términos de library,
+  owner y admin son equivalentes.
+- **author del item**: el `Post.authorUserId` del Post asociado al
+  `LibraryItem`. La palabra "owner" NO se usa para esto en
+  library — se usa "author" para evitar choque con el rol de
+  place.
+- **designated**: miembro listado en
+  `LibraryCategoryContributor` para una categoría específica. Se
+  habilita solo cuando `category.contributionPolicy = DESIGNATED`.
+- **miembro común**: cualquier miembro del place sin rol
+  especial.
+
+| Acción                          | place admin/owner | author del item | designated (en su categoría) | miembro común          |
+| ------------------------------- | ----------------- | --------------- | ---------------------------- | ---------------------- |
+| Crear categoría                 | ✓                 | —               | —                            | —                      |
+| Editar categoría (emoji+título) | ✓                 | —               | —                            | —                      |
+| Archivar categoría              | ✓                 | —               | —                            | —                      |
+| Configurar policy + designados  | ✓                 | —               | —                            | —                      |
+| Reordenar categorías            | ✓                 | —               | —                            | —                      |
+| Crear item en `admin_only`      | ✓                 | —               | —                            | —                      |
+| Crear item en `designated`      | ✓                 | —               | ✓                            | —                      |
+| Crear item en `members_open`    | ✓                 | —               | —                            | ✓                      |
+| Editar body/cover/título item   | ✓                 | ✓               | —                            | —                      |
+| Archivar item                   | ✓                 | ✓               | —                            | —                      |
+| Comentar / reaccionar / leer    | ✓                 | ✓               | ✓                            | ✓ (todos los miembros) |
+
+Función pura `canCreateInCategory(category, viewer): boolean` vive
+en `src/features/library/domain/permissions.ts`. Se usa en:
+
+- Server-side (page, action) para gate de creación.
+- RLS policy a nivel SQL (replica la lógica como CTE en la
+  policy de INSERT, ver § 10.4).
+- UI condicional (botón "Crear" visible/oculto).
+
+`canEditItem(item, post, viewer): boolean` y
+`canArchiveItem(item, post, viewer): boolean` siguen el mismo
+patrón.
+
+## 12. Editor + embed custom node (TipTap)
+
+### 12.1 Setup base
+
+`<LibraryItemForm>` (Client Component) instancia un `Editor` de
+TipTap con las mismas extensions usadas en el composer de
+discusiones (StarterKit, Underline, Mention si aplica) **más** la
+extension custom `EmbedNode`. La toolbar suma un botón
+"Insertar contenido" que abre un mini-form (URL + título
+opcional) y dispara `editor.commands.insertEmbedNode({...})`.
+
+El AST resultante es JSON serializable, válido para `Post.body`,
+y compatible con la pipeline existente:
+
+- Validación con Zod (`postBodySchema` se extiende para aceptar
+  el nodo `embed` con sus atributos).
+- Renderer en read-mode (`<PostBodyRenderer>`) detecta
+  `node.type === 'embed'` y delega a `<EmbedNodeView>` (Client,
+  pero pre-renderizable en Server según provider).
+- Sanitización: las URLs se validan contra la whitelist de
+  providers; `generic` no permite `javascript:` ni `data:` — solo
+  `http(s):`.
+
+### 12.2 Definición del nodo
+
+```ts
+// src/features/library/ui/embed-node/extension.ts
+export const EmbedNode = Node.create({
+  name: 'embed',
+  group: 'block',
+  atom: true,                       // contenido no editable inline
+  selectable: true,
+  draggable: true,
+  addAttributes() {
+    return {
+      url: { default: '' },
+      provider: { default: 'generic' },  // youtube|vimeo|drive|dropbox|gdoc|gsheet|generic
+      title: { default: '' },
+    }
+  },
+  parseHTML() { return [{ tag: 'div[data-embed]' }] },
+  renderHTML({ node, HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-embed': true, ... }), 0]
+  },
+  addNodeView() { return ReactNodeViewRenderer(EmbedNodeView) },
+})
+```
+
+### 12.3 NodeView (preview en editor + render en read mode)
+
+`<EmbedNodeView>` es un Client Component que renderiza el embed
+según provider:
+
+| Provider  | Render                                                                                             |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| `youtube` | `<iframe>` con thumbnail y aspect 16:9                                                             |
+| `vimeo`   | `<iframe>` con aspect 16:9                                                                         |
+| `gdoc`    | `<iframe src="...embed=true">` (Google permite embed con flag)                                     |
+| `gsheet`  | `<iframe src="...embed=true">`                                                                     |
+| `drive`   | Card con icon Drive + título + botón "Abrir en Drive" (no iframe — Drive bloquea iframes externos) |
+| `dropbox` | Card similar a Drive                                                                               |
+| `generic` | Card con favicon (si lo podemos resolver server-side) + URL + botón "Abrir"                        |
+
+En modo edición, el NodeView agrega un overlay con botones
+"Editar URL" y "Eliminar" (solo visibles si `editor.isEditable`).
+
+### 12.4 Parser de URL → provider
+
+`src/features/library/domain/embed-parser.ts` exporta
+`parseEmbedUrl(url): { provider: EmbedProvider; canonicalUrl: string; metadata?: { videoId?: string } }`.
+
+Reconoce:
+
+- `youtube.com/watch?v=...`, `youtu.be/...` → `youtube` (extrae
+  `videoId`).
+- `vimeo.com/<id>` → `vimeo`.
+- `docs.google.com/document/...` → `gdoc`.
+- `docs.google.com/spreadsheets/...` → `gsheet`.
+- `drive.google.com/...` → `drive`.
+- `dropbox.com/...` → `dropbox`.
+- Cualquier otro http(s) → `generic`.
+
+URLs `javascript:` o malformadas lanzan `ValidationError`.
+
+### 12.5 Indexación en search (R.4 follow-up)
+
+Cuando R.4 entregue el search overlay, indexar:
+
+- `title` + `body` text nodes del Post (texto plano).
+- Por cada nodo `embed`: el atributo `title` (lo que el author
+  escribió) y `provider` como categoría facetable.
+- NO se indexa `url` raw — sería ruido.
+
+## 13. Cross-zona y URL canónica
+
+### 13.1 Asimetría intencional vs eventos
+
+| Objeto       | Canónica                             | Redirect 308                           |
+| ------------ | ------------------------------------ | -------------------------------------- |
+| Evento (F.F) | `/conversations/[postSlug]`          | `/events/[eventId]` → canónica         |
+| LibraryItem  | `/library/[categorySlug]/[itemSlug]` | `/conversations/[postSlug]` → canónica |
+
+**Por qué la asimetría**: un evento no pertenece a una sub-zona
+del producto — es un objeto del place global, y discusiones es
+donde la conversación vive. Un library item, por contraste,
+**pertenece a una categoría** — la URL refleja esa pertenencia.
+Decisión user 2026-04-30 ("library es la canónica para que se
+mantenga la convención" de "URL refleja jerarquía de pertenencia").
+
+### 13.2 Apariciones del item en otras zonas
+
+- En `/library/[cat]`: render como `<RecentDocRow>` (renombrado
+  conceptualmente a row del item) con icon de provider del
+  primer embed o icon genérico si no hay embeds.
+- En `/library` (Recientes): mismo render que arriba, top-N.
+- En `/conversations` (lista de discusiones): el Post aparece
+  en la lista igual que cualquier otro thread, **con un badge
+  visual** que lo identifica como recurso de biblioteca (icon
+  📚 + label de la categoría). Click navega a la canónica
+  `/library/[cat]/[slug]` (el redirect 308 lo hace el page
+  `/conversations/[slug]`, no el link — los links a items
+  apuntan directo a la canónica).
+- En `/inbox` (cuando exista): items con actividad reciente
+  aparecen como threads cualquiera. Mismo comportamiento.
+
+### 13.3 Comments cross-zona
+
+Los comments del item viven en `Comment` igual que un Post
+cualquiera. Aparecen en la canónica
+`/library/[cat]/[slug]`. NO se replican en `/conversations` —
+hay una sola conversación, una sola URL canónica.
+
+## 14. Sub-fases R.7 — pequeñas, manejables, con commit por sub-fase
+
+> **Regla de oro de esta fase**: cada sub-fase termina con un
+> commit explícito. El user pidió esto para poder volver atrás
+> si algo se rompe. Antes de empezar R.7.1 hay un tag `pre-R.7`
+> apuntando al commit de R.5.3 — `git reset --hard pre-R.7`
+> deshace todo R.7 si hace falta.
+
+### 14.0 — Spec extendida (esta sub-fase)
+
+**Deliverable**: este doc actualizado con secciones § 10–§ 15
+nuevas + ajustes en § 1–§ 9.
+
+**Verificación**: `pnpm typecheck` y `pnpm lint` siguen verde
+(no se tocó código).
+
+**Commit**: `docs(library): spec R.7 — backend + admin CRUD + items editoriales con embeds`.
+
+### 14.1 — Schema + migrations + RLS de categorías
+
+**Deliverable**:
+
+- Migration Prisma con `LibraryCategory`, `LibraryCategoryContributor`,
+  `ContributionPolicy` enum, índices.
+- RLS policies para ambas tablas (SELECT/INSERT/UPDATE/DELETE).
+- Tests RLS en `tests/rls/library-categories.test.ts` (≥6
+  casos: member ve, no-member no ve, admin crea, member no crea,
+  archivada oculta para member, designated read sigue mismo
+  patrón).
+- Sin código aplicación todavía.
+
+**Verificación**: `pnpm test:rls` verde + `prisma migrate dev`
+limpio + `pnpm typecheck`/`lint`/`test` verde.
+
+**Commit**: `feat(library): schema + RLS de LibraryCategory (R.7.1)`.
+
+### 14.2 — Domain + queries + actions de categorías
+
+**Deliverable**:
+
+- `domain/types.ts` extendido con `LibraryCategory` final
+  (reemplaza el shape R.5) + `ContributionPolicy` + tipo
+  `LibraryCategoryContributor`.
+- `domain/invariants.ts` con cap `MAX_CATEGORIES_PER_PLACE = 30`,
+  validación de slug, max length de título.
+- `domain/permissions.ts` con `canCreateInCategory`,
+  `canEditCategory`, etc. (puro, testeable, reusable RLS-side).
+- `domain/errors.ts` con `CategoryLimitReachedError`,
+  `CategorySlugConflictError`, etc.
+- `schemas.ts` con Zod (`createCategoryInput`,
+  `updateCategoryInput`).
+- `server/queries.ts`: `listLibraryCategories(placeId)`,
+  `findCategoryBySlug(placeId, slug)`,
+  `listCategoryContributors(categoryId)`.
+- `server/actions/create-category.ts`,
+  `server/actions/update-category.ts`,
+  `server/actions/archive-category.ts`,
+  `server/actions/reorder-categories.ts`.
+- `public.server.ts` con queries; `public.ts` con tipos +
+  actions client-safe.
+- Tests unit: invariants, permissions, action behavior con DB
+  in-memory.
+
+**Verificación**: `pnpm typecheck`/`lint`/`test` verde + boundaries
+test verde.
+
+**Commit**: `feat(library): backend de categorías — queries + actions (R.7.2)`.
+
+### 14.3 — Settings UI: CRUD de categorías
+
+**Deliverable**:
+
+- Page `src/app/[placeSlug]/settings/library/page.tsx` (Server)
+  - `error.tsx` + `loading.tsx` (mismo patrón
+    `/settings/flags/`).
+- `<CategoryListAdmin>` (Server): listado con archive button
+  por row.
+- `<CategoryFormDialog>` (Client): modal crear/editar con
+  emoji picker (lib mínima — usar `<input>` text con
+  validación 1 char Unicode emoji) + título + dropdown
+  contribution policy.
+- `<ArchiveCategoryConfirmDialog>` (Client).
+- Reordering manual: `<DraggableCategoryList>` con
+  drag-and-drop (lib `@dnd-kit/core` ya en discussions o sumar
+  si no está; si suma, el cap LOC del slice puede pinchar — vale
+  ADR si excede).
+- Reuse: `<Dialog>`, `<DropdownMenu>` shared, `<Toaster>` para
+  feedback de actions.
+- Tests E2E smoke: admin crea → ve → edita → archiva.
+
+**Verificación**: `pnpm typecheck`/`lint`/`test` + `pnpm test:e2e --grep library-admin` verde + manual QA.
+
+**Commit**: `feat(library): admin CRUD de categorías en /settings/library (R.7.3)`.
+
+### 14.4 — Designated contributors UI
+
+**Deliverable**:
+
+- `<ContributorsManager>` (Client) montado dentro del
+  `<CategoryFormDialog>` cuando `policy === DESIGNATED`.
+- Server actions: `inviteContributorAction`,
+  `removeContributorAction`.
+- Member picker: input de búsqueda con autocomplete sobre
+  members del place (reuse helper `searchMembers` si existe en
+  members slice; si no, sumar query `searchMembersByName`).
+- UI: lista de invitados con avatar + nombre + botón "Quitar".
+- Tests unit + E2E smoke.
+
+**Verificación**: usual + boundary test (library importa de
+members/public.server para searchMembersByName).
+
+**Commit**: `feat(library): designated contributors por categoría (R.7.4)`.
+
+### 14.5 — Schema + RLS de items
+
+**Deliverable**:
+
+- Migration Prisma con `LibraryItem` + extensión a `Post`
+  (`libraryItemId` FK) + CHECK constraint `(eventId IS NULL OR libraryItemId IS NULL)`.
+- RLS policies para `LibraryItem`.
+- Tests RLS (≥6 casos: ver, crear según policy, editar como
+  author, editar como admin, archivar, archivada oculta).
+
+**Verificación**: usual + `prisma migrate` limpio.
+
+**Commit**: `feat(library): schema + RLS de LibraryItem (R.7.5)`.
+
+### 14.6 — Domain + queries + actions de items
+
+**Deliverable**:
+
+- `domain/types.ts` extendido con `LibraryItem` final.
+- `domain/invariants.ts` extendido (item title cap, body min,
+  cover URL format).
+- `domain/permissions.ts` extendido con `canCreateInCategory`,
+  `canEditItem`, `canArchiveItem`.
+- `schemas.ts` extendido (`createItemInput`,
+  `updateItemInput` — body es el AST TipTap).
+- `server/queries.ts` extendido:
+  `findItemBySlug(placeId, categorySlug, itemSlug)`,
+  `listItemsByCategory(categoryId)`,
+  `listRecentItems(placeId, { limit })`.
+- `server/actions/create-item.ts` (tx atómica:
+  `Post + LibraryItem` en una sola transacción —
+  precedente F.C / F.E / eventos).
+- `server/actions/update-item.ts`.
+- `server/actions/archive-item.ts`.
+- Cross-slice: usa `createPostFromSystemHelper` con kind
+  `LIBRARY_ITEM` (sumar al enum si hace falta).
+- Tests.
+
+**Verificación**: usual + tests cross-slice integration.
+
+**Commit**: `feat(library): backend de items — queries + actions (R.7.6)`.
+
+### 14.7 — TipTap embed extension
+
+**Deliverable**:
+
+- `library/domain/embed-parser.ts` (URL → provider).
+- `library/ui/embed-node/extension.ts` (TipTap Node).
+- `library/ui/embed-node/node-view.tsx` (Client Component).
+- `library/ui/embed-toolbar.tsx` (botón "Insertar contenido"
+  que abre mini-form URL + título).
+- Extender el Zod schema de `Post.body` (en discussions slice)
+  para aceptar `embed` node — esto es el único cambio
+  cross-slice del lado de discussions; resto está OK porque
+  TipTap nodes son extensibles.
+- Tests parser + AST validator + render snapshots.
+
+**Verificación**: usual + verificar que post composer
+existente (sin extensión embed) sigue funcionando — un post
+"viejo" no debe romper si la extensión está disponible pero no
+se usa.
+
+**Commit**: `feat(library): TipTap embed custom node con 6 providers (R.7.7)`.
+
+### 14.8 — UI de creación de item (compositor)
+
+**Deliverable**:
+
+- Page `/library/[categorySlug]/new/page.tsx` (Server, valida
+  permission y categoría existente) que renderiza
+  `<LibraryItemForm mode="create">`.
+- `<LibraryItemForm>` (Client): título + cover URL opcional +
+  TipTap editor con embed toolbar.
+- Submit dispara `createItemAction` → redirect 303 a
+  `/library/[cat]/[itemSlug]` (canónica).
+- Tests + E2E smoke (admin crea item con texto + 2 embeds).
+
+**Verificación**: usual + manual QA del editor (insertar embed,
+editarlo, eliminarlo).
+
+**Commit**: `feat(library): compositor de items con TipTap + embeds (R.7.8)`.
+
+### 14.9 — UI de item detail + cross-zona
+
+**Deliverable**:
+
+- Page `/library/[categorySlug]/[itemSlug]/page.tsx` (Server)
+  con render completo: header + body + reactions + readers +
+  comments + composer.
+- Reuse de `<ThreadHeaderBar>`, `<PostBodyRenderer>`
+  (extendido para renderizar embed nodes vía
+  `<EmbedNodeView>`), `<ReactionBar>`, `<PostReadersBlock>`,
+  `<CommentThread>`, `<CommentComposer>` desde discussions.
+- `<LibraryItemHeader>`: chip de categoría + título Fraunces +
+  author chip + meta (createdAt).
+- `<ItemAdminMenu>` (Client): kebab con "Editar" / "Archivar"
+  según permisos.
+- Edit page `/library/[cat]/[itemSlug]/edit/page.tsx` que
+  reusa `<LibraryItemForm mode="edit">`.
+- Cross-zona: en el page `/conversations/[slug]/page.tsx`
+  detectar `Post.libraryItemId` poblado y emitir
+  `redirect(308, /library/[cat]/[slug])`.
+- E2E smoke: crear → ver detail → editar → comentar →
+  archivar.
+
+**Verificación**: usual + E2E + manual QA (visual del thread
+documento, comments funcionan, reactions funcionan).
+
+**Commit**: `feat(library): item detail + cross-zona redirect (R.7.9)`.
+
+### 14.10 — Conexión zona /library con backend real
+
+**Deliverable**:
+
+- Update `/library/page.tsx`: swap del hardcoded `[]` por
+  `await listLibraryCategories(place.id)` y
+  `await listRecentItems(place.id, { limit: 5 })`.
+- Update `/library/[categorySlug]/page.tsx`: swap del
+  `notFound()` directo por `findCategoryBySlug` real + render
+  con `<ItemList>` o `<EmptyItemList>` con CTA condicional.
+- Renames internos del slice R.5 que ya no aplican (ej.
+  `<DocList>` → `<ItemList>`, `<EmptyDocList>` →
+  `<EmptyItemList>`, prop `docs` → `items` en
+  `<RecentsList>`). Mantener exports backward-compat solo si
+  algo externo los consume — sino delete clean.
+- E2E del flow completo: admin crea categoría → admin crea
+  item con embed YouTube → otro miembro entra a `/library`,
+  ve la categoría con count "1 recurso", entra y ve el item,
+  comenta.
+
+**Verificación**: usual + E2E full flow + manual QA.
+
+**Commit**: `feat(library): conexión zona /library con backend (R.7.10)`.
+
+### 14.11 — Cleanup + roadmap.md ✅
+
+**Deliverable**:
+
+- `docs/roadmap.md`: sumar R.7 ✅ con sub-fases listadas.
+  Mover los items de R.5.X que entran a R.7 fuera de la lista
+  follow-ups y agregar los R.7.X que quedan diferidos.
+- ADRs si surgió alguna decisión durante implementación que
+  amerita registro (ej. `@dnd-kit` adoption, asimetría URL
+  canónica documentada — esto último ya está en este spec).
+- Update `tests/boundaries.test.ts` si las dependencias
+  cross-slice cambiaron.
+- Manual QA full pass + checklist.
+- Final verify: typecheck + lint + tests + boundaries + build
+  prod limpio + E2E full pass.
+
+**Verificación**: todos los checks anteriores + checklist
+manual completo.
+
+**Commit**: `docs(roadmap): R.7 ✅ — library backend completo`.
+
+### Resumen de tabla
+
+| Sub        | Deliverable                                  | LOC esperado | Estado    |
+| ---------- | -------------------------------------------- | ------------ | --------- |
+| **R.7.0**  | Spec extendido (este doc).                   | ~400 docs    | en curso  |
+| **R.7.1**  | Schema + RLS de categorías + tests RLS.      | ~150         | pendiente |
+| **R.7.2**  | Domain + queries + actions de categorías.    | ~400         | pendiente |
+| **R.7.3**  | Settings UI: CRUD de categorías.             | ~400         | pendiente |
+| **R.7.4**  | Designated contributors UI.                  | ~250         | pendiente |
+| **R.7.5**  | Schema + RLS de items + tests RLS.           | ~150         | pendiente |
+| **R.7.6**  | Domain + queries + actions de items.         | ~400         | pendiente |
+| **R.7.7**  | TipTap embed extension + parser + node view. | ~400         | pendiente |
+| **R.7.8**  | Compositor de items.                         | ~250         | pendiente |
+| **R.7.9**  | Item detail + cross-zona redirect.           | ~350         | pendiente |
+| **R.7.10** | Conexión zona /library con backend.          | ~150         | pendiente |
+| **R.7.11** | Cleanup + roadmap ✅.                        | ~50 docs     | pendiente |
+
+**Total estimado**: ~3000 LOC en código + tests, distribuidos
+en 11 commits atómicos. Cada sub-fase es restaurable
+individualmente con `git revert <hash>` o el conjunto entero
+con `git reset --hard pre-R.7`.
+
+## 15. Excepción al cap de tamaño del slice
+
+El cap default por slice es 1500 LOC (`CLAUDE.md`). El slice
+`library/` después de R.7 puede acercarse o superar esa marca:
+
+- `domain/` (types, invariants, permissions, errors,
+  embed-parser, schemas): ~400 LOC.
+- `server/` (queries + 8 actions): ~600 LOC.
+- `ui/` (componentes R.5 + componentes R.7 + embed node):
+  ~700 LOC.
+- `__tests__/`: ~600 LOC.
+
+Total estimado: ~2300 LOC. Requiere ADR
+`docs/decisions/2026-04-30-library-size-exception.md` similar al
+de discussions. Se redacta en R.7.11 (cleanup) si y solo si el
+total real supera 1500. Sub-split candidato si crece más:
+`library/embeds/` como sub-slice independiente con su propio
+cap.
+
+## 16. Principios no negociables aplicados (R.7)
+
+Reafirmar lo de § 7 + adiciones de R.7:
+
+- **"Sin métricas vanidosas"**: el contador "n recursos" en
+  card sigue siendo útil, no vanity. NO sumamos "más leído",
+  "más comentado del mes", "ranking de contributors".
+- **"Customización activa"**: las categorías y emojis los
+  decide el admin. Los designated contributors los elige el
+  admin one-by-one — no hay auto-promoción ni "members con
+  N items se vuelven contributors automáticamente".
+- **"Memoria preservada"**: el item NO expira (a diferencia de
+  los audios efímeros en discusiones que duran 24hs). La
+  biblioteca es lo opuesto del feed: persistente,
+  retroactivamente útil. Documentado para evitar que un dev
+  futuro confunda con el patrón audio.
+- **"Sin gamificación"**: no hay "items publicados este mes
+  por X" ni achievements. Los items aparecen porque alguien
+  con permiso los aportó — el reconocimiento social ocurre
+  en los comments y reactions, no en métricas dashboard.
+- **"Construcción social"**: comments + reactions activadas
+  intencionalmente (decisión user 2026-04-30) — biblioteca no
+  es archivo muerto, es contenido sobre el que la comunidad
+  conversa. El thread documento captura esa pertenencia.

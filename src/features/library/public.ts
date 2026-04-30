@@ -17,9 +17,12 @@
 export type {
   ContributionPolicy,
   DocType, // @deprecated R.7 — retenido para compat con componentes R.5
+  ItemAuthorSnapshot,
   LibraryCategory,
   LibraryCategoryContributor,
   LibraryDoc, // @deprecated R.7 — retenido para compat con componentes R.5
+  LibraryItemDetailView,
+  LibraryItemListView,
 } from './domain/types'
 
 export { CONTRIBUTION_POLICY_VALUES } from './domain/types'
@@ -45,7 +48,9 @@ export {
   CATEGORY_EMOJI_MAX_LENGTH,
   CATEGORY_TITLE_MAX_LENGTH,
   CATEGORY_TITLE_MIN_LENGTH,
+  ITEM_COVER_URL_MAX_LENGTH,
   MAX_CATEGORIES_PER_PLACE,
+  validateItemCoverUrl,
 } from './domain/invariants'
 
 // ---------------------------------------------------------------
@@ -53,11 +58,14 @@ export {
 // ---------------------------------------------------------------
 
 export { archiveLibraryCategoryAction } from './server/actions/archive-category'
+export { archiveLibraryItemAction } from './server/actions/archive-item'
 export { createLibraryCategoryAction } from './server/actions/create-category'
+export { createLibraryItemAction } from './server/actions/create-item'
 export { inviteContributorAction } from './server/actions/invite-contributor'
 export { removeContributorAction } from './server/actions/remove-contributor'
 export { reorderLibraryCategoriesAction } from './server/actions/reorder-categories'
 export { updateLibraryCategoryAction } from './server/actions/update-category'
+export { updateLibraryItemAction } from './server/actions/update-item'
 
 // ---------------------------------------------------------------
 // UI admin (R.7.3) — settings/library

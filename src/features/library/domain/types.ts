@@ -74,6 +74,75 @@ export type LibraryCategoryContributor = {
 }
 
 // ---------------------------------------------------------------
+// LibraryItem (R.7.5+)
+// ---------------------------------------------------------------
+
+/**
+ * Snapshot del author del item — el shape se hereda del Post asociado
+ * (Post.authorSnapshot). Se renombra a "ex-miembro" tras erasure 365d.
+ * Definido localmente para no depender del slice discussions desde
+ * domain/types.ts (que es puro).
+ */
+export type ItemAuthorSnapshot = {
+  displayName: string
+  avatarUrl: string | null
+}
+
+/**
+ * Vista de listado: una row del item para `<RecentDocRow>` o
+ * `<DocList>`. Combina LibraryItem + Post.title + Post.lastActivityAt
+ * + Post.slug + author snapshot — el thread documento ES el item.
+ */
+export type LibraryItemListView = {
+  id: string
+  postId: string
+  postSlug: string
+  /** Slug de la categoría — para construir URL canónica
+   *  `/library/[categorySlug]/[postSlug]`. */
+  categorySlug: string
+  categoryEmoji: string
+  categoryTitle: string
+  title: string
+  /** Cover guardado en DB; mobile no renderiza, desktop futuro sí. */
+  coverUrl: string | null
+  /** Para la mini-card mobile. Display del author. */
+  authorUserId: string | null
+  authorDisplayName: string
+  /** Última actividad del Post (createdAt si nunca tuvo comments). */
+  lastActivityAt: Date
+  /** Cantidad de comments del Post — útil para "n respuestas". */
+  commentCount: number
+}
+
+/**
+ * Vista detalle: el item con todo lo que necesita la page
+ * `/library/[categorySlug]/[itemSlug]` para renderizar header +
+ * cuerpo TipTap + meta. Comments y reactions vienen de las queries
+ * de discussions.
+ */
+export type LibraryItemDetailView = {
+  id: string
+  placeId: string
+  categoryId: string
+  categorySlug: string
+  categoryEmoji: string
+  categoryTitle: string
+  postId: string
+  postSlug: string
+  title: string
+  /** AST TipTap del Post.body. */
+  body: unknown
+  coverUrl: string | null
+  authorUserId: string | null
+  authorSnapshot: ItemAuthorSnapshot
+  archivedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+  postCreatedAt: Date
+  postLastActivityAt: Date
+}
+
+// ---------------------------------------------------------------
 // Tipos R.5 retenidos para compat (se replantean en R.7.5+)
 // ---------------------------------------------------------------
 

@@ -1,6 +1,12 @@
 import 'server-only'
 import { prisma } from '@/db/client'
-import type { LibraryCategory, LibraryCategoryContributor } from '../domain/types'
+import type {
+  ItemAuthorSnapshot,
+  LibraryCategory,
+  LibraryCategoryContributor,
+  LibraryItemDetailView,
+  LibraryItemListView,
+} from '../domain/types'
 
 /**
  * Queries del slice `library` (R.7.2 — solo categorías).
@@ -31,6 +37,7 @@ type CategoryRow = {
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  _count?: { items: number }
 }
 
 function mapCategoryRow(row: CategoryRow, docCount: number): LibraryCategory {
@@ -62,8 +69,8 @@ export type ListLibraryCategoriesOptions = {
  * createdAt ASC). NULLS LAST = categorías nuevas no reordenadas
  * aparecen al final del orden visual.
  *
- * `docCount` es 0 hasta R.7.5+ (cuando exista `LibraryItem`). En R.7.2
- * la sub-query no se hace — placeholder fijo.
+ * `docCount` es el número de items NO archivados de cada categoría
+ * (R.7.6+). Calculado vía `_count` aggregate de Prisma.
  */
 export async function listLibraryCategories(
   placeId: string,
@@ -85,14 +92,12 @@ export async function listLibraryCategories(
       archivedAt: true,
       createdAt: true,
       updatedAt: true,
+      _count: {
+        select: { items: { where: { archivedAt: null } } },
+      },
     },
   })
-
-  // R.7.2: docCount = 0 (LibraryItem todavía no existe). R.7.6 lo
-  // reemplazará por una sub-query de count. Mantener este placeholder
-  // explícito en lugar de borrarlo del shape — los componentes UI
-  // R.5 ya consumen `category.docCount`.
-  return rows.map((r) => mapCategoryRow(r, 0))
+  return rows.map((r) => mapCategoryRow(r, r._count.items))
 }
 
 /**
@@ -117,11 +122,14 @@ export async function findLibraryCategoryBySlug(
       archivedAt: true,
       createdAt: true,
       updatedAt: true,
+      _count: {
+        select: { items: { where: { archivedAt: null } } },
+      },
     },
   })
   if (!row) return null
   if (!opts.includeArchived && row.archivedAt) return null
-  return mapCategoryRow(row, 0)
+  return mapCategoryRow(row, row._count.items)
 }
 
 /**
@@ -141,10 +149,13 @@ export async function findLibraryCategoryById(categoryId: string): Promise<Libra
       archivedAt: true,
       createdAt: true,
       updatedAt: true,
+      _count: {
+        select: { items: { where: { archivedAt: null } } },
+      },
     },
   })
   if (!row) return null
-  return mapCategoryRow(row, 0)
+  return mapCategoryRow(row, row._count.items)
 }
 
 /**
@@ -251,4 +262,230 @@ export async function listContributorsByCategoryIds(
     map.set(r.categoryId, existing)
   }
   return map
+}
+
+// ---------------------------------------------------------------
+// Items (R.7.6)
+// ---------------------------------------------------------------
+
+function readAuthorSnapshot(raw: unknown): ItemAuthorSnapshot {
+  if (raw && typeof raw === 'object' && 'displayName' in raw) {
+    const obj = raw as { displayName: unknown; avatarUrl?: unknown }
+    return {
+      displayName: typeof obj.displayName === 'string' ? obj.displayName : 'ex-miembro',
+      avatarUrl: typeof obj.avatarUrl === 'string' ? obj.avatarUrl : null,
+    }
+  }
+  return { displayName: 'ex-miembro', avatarUrl: null }
+}
+
+/**
+ * Lista items NO archivados de una categoría, ordenados por
+ * `Post.lastActivityAt DESC` (mismo criterio que discusiones — los
+ * más recientes con actividad arriba).
+ */
+export async function listItemsByCategory(categoryId: string): Promise<LibraryItemListView[]> {
+  const rows = await prisma.libraryItem.findMany({
+    where: { categoryId, archivedAt: null },
+    select: {
+      id: true,
+      authorUserId: true,
+      coverUrl: true,
+      category: { select: { slug: true, emoji: true, title: true } },
+      post: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          authorSnapshot: true,
+          lastActivityAt: true,
+          _count: { select: { comments: true } },
+        },
+      },
+    },
+    orderBy: { post: { lastActivityAt: 'desc' } },
+  })
+  return rows.map((r) => {
+    const snap = readAuthorSnapshot(r.post.authorSnapshot)
+    return {
+      id: r.id,
+      postId: r.post.id,
+      postSlug: r.post.slug,
+      categorySlug: r.category.slug,
+      categoryEmoji: r.category.emoji,
+      categoryTitle: r.category.title,
+      title: r.post.title,
+      coverUrl: r.coverUrl,
+      authorUserId: r.authorUserId,
+      authorDisplayName: snap.displayName,
+      lastActivityAt: r.post.lastActivityAt,
+      commentCount: r.post._count.comments,
+    }
+  })
+}
+
+/**
+ * Top-N items globales del place ordenados por `Post.lastActivityAt
+ * DESC`. Usado por `<RecentsList>` en `/library`.
+ */
+export async function listRecentItems(
+  placeId: string,
+  opts: { limit?: number } = {},
+): Promise<LibraryItemListView[]> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 5, 20))
+  const rows = await prisma.libraryItem.findMany({
+    where: { placeId, archivedAt: null, category: { archivedAt: null } },
+    select: {
+      id: true,
+      authorUserId: true,
+      coverUrl: true,
+      category: { select: { slug: true, emoji: true, title: true } },
+      post: {
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          authorSnapshot: true,
+          lastActivityAt: true,
+          _count: { select: { comments: true } },
+        },
+      },
+    },
+    orderBy: { post: { lastActivityAt: 'desc' } },
+    take: limit,
+  })
+  return rows.map((r) => {
+    const snap = readAuthorSnapshot(r.post.authorSnapshot)
+    return {
+      id: r.id,
+      postId: r.post.id,
+      postSlug: r.post.slug,
+      categorySlug: r.category.slug,
+      categoryEmoji: r.category.emoji,
+      categoryTitle: r.category.title,
+      title: r.post.title,
+      coverUrl: r.coverUrl,
+      authorUserId: r.authorUserId,
+      authorDisplayName: snap.displayName,
+      lastActivityAt: r.post.lastActivityAt,
+      commentCount: r.post._count.comments,
+    }
+  })
+}
+
+/**
+ * Resuelve un item por (categorySlug, postSlug) en el place. La URL
+ * canónica del item es `/library/[categorySlug]/[postSlug]` — usamos
+ * Post.slug porque LibraryItem no tiene slug propio (es el thread
+ * documento, vive en Post).
+ *
+ * Devuelve `null` si la categoría o el item no existen, o si está
+ * archivado y el viewer no es admin/author (la app gateaa eso desde
+ * la page; acá la query solo filtra archivada según `includeArchived`).
+ */
+export async function findItemBySlug(
+  placeId: string,
+  categorySlug: string,
+  postSlug: string,
+  opts: { includeArchived?: boolean } = {},
+): Promise<LibraryItemDetailView | null> {
+  // Resolver category primero — slug es local al place pero tabla
+  // tiene unique (placeId, slug).
+  const category = await prisma.libraryCategory.findUnique({
+    where: { placeId_slug: { placeId, slug: categorySlug } },
+    select: { id: true, slug: true, emoji: true, title: true, archivedAt: true },
+  })
+  if (!category) return null
+  if (!opts.includeArchived && category.archivedAt) return null
+
+  // Resolver Post por (placeId, postSlug) y joinear LibraryItem.
+  const post = await prisma.post.findUnique({
+    where: { placeId_slug: { placeId, slug: postSlug } },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      body: true,
+      authorSnapshot: true,
+      createdAt: true,
+      lastActivityAt: true,
+      libraryItem: {
+        select: {
+          id: true,
+          placeId: true,
+          categoryId: true,
+          authorUserId: true,
+          coverUrl: true,
+          archivedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+    },
+  })
+  if (!post || !post.libraryItem) return null
+  const item = post.libraryItem
+  if (item.categoryId !== category.id) return null
+  if (!opts.includeArchived && item.archivedAt) return null
+
+  return {
+    id: item.id,
+    placeId: item.placeId,
+    categoryId: item.categoryId,
+    categorySlug: category.slug,
+    categoryEmoji: category.emoji,
+    categoryTitle: category.title,
+    postId: post.id,
+    postSlug: post.slug,
+    title: post.title,
+    body: post.body,
+    coverUrl: item.coverUrl,
+    authorUserId: item.authorUserId,
+    authorSnapshot: readAuthorSnapshot(post.authorSnapshot),
+    archivedAt: item.archivedAt,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    postCreatedAt: post.createdAt,
+    postLastActivityAt: post.lastActivityAt,
+  }
+}
+
+/**
+ * Resuelve un item por su id (para actions). Devuelve campos mínimos
+ * + placeId/categoryId del item + authorUserId/postId/categorySlug
+ * para usar en revalidate paths.
+ */
+export async function findItemForAction(itemId: string): Promise<{
+  id: string
+  placeId: string
+  categoryId: string
+  categorySlug: string
+  postId: string
+  postSlug: string
+  authorUserId: string | null
+  archivedAt: Date | null
+} | null> {
+  const row = await prisma.libraryItem.findUnique({
+    where: { id: itemId },
+    select: {
+      id: true,
+      placeId: true,
+      categoryId: true,
+      authorUserId: true,
+      archivedAt: true,
+      category: { select: { slug: true } },
+      post: { select: { id: true, slug: true } },
+    },
+  })
+  if (!row) return null
+  return {
+    id: row.id,
+    placeId: row.placeId,
+    categoryId: row.categoryId,
+    categorySlug: row.category.slug,
+    postId: row.post.id,
+    postSlug: row.post.slug,
+    authorUserId: row.authorUserId,
+    archivedAt: row.archivedAt,
+  }
 }

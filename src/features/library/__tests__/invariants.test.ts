@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { ValidationError } from '@/shared/errors/domain-error'
 import {
   CATEGORY_TITLE_MAX_LENGTH,
+  ITEM_COVER_URL_MAX_LENGTH,
   MAX_CATEGORIES_PER_PLACE,
   assertCategoryCapacity,
   validateCategoryEmoji,
   validateCategorySlug,
   validateCategoryTitle,
   validateContributionPolicy,
+  validateItemCoverUrl,
 } from '../domain/invariants'
 import { CategoryLimitReachedError } from '../domain/errors'
 
@@ -100,6 +102,31 @@ describe('library invariants — categoría', () => {
       expect(() => assertCategoryCapacity(MAX_CATEGORIES_PER_PLACE + 5)).toThrow(
         CategoryLimitReachedError,
       )
+    })
+  })
+
+  describe('validateItemCoverUrl', () => {
+    it('acepta null / undefined / string vacío', () => {
+      expect(() => validateItemCoverUrl(null)).not.toThrow()
+      expect(() => validateItemCoverUrl(undefined)).not.toThrow()
+      expect(() => validateItemCoverUrl('')).not.toThrow()
+      expect(() => validateItemCoverUrl('   ')).not.toThrow()
+    })
+
+    it('acepta URLs http(s) válidas', () => {
+      expect(() => validateItemCoverUrl('https://example.com/cover.jpg')).not.toThrow()
+      expect(() => validateItemCoverUrl('http://localhost:3000/img.png')).not.toThrow()
+    })
+
+    it('rechaza schemes no http/https', () => {
+      expect(() => validateItemCoverUrl('javascript:alert(1)')).toThrow(ValidationError)
+      expect(() => validateItemCoverUrl('data:image/png;base64,abc')).toThrow(ValidationError)
+      expect(() => validateItemCoverUrl('ftp://example.com/x')).toThrow(ValidationError)
+    })
+
+    it(`rechaza URL > ${ITEM_COVER_URL_MAX_LENGTH} chars`, () => {
+      const long = 'https://example.com/' + 'x'.repeat(ITEM_COVER_URL_MAX_LENGTH)
+      expect(() => validateItemCoverUrl(long)).toThrow(ValidationError)
     })
   })
 })

@@ -124,3 +124,34 @@ export function assertCategoryCapacity(currentCount: number): void {
     })
   }
 }
+
+// ---------------------------------------------------------------
+// Item invariants (R.7.6+)
+// ---------------------------------------------------------------
+
+/**
+ * Cap defensivo de `coverUrl`. Más amplio que un slug porque las
+ * URLs de imágenes pueden tener query strings largos (presigned
+ * URLs de Drive/Dropbox/etc.). Mismo orden que el límite del Post.
+ */
+export const ITEM_COVER_URL_MAX_LENGTH = 2000
+
+/**
+ * Valida que `coverUrl` sea un http(s):// válido y no exceda el cap.
+ * Retorna sin error si es null (cover opcional).
+ */
+export function validateItemCoverUrl(url: string | null | undefined): void {
+  if (url === null || url === undefined) return
+  const trimmed = url.trim()
+  if (trimmed.length === 0) return
+  if (trimmed.length > ITEM_COVER_URL_MAX_LENGTH) {
+    throw new ValidationError(`La URL del cover supera ${ITEM_COVER_URL_MAX_LENGTH} caracteres.`, {
+      length: trimmed.length,
+    })
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new ValidationError('La URL del cover debe comenzar con http:// o https://.', {
+      url: trimmed,
+    })
+  }
+}

@@ -35,9 +35,11 @@ export type CreatePostFromSystemInput = {
   body: Prisma.InputJsonValue
   authorUserId: string
   authorSnapshot: Prisma.InputJsonValue
-  /** Discriminador para logging (`'event'` para auto-thread de eventos). */
-  originSystem: 'event'
-  /** ID del objeto origen (eventId, etc.) para audit. */
+  /** Discriminador para logging.
+   *  - `'event'`: auto-thread de eventos (F.E).
+   *  - `'library_item'`: thread documento de un item de biblioteca (R.7.6). */
+  originSystem: 'event' | 'library_item'
+  /** ID del objeto origen (eventId, libraryItemId, etc.) para audit. */
   originId: string
 }
 

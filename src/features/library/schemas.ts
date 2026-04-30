@@ -9,11 +9,14 @@
  */
 
 import { z } from 'zod'
+import { richTextDocumentSchema } from '@/features/discussions/public'
+import { POST_TITLE_MAX_LENGTH, POST_TITLE_MIN_LENGTH } from '@/features/discussions/public'
 import {
   CATEGORY_EMOJI_MAX_LENGTH,
   CATEGORY_EMOJI_MIN_LENGTH,
   CATEGORY_TITLE_MAX_LENGTH,
   CATEGORY_TITLE_MIN_LENGTH,
+  ITEM_COVER_URL_MAX_LENGTH,
 } from './domain/invariants'
 import { CONTRIBUTION_POLICY_VALUES } from './domain/types'
 
@@ -86,3 +89,39 @@ export const removeContributorInputSchema = z.object({
   userId: z.string().min(1),
 })
 export type RemoveContributorInput = z.infer<typeof removeContributorInputSchema>
+
+// ---------------------------------------------------------------
+// Items (R.7.6)
+// ---------------------------------------------------------------
+
+const itemTitleSchema = z
+  .string()
+  .min(POST_TITLE_MIN_LENGTH)
+  .max(POST_TITLE_MAX_LENGTH)
+  .refine((s) => s.trim().length >= POST_TITLE_MIN_LENGTH, {
+    message: 'El título no puede estar vacío después de quitar espacios.',
+  })
+
+const coverUrlSchema = z.string().max(ITEM_COVER_URL_MAX_LENGTH).nullable().optional()
+
+export const createItemInputSchema = z.object({
+  placeId: z.string().min(1),
+  categoryId: z.string().min(1),
+  title: itemTitleSchema,
+  body: richTextDocumentSchema,
+  coverUrl: coverUrlSchema,
+})
+export type CreateItemInput = z.infer<typeof createItemInputSchema>
+
+export const updateItemInputSchema = z.object({
+  itemId: z.string().min(1),
+  title: itemTitleSchema,
+  body: richTextDocumentSchema,
+  coverUrl: coverUrlSchema,
+})
+export type UpdateItemInput = z.infer<typeof updateItemInputSchema>
+
+export const archiveItemInputSchema = z.object({
+  itemId: z.string().min(1),
+})
+export type ArchiveItemInput = z.infer<typeof archiveItemInputSchema>

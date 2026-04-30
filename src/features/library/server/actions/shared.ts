@@ -16,3 +16,20 @@ export function revalidateLibraryCategoryPaths(placeSlug: string, categorySlug?:
     revalidatePath(`/${placeSlug}/library/${categorySlug}`)
   }
 }
+
+/**
+ * Revalida paths que tocan un item específico: zona biblioteca
+ * (Recientes), categoría (listado), item detail, thread cross-zona
+ * en /conversations.
+ */
+export function revalidateLibraryItemPaths(
+  placeSlug: string,
+  categorySlug: string,
+  postSlug: string,
+): void {
+  revalidatePath(`/${placeSlug}/library`)
+  revalidatePath(`/${placeSlug}/library/${categorySlug}`)
+  revalidatePath(`/${placeSlug}/library/${categorySlug}/${postSlug}`)
+  revalidatePath(`/${placeSlug}/conversations`)
+  revalidatePath(`/${placeSlug}/conversations/${postSlug}`)
+}

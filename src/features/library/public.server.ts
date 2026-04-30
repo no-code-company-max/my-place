@@ -12,11 +12,15 @@ import 'server-only'
 
 export {
   countLibraryCategories,
+  findItemBySlug,
+  findItemForAction,
   findLibraryCategoryById,
   findLibraryCategoryBySlug,
   listCategoryContributorUserIds,
   listCategoryContributors,
   listContributorsByCategoryIds,
+  listItemsByCategory,
   listLibraryCategories,
+  listRecentItems,
   type ListLibraryCategoriesOptions,
 } from './server/queries'

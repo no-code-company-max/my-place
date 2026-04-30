@@ -58,6 +58,19 @@ export { reorderLibraryCategoriesAction } from './server/actions/reorder-categor
 export { updateLibraryCategoryAction } from './server/actions/update-category'
 
 // ---------------------------------------------------------------
+// UI admin (R.7.3) — settings/library
+// ---------------------------------------------------------------
+
+export { ArchiveCategoryButton } from './ui/admin/archive-category-button'
+export { CategoryFormDialog } from './ui/admin/category-form-dialog'
+export { CategoryListAdmin } from './ui/admin/category-list-admin'
+export {
+  contributionPolicyDescription,
+  contributionPolicyLabel,
+} from './ui/admin/contribution-policy-label'
+export { friendlyLibraryErrorMessage } from './ui/admin/errors'
+
+// ---------------------------------------------------------------
 // UI components — Server Components salvo `<TypeFilterPills>`
 // ---------------------------------------------------------------
 

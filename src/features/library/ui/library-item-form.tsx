@@ -79,6 +79,7 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
   })
 
   function onSubmit(values: FormValues): void {
+    console.log('[LibraryItemForm] onSubmit START', { mode: mode.kind })
     setFeedback(null)
     const trimmedTitle = values.title.trim()
     const coverUrl = values.coverUrl.trim() === '' ? null : values.coverUrl.trim()
@@ -92,10 +93,17 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
     let bodyJson: RichTextDoc
     try {
       bodyJson = JSON.parse(JSON.stringify(body)) as RichTextDoc
-    } catch {
+    } catch (err) {
+      console.error('[LibraryItemForm] body JSON serialize failed', err)
       setFeedback({ kind: 'err', message: 'No pudimos serializar el contenido. Reintentá.' })
       return
     }
+
+    console.log('[LibraryItemForm] submit payload', {
+      title: trimmedTitle,
+      coverUrl,
+      body: bodyJson,
+    })
 
     startTransition(async () => {
       try {
@@ -107,6 +115,7 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
             body: bodyJson,
             coverUrl,
           })
+          console.log('[LibraryItemForm] create OK', result)
           router.replace(`/library/${result.categorySlug}/${result.postSlug}`)
         } else {
           const result = await updateLibraryItemAction({
@@ -115,10 +124,16 @@ export function LibraryItemForm({ mode }: Props): React.ReactNode {
             body: bodyJson,
             coverUrl,
           })
+          console.log('[LibraryItemForm] update OK', result)
           router.replace(`/library/${result.categorySlug}/${result.postSlug}`)
           router.refresh()
         }
       } catch (err) {
+        console.error('[LibraryItemForm] submit failed', {
+          name: err instanceof Error ? err.name : typeof err,
+          message: err instanceof Error ? err.message : String(err),
+          err,
+        })
         setFeedback({ kind: 'err', message: friendlyLibraryErrorMessage(err) })
       }
     })

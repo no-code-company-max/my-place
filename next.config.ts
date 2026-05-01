@@ -15,6 +15,15 @@ const cspDirectives = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https: ws: wss:",
+  // R.7.7+: iframes de embeds externos en library items (YouTube,
+  // Vimeo, Google Doc/Sheet). Sin esta directiva el browser bloquea
+  // cualquier iframe externo con el mensaje "Este contenido está
+  // bloqueado. Comunícate con el propietario del sitio…" — el msg
+  // viene del browser, no del provider. Drive/Dropbox/generic los
+  // renderizamos como card link (NO iframe), no necesitan acá.
+  // El nocookie también lo permitimos por backward-compat con items
+  // que se persistieron antes del revert.
+  'frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com https://docs.google.com',
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

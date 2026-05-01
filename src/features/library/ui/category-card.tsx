@@ -2,10 +2,14 @@ import Link from 'next/link'
 import type { LibraryCategory } from '../domain/types'
 
 /**
- * Card cuadrada de una categoría — celda del `<CategoryGrid>` 2-col.
+ * Card de una categoría — celda del `<CategoryGrid>` 2-col.
  *
  * Specs (handoff library/, ajustados 2026-04-30):
- *  - Aspect 1:1, `bg-surface`, border 0.5px, radius 18, padding 16.
+ *  - `bg-surface`, border 0.5px, radius 18, padding 16.
+ *  - **Sin aspect-square**: altura natural según contenido. Antes
+ *    teníamos `aspect-square` pero feedback del user (2026-04-30):
+ *    quedaba mucho espacio en blanco bajo el contador. Ahora la
+ *    card crece solo lo necesario.
  *  - Emoji 30px / line-height 1.
  *  - Espacio emoji → título: 14px (margin-bottom del emoji).
  *  - Título Inter 15/700.
@@ -26,7 +30,7 @@ export function CategoryCard({ category }: Props): React.ReactNode {
   return (
     <Link
       href={`/library/${category.slug}`}
-      className="flex aspect-square flex-col rounded-[18px] border-[0.5px] border-border bg-surface p-4 hover:bg-soft motion-safe:transition-colors"
+      className="flex flex-col rounded-[18px] border-[0.5px] border-border bg-surface p-4 hover:bg-soft motion-safe:transition-colors"
     >
       <span aria-hidden="true" className="mb-[14px] text-[30px] leading-none">
         {category.emoji}

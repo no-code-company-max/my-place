@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { resolveViewerForPlace } from '@/features/discussions/public.server'
@@ -59,18 +58,7 @@ export default async function LibraryCategoryPage({ params }: Props) {
 
   return (
     <div className="pb-6">
-      <CategoryHeaderBar
-        rightSlot={
-          canCreate ? (
-            <Link
-              href={`/library/${category.slug}/new`}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs text-bg"
-            >
-              Nuevo
-            </Link>
-          ) : null
-        }
-      />
+      <CategoryHeaderBar />
       <header className="mt-4 px-3">
         <h1 className="font-title text-[28px] font-bold text-text">
           {category.emoji} {category.title}

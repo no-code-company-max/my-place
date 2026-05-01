@@ -26,12 +26,15 @@ import { isZoneRootPath } from '../domain/swiper-snap'
  * Items del menú (MVP, hardcoded):
  *  - "Nueva discusión" → `/conversations/new`.
  *  - "Proponer evento" → `/events/new`.
+ *  - "Nuevo recurso" → `/library` (R.7.X follow-up). El user
+ *    elige categoría desde la zona biblioteca y ahí crea via
+ *    "Crear el primero" (empty state) o navegando a la categoría.
+ *    Pickr cross-categoría como sub-modal queda diferido.
  *
  * Mismo set en las 4 zonas (no zona-aware en MVP — costo cognitivo
  * de "el menú cambia según donde estoy" supera el beneficio para una
  * app de 150 members). Futuro: si producto pide priorizar acción de
- * la zona actual, agregar reorder/highlight (no breaking). R.5.X
- * sumará "Subir documento" cuando uploads existan.
+ * la zona actual, agregar reorder/highlight (no breaking).
  *
  * Boundary: NO importa de `discussions` ni `events` — los paths son
  * strings literales. Cero violación de aislamiento.
@@ -52,6 +55,9 @@ export function ZoneFab(): React.ReactNode {
       </DropdownMenuItem>
       <DropdownMenuItem asChild>
         <Link href="/events/new">Proponer evento</Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild>
+        <Link href="/library">Nuevo recurso</Link>
       </DropdownMenuItem>
     </FAB>
   )

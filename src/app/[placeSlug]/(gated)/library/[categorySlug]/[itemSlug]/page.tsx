@@ -8,7 +8,6 @@ import {
   PostReadersBlock,
   ReactionBar,
   RichTextRenderer,
-  ThreadHeaderBar,
   ThreadPresence,
   aggregateReactions,
   findOrCreateCurrentOpening,
@@ -24,6 +23,7 @@ import {
 import {
   ItemAdminMenu,
   LibraryItemHeader,
+  LibraryItemHeaderBar,
   canArchiveItem,
   canEditItem,
 } from '@/features/library/public'
@@ -39,7 +39,11 @@ type Props = {
  * con `Post.slug` — el item ES el thread documento.
  *
  * Render:
- *   - ThreadHeaderBar sticky (con kebab admin/author si corresponde).
+ *   - LibraryItemHeaderBar sticky (con kebab admin/author si corresponde).
+ *     Específico de library (no reusa ThreadHeaderBar de discussions)
+ *     porque el back button siempre debe ir a la categoría — usar
+ *     router.back() rompería en items accedidos via redirect 308 desde
+ *     /conversations/[slug] (loop infinito) y deep-links.
  *   - LibraryItemHeader (chip categoría + título + author + meta).
  *   - RichTextRenderer del Post.body (con embed nodes intercalados).
  *   - ReactionBar standalone sobre el Post.
@@ -122,7 +126,8 @@ export default async function LibraryItemDetailPage({ params }: Props) {
 
   return (
     <div className="pb-32">
-      <ThreadHeaderBar
+      <LibraryItemHeaderBar
+        categorySlug={item.categorySlug}
         rightSlot={
           canEdit || canArchive ? (
             <ItemAdminMenu

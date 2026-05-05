@@ -1,4 +1,3 @@
-import { MembershipRole } from '@prisma/client'
 import { AuthorizationError, ConflictError, InvariantViolation } from '@/shared/errors/domain-error'
 import type { InviterPermissions } from './types'
 
@@ -22,12 +21,16 @@ export function assertPlaceHasCapacity(activeCount: number): void {
   }
 }
 
-export function assertInviterHasRole(perms: InviterPermissions): void {
-  if (perms.isOwner) return
-  if (perms.role === MembershipRole.ADMIN) return
+/**
+ * Asegura que el inviter tenga permiso de invitar (admin o owner). `isAdmin`
+ * cubre owner ⇒ true automáticamente; queda explícito el chequeo combinado
+ * por documentación. Ver ADR `2026-05-03-drop-membership-role-rls-impact.md`.
+ */
+export function assertInviterHasAdminAccess(perms: InviterPermissions): void {
+  if (perms.isAdmin) return
   throw new AuthorizationError('Solo owners y admins pueden invitar miembros.', {
-    role: perms.role,
     isOwner: perms.isOwner,
+    isAdmin: perms.isAdmin,
   })
 }
 

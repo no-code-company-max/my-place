@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Prisma, MembershipRole } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import {
   AuthorizationError,
   ConflictError,
@@ -19,6 +19,7 @@ const ownershipFindUnique = vi.fn()
 const invitationCreate = vi.fn()
 const invitationUpdate = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const getUserFn = vi.fn()
 const generateInviteMagicLinkMock = vi.fn()
 const revalidatePathFn = vi.fn()
@@ -36,6 +37,9 @@ vi.mock('@/db/client', () => ({
       update: (...a: unknown[]) => invitationUpdate(...a),
     },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
   },
 }))
 
@@ -87,8 +91,9 @@ function mockAuthorized(): void {
     name: 'The Company',
     archivedAt: null,
   })
-  membershipFindFirst.mockResolvedValue({ role: MembershipRole.ADMIN })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue({ id: 'gm-mock' })
   membershipCount.mockResolvedValue(0)
   userFindUnique.mockResolvedValue({ displayName: 'Max' })
 }
@@ -101,6 +106,7 @@ beforeEach(() => {
   invitationCreate.mockReset()
   invitationUpdate.mockReset()
   userFindUnique.mockReset()
+  groupMembershipFindFirst.mockReset()
   getUserFn.mockReset()
   generateInviteMagicLinkMock.mockReset()
   revalidatePathFn.mockReset()
@@ -147,10 +153,11 @@ describe('inviteMemberAction — validación y autorización', () => {
     await expect(inviteMemberAction(validInput)).rejects.toBeInstanceOf(ConflictError)
   })
 
-  it('rechaza MEMBER simple (no admin ni owner) con AuthorizationError', async () => {
+  it('rechaza miembro sin permiso de admin (no preset, no owner) con AuthorizationError', async () => {
     mockAuthorized()
-    membershipFindFirst.mockResolvedValue({ role: MembershipRole.MEMBER })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue(null)
     await expect(inviteMemberAction(validInput)).rejects.toBeInstanceOf(AuthorizationError)
     expect(invitationCreate).not.toHaveBeenCalled()
   })
@@ -296,6 +303,9 @@ describe('inviteMemberAction — flujo de delivery (Resend)', () => {
 
     const throwingMailer = {
       sendInvitation: vi.fn().mockRejectedValue(new Error('resend 503 Service Unavailable')),
+      sendBlockNotice: vi.fn(),
+      sendExpelNotice: vi.fn(),
+      sendUnblockNotice: vi.fn(),
     }
     setMailer(throwingMailer)
 

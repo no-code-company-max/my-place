@@ -78,7 +78,7 @@ export default async function SettingsMembersPage({ params }: Props) {
                   </span>
                 ) : null}
                 <span className="rounded-full border border-neutral-300 px-2 py-0.5 text-neutral-600">
-                  {m.role === 'ADMIN' ? 'admin' : 'miembro'}
+                  {m.isAdmin && !m.isOwner ? 'admin' : !m.isOwner ? 'miembro' : ''}
                 </span>
               </div>
             </li>

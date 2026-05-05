@@ -33,8 +33,8 @@ const places = [
     billingMode: 'OWNER_PAYS' as const,
     archivedAt: null,
     createdAt: new Date('2026-01-01'),
-    role: 'MEMBER' as const,
     isOwner: false,
+    isAdmin: false,
     joinedAt: new Date('2026-01-15'),
   },
 ]

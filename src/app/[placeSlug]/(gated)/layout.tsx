@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
-import { findOrCreateCurrentOpening } from '@/features/discussions/public'
+import { findOrCreateCurrentOpening } from '@/features/discussions/public.server'
 import { findMemberPermissions } from '@/features/members/public.server'
 import { isPlaceOpen, parseOpeningHours, PlaceClosedView } from '@/features/hours/public'
 import { logger } from '@/shared/lib/logger'
@@ -53,17 +53,21 @@ export default async function GatedLayout({ children, params }: Props) {
     // R.2.6: el ZoneFab vive como sibling — overlay fixed que solo
     // renderiza en zonas root (gate interno). PlaceClosedView nunca
     // alcanza este return, así que el FAB queda automáticamente fuera
-    // cuando el place está cerrado.
+    // cuando el place está cerrado. El `<ZoneFab>` resuelve internamente
+    // su capability `canCreateLibraryResource` vía `<Suspense>` (lazy):
+    // así el shell paint NO depende de ese round-trip al pooler para
+    // las 10+ pages bajo (gated). Ver `zone-fab.tsx` para el rationale.
     // Ver `docs/features/shell/spec.md` § 16 + § 17.
+    const isAdmin = perms.isAdmin
     return (
       <>
         <ZoneSwiper>{children}</ZoneSwiper>
-        <ZoneFab />
+        <ZoneFab placeId={place.id} userId={auth.id} isAdmin={isAdmin} />
       </>
     )
   }
 
-  const variant: 'admin' | 'member' = perms.isOwner || perms.role === 'ADMIN' ? 'admin' : 'member'
+  const variant: 'admin' | 'member' = perms.isAdmin ? 'admin' : 'member'
 
   return (
     <PlaceClosedView

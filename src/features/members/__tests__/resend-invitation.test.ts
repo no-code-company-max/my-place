@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MembershipRole } from '@prisma/client'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { FakeMailer, setMailer, resetMailer } from '@/shared/lib/mailer'
 
@@ -8,6 +7,7 @@ const invitationUpdate = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const getUserFn = vi.fn()
 const generateInviteMagicLinkMock = vi.fn()
 const revalidatePathFn = vi.fn()
@@ -21,6 +21,9 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
   },
 }))
 
@@ -79,8 +82,9 @@ let fakeMailer: FakeMailer
 
 function mockAuthorizedAdmin(): void {
   getUserFn.mockResolvedValue(AUTH_OK)
-  membershipFindFirst.mockResolvedValue({ role: MembershipRole.ADMIN })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue({ id: 'gm-mock' })
   userFindUnique.mockResolvedValue({ displayName: 'Max' })
 }
 
@@ -90,6 +94,7 @@ beforeEach(() => {
   membershipFindFirst.mockReset()
   ownershipFindUnique.mockReset()
   userFindUnique.mockReset()
+  groupMembershipFindFirst.mockReset()
   getUserFn.mockReset()
   generateInviteMagicLinkMock.mockReset()
   revalidatePathFn.mockReset()
@@ -147,11 +152,12 @@ describe('resendInvitationAction', () => {
     })
   })
 
-  it('rechaza MEMBER simple con AuthorizationError', async () => {
+  it('rechaza miembro sin permiso de admin con AuthorizationError', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     invitationFindUnique.mockResolvedValue(pendingInvitation)
-    membershipFindFirst.mockResolvedValue({ role: MembershipRole.MEMBER })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue(null)
     await expect(resendInvitationAction({ invitationId: 'inv-1' })).rejects.toBeInstanceOf(
       AuthorizationError,
     )

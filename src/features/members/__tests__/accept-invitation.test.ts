@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { Prisma, MembershipRole } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import {
   AuthorizationError,
   ConflictError,
@@ -14,6 +14,8 @@ const membershipFindFirstTop = vi.fn() // findActiveMembership (outside tx)
 const membershipFindFirstTx = vi.fn() // inside tx
 const membershipCountTx = vi.fn() // inside tx
 const membershipCreateTx = vi.fn() // inside tx
+const permissionGroupFindFirstTx = vi.fn() // inside tx (preset lookup)
+const groupMembershipCreateTx = vi.fn() // inside tx (admin onboarding)
 const transactionFn = vi.fn()
 const getUserFn = vi.fn()
 const revalidatePathFn = vi.fn()
@@ -85,6 +87,8 @@ beforeEach(() => {
   membershipFindFirstTx.mockReset()
   membershipCountTx.mockReset()
   membershipCreateTx.mockReset()
+  permissionGroupFindFirstTx.mockReset()
+  groupMembershipCreateTx.mockReset()
   transactionFn.mockReset()
   getUserFn.mockReset()
   revalidatePathFn.mockReset()
@@ -98,6 +102,12 @@ beforeEach(() => {
       },
       invitation: {
         updateMany: invitationUpdateMany,
+      },
+      permissionGroup: {
+        findFirst: permissionGroupFindFirstTx,
+      },
+      groupMembership: {
+        create: groupMembershipCreateTx,
       },
     }),
   )
@@ -149,7 +159,7 @@ describe('acceptInvitationAction', () => {
   it('ya aceptada y yo ya soy miembro → idempotente alreadyMember=true', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     invitationFindUnique.mockResolvedValue(makeInvitation({ acceptedAt: new Date() }))
-    membershipFindFirstTop.mockResolvedValue({ id: 'mem-1', role: MembershipRole.MEMBER })
+    membershipFindFirstTop.mockResolvedValue({ id: 'mem-1' })
 
     const res = await acceptInvitationAction(TOKEN)
     expect(res).toEqual({ ok: true, placeSlug: 'the-company', alreadyMember: true })
@@ -177,7 +187,7 @@ describe('acceptInvitationAction', () => {
     expect(membershipCreateTx).not.toHaveBeenCalled()
   })
 
-  it('happy path MEMBER: crea membership y marca acceptedAt', async () => {
+  it('happy path miembro simple: crea membership y marca acceptedAt (sin onboarding admin)', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     invitationFindUnique.mockResolvedValue(makeInvitation())
     membershipFindFirstTx.mockResolvedValue(null)
@@ -192,9 +202,10 @@ describe('acceptInvitationAction', () => {
       data: {
         userId: 'user-1',
         placeId: 'place-1',
-        role: MembershipRole.MEMBER,
       },
     })
+    expect(permissionGroupFindFirstTx).not.toHaveBeenCalled()
+    expect(groupMembershipCreateTx).not.toHaveBeenCalled()
     expect(invitationUpdateMany).toHaveBeenCalledWith({
       where: { id: 'inv-1', acceptedAt: null },
       data: { acceptedAt: expect.any(Date) },
@@ -203,12 +214,14 @@ describe('acceptInvitationAction', () => {
     expect(revalidatePathFn).toHaveBeenCalledWith('/the-company')
   })
 
-  it('happy path asAdmin=true: crea membership con role=ADMIN', async () => {
+  it('happy path asAdmin=true: crea membership y suma al preset group del place', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     invitationFindUnique.mockResolvedValue(makeInvitation({ asAdmin: true }))
     membershipFindFirstTx.mockResolvedValue(null)
     membershipCountTx.mockResolvedValue(0)
     membershipCreateTx.mockResolvedValue({})
+    permissionGroupFindFirstTx.mockResolvedValue({ id: 'pg-preset-1' })
+    groupMembershipCreateTx.mockResolvedValue({})
     invitationUpdateMany.mockResolvedValue({ count: 1 })
 
     await acceptInvitationAction(TOKEN)
@@ -217,7 +230,17 @@ describe('acceptInvitationAction', () => {
       data: {
         userId: 'user-1',
         placeId: 'place-1',
-        role: MembershipRole.ADMIN,
+      },
+    })
+    expect(permissionGroupFindFirstTx).toHaveBeenCalledWith({
+      where: { placeId: 'place-1', isPreset: true },
+      select: { id: true },
+    })
+    expect(groupMembershipCreateTx).toHaveBeenCalledWith({
+      data: {
+        userId: 'user-1',
+        placeId: 'place-1',
+        groupId: 'pg-preset-1',
       },
     })
   })

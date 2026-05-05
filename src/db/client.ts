@@ -15,13 +15,19 @@ import { logger } from '@/shared/lib/logger'
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
 const isDev = process.env.NODE_ENV === 'development'
+// Opt-in para activar el query log en builds de producción local
+// (`pnpm start`) cuando corremos `scripts/perf/measure-perf.ts`. Sin esto
+// el log default es `['error']` y no podemos correlacionar queries con
+// un request real al servidor warm-cache.
+const isPerfRun = process.env.PERF_LOG === '1'
+const enableQueryLog = isDev || isPerfRun
 
 function createPrisma(): PrismaClient {
   const client = new PrismaClient({
-    log: isDev ? ['error', 'warn'] : ['error'],
+    log: enableQueryLog ? ['error', 'warn'] : ['error'],
   })
 
-  if (isDev) {
+  if (enableQueryLog) {
     client.$use(async (params, next) => {
       const start = performance.now()
       try {

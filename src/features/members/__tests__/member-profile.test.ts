@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 
 vi.mock('@/db/client', () => ({
   prisma: {
@@ -10,6 +11,9 @@ vi.mock('@/db/client', () => ({
     },
     placeOwnership: {
       findUnique: (...a: unknown[]) => ownershipFindUnique(...a),
+    },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
     },
   },
 }))
@@ -21,6 +25,8 @@ import { findMemberProfile } from '../server/queries'
 beforeEach(() => {
   membershipFindFirst.mockReset()
   ownershipFindUnique.mockReset()
+  groupMembershipFindFirst.mockReset()
+  groupMembershipFindFirst.mockResolvedValue(null)
 })
 
 describe('findMemberProfile', () => {
@@ -50,7 +56,6 @@ describe('findMemberProfile', () => {
   it('happy path: miembro simple sin ownership', async () => {
     membershipFindFirst.mockResolvedValue({
       id: 'mem-1',
-      role: 'MEMBER',
       joinedAt: new Date('2026-01-01T00:00:00Z'),
       user: { displayName: 'Ana', handle: 'ana', avatarUrl: null },
     })
@@ -60,17 +65,16 @@ describe('findMemberProfile', () => {
     expect(res).toEqual({
       userId: 'user-1',
       membershipId: 'mem-1',
-      role: 'MEMBER',
+      isAdmin: false,
       joinedAt: new Date('2026-01-01T00:00:00Z'),
       isOwner: false,
       user: { displayName: 'Ana', handle: 'ana', avatarUrl: null },
     })
   })
 
-  it('happy path: owner tiene isOwner=true', async () => {
+  it('happy path: owner tiene isOwner=true e isAdmin=true (herencia)', async () => {
     membershipFindFirst.mockResolvedValue({
       id: 'mem-2',
-      role: 'ADMIN',
       joinedAt: new Date('2025-01-01T00:00:00Z'),
       user: { displayName: 'Root', handle: null, avatarUrl: 'https://example.com/a.jpg' },
     })
@@ -78,7 +82,7 @@ describe('findMemberProfile', () => {
 
     const res = await findMemberProfile('place-1', 'user-2')
     expect(res?.isOwner).toBe(true)
-    expect(res?.role).toBe('ADMIN')
+    expect(res?.isAdmin).toBe(true)
   })
 
   it('multi-place: scopea por placeId (no lee membership de otro place)', async () => {

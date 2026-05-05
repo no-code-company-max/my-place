@@ -10,3 +10,4 @@ import 'server-only'
  */
 
 export { listEvents, getEvent, listEventRsvps } from './server/queries'
+export { cancelEventInTx } from './server/actions/cancel-in-tx'

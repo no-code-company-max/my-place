@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { MembershipRole } from '@prisma/client'
 import { AuthorizationError, NotFoundError } from '@/shared/errors/domain-error'
 
 const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const getUserFn = vi.fn()
 
 vi.mock('@/db/client', () => ({
@@ -14,6 +14,7 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: { findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a) },
   },
 }))
 
@@ -32,6 +33,7 @@ beforeEach(() => {
   membershipFindFirst.mockReset()
   ownershipFindUnique.mockReset()
   userFindUnique.mockReset()
+  groupMembershipFindFirst.mockReset()
   getUserFn.mockReset()
 })
 
@@ -63,17 +65,19 @@ describe('resolveActorForPlace', () => {
     placeFindUnique.mockResolvedValue({ id: 'p-1', slug: 's', archivedAt: null })
     membershipFindFirst.mockResolvedValue(null)
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue(null)
     userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
     await expect(resolveActorForPlace({ placeId: 'p-1' })).rejects.toBeInstanceOf(
       AuthorizationError,
     )
   })
 
-  it('MEMBER no-owner => isAdmin=false', async () => {
+  it('Member no-owner sin preset group => isAdmin=false', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue({ id: 'p-1', slug: 's', archivedAt: null })
-    membershipFindFirst.mockResolvedValue({ id: 'm-1', role: MembershipRole.MEMBER })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue(null)
     userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
     const actor = await resolveActorForPlace({ placeId: 'p-1' })
     expect(actor.isAdmin).toBe(false)
@@ -81,21 +85,23 @@ describe('resolveActorForPlace', () => {
     expect(actor.actorId).toBe('user-1')
   })
 
-  it('ADMIN => isAdmin=true', async () => {
+  it('Member con preset group => isAdmin=true', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue({ id: 'p-1', slug: 's', archivedAt: null })
-    membershipFindFirst.mockResolvedValue({ id: 'm-1', role: MembershipRole.ADMIN })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue({ id: 'gm-1' })
     userFindUnique.mockResolvedValue({ displayName: 'Admin', avatarUrl: null })
     const actor = await resolveActorForPlace({ placeId: 'p-1' })
     expect(actor.isAdmin).toBe(true)
   })
 
-  it('Owner con rol MEMBER => isAdmin=true (owner hereda)', async () => {
+  it('Owner sin preset group => isAdmin=true (owner hereda)', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue({ id: 'p-1', slug: 's', archivedAt: null })
-    membershipFindFirst.mockResolvedValue({ id: 'm-1', role: MembershipRole.MEMBER })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue({ userId: 'user-1' })
+    groupMembershipFindFirst.mockResolvedValue(null)
     userFindUnique.mockResolvedValue({ displayName: 'Owner', avatarUrl: null })
     const actor = await resolveActorForPlace({ placeId: 'p-1' })
     expect(actor.isAdmin).toBe(true)

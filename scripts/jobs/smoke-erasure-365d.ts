@@ -25,7 +25,7 @@
  * - `.env.local` con `CRON_SECRET` + `DATABASE_URL` del Cloud dev.
  */
 
-import { PrismaClient, MembershipRole, BillingMode, Prisma } from '@prisma/client'
+import { PrismaClient, BillingMode, Prisma } from '@prisma/client'
 
 const PREFIX = 'erasure_smoke'
 const USER_ID = `usr_${PREFIX}_user1`
@@ -83,7 +83,6 @@ async function seedFixture(): Promise<void> {
       id: MEMBERSHIP_ID,
       userId: USER_ID,
       placeId: PLACE_ID,
-      role: MembershipRole.MEMBER,
       leftAt: new Date(), // Se forzará a 400d atrás via SQL después.
     },
   })

@@ -57,5 +57,8 @@ Thumbs.db
 .vercel/
 .turbo/
 
+# Claude Code local config (no compartir entre devs)
+.claude/
+
 # GlaDOS Studio image context
 glados-images/

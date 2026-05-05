@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MembershipRole } from '@prisma/client'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { EditWindowExpired, InvalidQuoteTarget } from '../domain/errors'
 
@@ -7,6 +6,7 @@ const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const postFindUnique = vi.fn()
 const commentFindUnique = vi.fn()
 const commentCreate = vi.fn()
@@ -23,6 +23,9 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
     post: { findUnique: (...a: unknown[]) => postFindUnique(...a) },
     comment: {
       findUnique: (...a: unknown[]) => commentFindUnique(...a),
@@ -75,11 +78,12 @@ const bodyDoc = {
   content: [{ type: 'paragraph', content: [{ type: 'text', text: 'comentario' }] }],
 }
 
-function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
+function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: 'user-1' } } })
   placeFindUnique.mockResolvedValue({ id: 'place-1', slug: 'the-place', archivedAt: null })
-  membershipFindFirst.mockResolvedValue({ id: 'm-1', role })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue(opts.asAdmin ? { id: 'gm-mock' } : null)
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
   assertPlaceOpenFn.mockResolvedValue(undefined)
   transactionFn.mockImplementation((fn: (tx: unknown) => unknown) =>
@@ -296,7 +300,7 @@ describe('editCommentAction', () => {
   })
 
   it('no-autor rechaza con AuthorizationError', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     commentFindUnique.mockResolvedValue({
       id: 'c-1',
       placeId: 'place-1',
@@ -464,7 +468,7 @@ describe('openCommentEditSession', () => {
   })
 
   it('no-autor: AuthorizationError (comments no tienen admin-edit)', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     commentFindUnique.mockResolvedValue({
       id: 'c-1',
       placeId: 'place-1',
@@ -486,7 +490,7 @@ describe('openCommentEditSession', () => {
 
 describe('deleteCommentAction', () => {
   it('admin borra comentario ajeno', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     commentFindUnique.mockResolvedValue({
       id: 'c-1',
       placeId: 'place-1',

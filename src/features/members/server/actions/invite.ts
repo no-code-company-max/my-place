@@ -8,7 +8,7 @@ import { clientEnv } from '@/shared/config/env'
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { inviteMemberSchema, type InviteMemberInput } from '@/features/members/schemas'
 import {
-  assertInviterHasRole,
+  assertInviterHasAdminAccess,
   assertPlaceActive,
   assertPlaceHasCapacity,
   generateInvitationToken,
@@ -83,7 +83,7 @@ async function assertInvitablePlace(slug: string, actorId: string): Promise<Plac
   if (!place) throw new NotFoundError('Place no encontrado.', { slug })
   assertPlaceActive(place)
   const perms = await findInviterPermissions(actorId, place.id)
-  assertInviterHasRole(perms)
+  assertInviterHasAdminAccess(perms)
   const activeCount = await countActiveMemberships(place.id)
   assertPlaceHasCapacity(activeCount)
   return place

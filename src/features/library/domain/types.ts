@@ -14,19 +14,62 @@
 /**
  * Política de contribución por categoría.
  *
- * - `ADMIN_ONLY`: solo admin/owner del place crea items (default seguro).
  * - `DESIGNATED`: admin + miembros listados en
  *   `LibraryCategoryContributor`.
- * - `MEMBERS_OPEN`: cualquier miembro activo del place.
+ * - `MEMBERS_OPEN`: cualquier miembro activo del place (default).
+ * - `SELECTED_GROUPS`: miembros que pertenezcan a alguno de los
+ *   `PermissionGroup` con scope a esta categoría (via `GroupCategoryScope`).
+ *
+ * `ADMIN_ONLY` fue eliminado (migration 20260504010000) — ver
+ * `docs/decisions/2026-05-04-library-contribution-policy-groups.md`.
  *
  * Mapea 1:1 al enum Postgres `ContributionPolicy`.
  */
-export type ContributionPolicy = 'ADMIN_ONLY' | 'DESIGNATED' | 'MEMBERS_OPEN'
+export type ContributionPolicy = 'DESIGNATED' | 'MEMBERS_OPEN' | 'SELECTED_GROUPS'
 
 export const CONTRIBUTION_POLICY_VALUES: ReadonlyArray<ContributionPolicy> = [
-  'ADMIN_ONLY',
   'DESIGNATED',
   'MEMBERS_OPEN',
+  'SELECTED_GROUPS',
+]
+
+/**
+ * Tipo de categoría (G.1, 2026-05-04).
+ *
+ * - `GENERAL`: contenido regular (default).
+ * - `COURSE`: items pueden declarar prereqs y los viewers marcarlos como
+ *   completados (tracking privado en `LibraryItemCompletion`).
+ *
+ * Mapea 1:1 al enum Postgres `LibraryCategoryKind`. Ver
+ * `docs/decisions/2026-05-04-library-courses-and-read-access.md`.
+ */
+export type LibraryCategoryKind = 'GENERAL' | 'COURSE'
+
+export const LIBRARY_CATEGORY_KIND_VALUES: ReadonlyArray<LibraryCategoryKind> = [
+  'GENERAL',
+  'COURSE',
+]
+
+/**
+ * Discriminator del scope de lectura (G.1, 2026-05-04).
+ *
+ * - `PUBLIC`: cualquier miembro activo del place lee (default).
+ * - `GROUPS`: sólo users en alguno de los `PermissionGroup` listados en
+ *   `LibraryCategoryGroupReadScope` para esta categoría.
+ * - `TIERS`: sólo users con `TierMembership` activa a alguno de los tiers
+ *   listados en `LibraryCategoryTierReadScope`.
+ * - `USERS`: sólo los users individuales listados en
+ *   `LibraryCategoryUserReadScope`.
+ *
+ * Mapea 1:1 al enum Postgres `LibraryReadAccessKind`.
+ */
+export type LibraryReadAccessKind = 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
+
+export const LIBRARY_READ_ACCESS_KIND_VALUES: ReadonlyArray<LibraryReadAccessKind> = [
+  'PUBLIC',
+  'GROUPS',
+  'TIERS',
+  'USERS',
 ]
 
 /**
@@ -49,12 +92,19 @@ export type LibraryCategory = {
    *  COALESCE(position, +Infinity) → createdAt como fallback. */
   position: number | null
   contributionPolicy: ContributionPolicy
+  /** G.1 (2026-05-04): tipo de categoría. Default GENERAL. */
+  kind: LibraryCategoryKind
+  /** G.1 (2026-05-04): discriminator del scope de lectura. Default PUBLIC. */
+  readAccessKind: LibraryReadAccessKind
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
   /** Cantidad de items activos. Calculado por la query (sub-count).
    *  R.7.2 retorna 0; cuando R.7.5+ sume LibraryItem, refleja el real. */
   docCount: number
+  /** Group ids con scope a esta categoría (via `GroupCategoryScope`).
+   *  Vacío salvo cuando `contributionPolicy === 'SELECTED_GROUPS'`. */
+  groupScopeIds: string[]
 }
 
 /**
@@ -112,6 +162,9 @@ export type LibraryItemListView = {
   lastActivityAt: Date
   /** Cantidad de comments del Post — útil para "n respuestas". */
   commentCount: number
+  /** G.1 (2026-05-04): item prereq (single, opt-in) para courses. NULL
+   *  cuando la categoría es GENERAL o el item no declara prereq. */
+  prereqItemId: string | null
 }
 
 /**
@@ -132,9 +185,14 @@ export type LibraryItemDetailView = {
   title: string
   /** AST TipTap del Post.body. */
   body: unknown
+  /** Versión del Post — usada por `updateItemAction` como `expectedVersion`
+   *  para optimistic concurrency. */
+  postVersion: number
   coverUrl: string | null
   authorUserId: string | null
   authorSnapshot: ItemAuthorSnapshot
+  /** G.1 (2026-05-04): item prereq (single) para courses. */
+  prereqItemId: string | null
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date

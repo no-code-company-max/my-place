@@ -26,13 +26,18 @@ export {
 
 export type FlagId = string
 
-/** Entidad persistida tal como la mapea `server/queries.ts`. */
+/** Entidad persistida tal como la mapea `server/queries.ts`.
+ *
+ * `reporterUserId` es nullable post-migration 20260501000000: el job de
+ * erasure 365d setea NULL al reporter cuando pasa el plazo. La identidad
+ * histórica vive en `reporterSnapshot` (no expuesto en este shape; es
+ * uso interno del admin queue mapper). */
 export type Flag = {
   id: FlagId
   targetType: ContentTargetKind
   targetId: string
   placeId: string
-  reporterUserId: string
+  reporterUserId: string | null
   reason: FlagReason
   reasonNote: string | null
   status: FlagStatus
@@ -94,7 +99,12 @@ export type FlagView = {
   reason: FlagReason
   reasonNote: string | null
   createdAt: Date
-  reporterUserId: string
+  /**
+   * Nullable post-migration 20260501000000: el job de erasure 365d
+   * anonimiza el reporter sin perder el flag. La UI muestra "ex-miembro"
+   * cuando es null. Mismo motivo que `Flag.reporterUserId`.
+   */
+  reporterUserId: string | null
   status: FlagStatus
   reviewedAt: Date | null
   reviewNote: string | null

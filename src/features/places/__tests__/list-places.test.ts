@@ -1,10 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const membershipFindMany = vi.fn()
+const groupMembershipFindMany = vi.fn()
 
 vi.mock('@/db/client', () => ({
   prisma: {
     membership: { findMany: (...args: unknown[]) => membershipFindMany(...args) },
+    groupMembership: {
+      findMany: (...args: unknown[]) => groupMembershipFindMany(...args),
+    },
   },
 }))
 
@@ -23,12 +27,10 @@ const base = {
 }
 
 function membershipRow(opts: {
-  role: 'MEMBER' | 'ADMIN'
   joinedAt?: Date
   place: { id: string; slug: string; archivedAt?: Date | null; ownerships: { userId: string }[] }
 }) {
   return {
-    role: opts.role,
     joinedAt: opts.joinedAt ?? new Date('2026-01-02'),
     place: {
       ...base,
@@ -40,6 +42,8 @@ function membershipRow(opts: {
 
 beforeEach(() => {
   membershipFindMany.mockReset()
+  groupMembershipFindMany.mockReset()
+  groupMembershipFindMany.mockResolvedValue([])
 })
 
 describe('listMyPlaces', () => {
@@ -72,34 +76,35 @@ describe('listMyPlaces', () => {
   it('marca isOwner=true cuando existe PlaceOwnership del user en ese place', async () => {
     membershipFindMany.mockResolvedValue([
       membershipRow({
-        role: 'ADMIN',
         place: { id: 'p1', slug: 'owned', ownerships: [{ userId: 'u' }] },
       }),
       membershipRow({
-        role: 'MEMBER',
         place: { id: 'p2', slug: 'just-member', ownerships: [] },
       }),
     ])
 
     const out = await listMyPlaces('u')
     expect(out).toHaveLength(2)
-    expect(out[0]).toMatchObject({ id: 'p1', slug: 'owned', role: 'ADMIN', isOwner: true })
-    expect(out[1]).toMatchObject({ id: 'p2', slug: 'just-member', role: 'MEMBER', isOwner: false })
+    expect(out[0]).toMatchObject({ id: 'p1', slug: 'owned', isOwner: true, isAdmin: true })
+    expect(out[1]).toMatchObject({
+      id: 'p2',
+      slug: 'just-member',
+      isOwner: false,
+      isAdmin: false,
+    })
   })
 
   it('multi-place: user owner de 2 + miembro simple de 3 → 5 resultados, flags correctos', async () => {
     const rows = [
       membershipRow({
-        role: 'ADMIN',
         place: { id: 'a', slug: 'owned-a', ownerships: [{ userId: 'u' }] },
       }),
       membershipRow({
-        role: 'ADMIN',
         place: { id: 'b', slug: 'owned-b', ownerships: [{ userId: 'u' }] },
       }),
-      membershipRow({ role: 'MEMBER', place: { id: 'c', slug: 'mem-c', ownerships: [] } }),
-      membershipRow({ role: 'MEMBER', place: { id: 'd', slug: 'mem-d', ownerships: [] } }),
-      membershipRow({ role: 'MEMBER', place: { id: 'e', slug: 'mem-e', ownerships: [] } }),
+      membershipRow({ place: { id: 'c', slug: 'mem-c', ownerships: [] } }),
+      membershipRow({ place: { id: 'd', slug: 'mem-d', ownerships: [] } }),
+      membershipRow({ place: { id: 'e', slug: 'mem-e', ownerships: [] } }),
     ]
     membershipFindMany.mockResolvedValue(rows)
 

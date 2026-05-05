@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MembershipRole, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { FlagAlreadyExists } from '../domain/errors'
 
@@ -7,6 +7,8 @@ const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
+const groupMembershipFindMany = vi.fn()
 const postFindUnique = vi.fn()
 const commentFindUnique = vi.fn()
 const flagCreate = vi.fn()
@@ -25,6 +27,10 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+      findMany: (...a: unknown[]) => groupMembershipFindMany(...a),
+    },
     post: {
       findUnique: (...a: unknown[]) => postFindUnique(...a),
       update: (...a: unknown[]) => postUpdate(...a),
@@ -51,6 +57,16 @@ vi.mock('next/cache', () => ({
 }))
 vi.mock('server-only', () => ({}))
 
+vi.mock('@/shared/config/env', () => ({
+  clientEnv: {
+    NEXT_PUBLIC_APP_URL: 'http://lvh.me:3000',
+    NEXT_PUBLIC_APP_DOMAIN: 'lvh.me:3000',
+    NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+  },
+  serverEnv: { SUPABASE_SERVICE_ROLE_KEY: 'service', NODE_ENV: 'test' },
+}))
+
 vi.mock('@/features/discussions/public.server', () => ({
   hardDeletePost: (...a: unknown[]) => hardDeletePostFn(...a),
 }))
@@ -59,15 +75,22 @@ import { flagAction, reviewFlagAction } from '../server/actions'
 
 type TxArgs = Parameters<typeof transactionFn>[0]
 
-function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
+function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: 'user-1' } } })
   placeFindUnique.mockResolvedValue({
     id: 'place-1',
     slug: 'the-place',
     archivedAt: null,
   })
-  membershipFindFirst.mockResolvedValue({ id: 'm-1', role })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue(opts.asAdmin ? { id: 'gm-mock' } : null)
+  // hasPermission(actor, 'flags:review') resuelve por groupMembership.findMany
+  // filtrado al permiso. Admin → un grupo sin categoryScopes (global). Member
+  // → array vacío (deny).
+  groupMembershipFindMany.mockResolvedValue(
+    opts.asAdmin ? [{ id: 'gm-mock', group: { id: 'g-1', categoryScopes: [] } }] : [],
+  )
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
 }
 
@@ -137,7 +160,7 @@ describe('flagAction', () => {
 
 describe('reviewFlagAction', () => {
   it('admin resuelve flag OPEN sin sideEffect', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -165,7 +188,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('member no puede revisar flags', async () => {
-    mockActiveMember(MembershipRole.MEMBER)
+    mockActiveMember()
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -179,7 +202,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('NotFoundError si otro admin ya resolvió', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -196,7 +219,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=HIDE_TARGET sobre POST actualiza flag + post.hiddenAt + revalida conversation', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -226,7 +249,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=DELETE_TARGET sobre POST hace hard delete + claim del flag + revalida', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -259,7 +282,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=DELETE_TARGET sobre POST: si claim del flag falla (race) ⇒ NotFoundError sin hard delete', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -281,7 +304,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=DELETE_TARGET sobre POST: post ya no existe ⇒ NotFoundError sin tocar flag ni hard delete', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -303,7 +326,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=DELETE_TARGET sobre COMMENT actualiza comment.deletedAt + revalida el thread', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -332,7 +355,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('sideEffect=HIDE_TARGET sobre COMMENT ⇒ ValidationError (comments no se ocultan)', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',
@@ -352,7 +375,7 @@ describe('reviewFlagAction', () => {
   })
 
   it('race con count=0 en HIDE_TARGET ⇒ tx rollback + NotFoundError, sin post.update', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     flagFindUnique.mockResolvedValue({
       id: 'f-1',
       placeId: 'place-1',

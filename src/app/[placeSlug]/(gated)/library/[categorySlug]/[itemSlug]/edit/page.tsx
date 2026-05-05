@@ -1,8 +1,7 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { resolveViewerForPlace } from '@/features/discussions/public.server'
 import { LibraryItemForm, canEditItem } from '@/features/library/public'
-import { findItemBySlug } from '@/features/library/public.server'
+import { findItemBySlug, resolveLibraryViewer } from '@/features/library/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string; itemSlug: string }>
@@ -21,16 +20,13 @@ export default async function EditLibraryItemPage({ params }: Props) {
   const place = await loadPlaceBySlug(placeSlug)
   if (!place) notFound()
 
-  const [item, viewer] = await Promise.all([
+  const [item, vctx] = await Promise.all([
     findItemBySlug(place.id, categorySlug, itemSlug, { includeArchived: true }),
-    resolveViewerForPlace({ placeSlug }),
+    resolveLibraryViewer({ placeSlug }),
   ])
   if (!item) notFound()
 
-  const canEdit = canEditItem(
-    { authorUserId: item.authorUserId },
-    { userId: viewer.actorId, isAdmin: viewer.isAdmin },
-  )
+  const canEdit = canEditItem({ authorUserId: item.authorUserId }, vctx.viewer)
   if (!canEdit) notFound()
 
   return (

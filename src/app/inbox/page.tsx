@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createSupabaseServer } from '@/shared/lib/supabase/server'
 import { clientEnv } from '@/shared/config/env'
-import { listMyPlaces, PlacesList } from '@/features/places/public'
+import { PlacesList } from '@/features/places/public'
+import { listMyPlaces } from '@/features/places/public.server'
 
 /**
  * Inbox universal del usuario. Accedido via `app.place.app` (prod) o `app.lvh.me:3000` (dev).
@@ -17,16 +18,20 @@ export default async function InboxPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl p-8">
-      <header className="mb-6 flex items-baseline justify-between gap-4">
+      <header className="mb-6">
         <h1 className="font-serif text-3xl italic">Inbox</h1>
-        <Link
-          href="/places/new"
-          className="text-sm text-neutral-600 underline decoration-neutral-300 hover:decoration-neutral-600"
-        >
-          Nuevo place
-        </Link>
       </header>
       <PlacesList places={places} appDomain={clientEnv.NEXT_PUBLIC_APP_DOMAIN} />
+      {places.length > 0 ? (
+        // Pattern canónico "Add another to the list" (docs/ux-patterns.md):
+        // dashed-border full-width neutral, después de la lista. Nunca top-right filled.
+        <Link
+          href="/places/new"
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-300 px-4 text-sm font-medium text-neutral-600 hover:border-neutral-500"
+        >
+          <span aria-hidden>+</span> Nuevo place
+        </Link>
+      ) : null}
     </main>
   )
 }

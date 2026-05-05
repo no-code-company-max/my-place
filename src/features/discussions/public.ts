@@ -79,30 +79,8 @@ export {
   RichTextTooLarge,
 } from './domain/errors'
 
-export {
-  COMMENT_PAGE_SIZE,
-  POST_PAGE_SIZE,
-  findCommentById,
-  findPostById,
-  findPostBySlug,
-  listCommentsByPost,
-  listPostsByPlace,
-  listReadersByPost,
-  type CommentView,
-  type PostReader,
-} from './server/queries'
-
-export {
-  aggregateReactions,
-  reactionMapKey,
-  type AggregatedReaction,
-  type ReactionAggregationMap,
-} from './server/reactions-aggregation'
-
-export { resolveViewerForPlace, type DiscussionViewer } from './server/actor'
-
-export { findOrCreateCurrentOpening } from './server/place-opening'
-
+// Server Action references viajan client-safe (Next las serializa como
+// referencias remotas, no como código del bundle del cliente).
 export {
   createPostAction,
   deletePostAction,
@@ -137,12 +115,11 @@ export {
   type PostListFilter,
 } from './domain/filter'
 
-export { CommentThread } from './ui/comment-thread'
+// UI client-safe (Client Components con `'use client'` o Server Components
+// puros sin imports server-only). Los componentes Server que importan
+// queries/aggregations server-only viajan via `public.server.ts`.
 export { DwellTracker } from './ui/dwell-tracker'
 export { PostComposer } from './ui/post-composer'
-export { PostDetail } from './ui/post-detail'
-export { PostList } from './ui/post-list'
-export { PostReadersBlock } from './ui/post-readers-block'
 export { PostUnreadDot } from './ui/post-unread-dot'
 export { PostAdminMenu } from './ui/post-admin-menu'
 export { ReactionBar } from './ui/reaction-bar'

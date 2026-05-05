@@ -1,8 +1,8 @@
 import 'server-only'
-import type { MembershipRole } from '@prisma/client'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import {
   findActiveMembership,
+  findIsPlaceAdmin,
   findPlaceOwnership,
   findUserProfile,
 } from '@/shared/lib/identity-cache'
@@ -13,8 +13,10 @@ import { AuthorizationError, NotFoundError } from '@/shared/errors/domain-error'
  * Actor resuelto para una acción en el contexto de un place.
  * Se usa como primer paso en toda write action del slice `discussions`.
  *
- * `isAdmin` = rol `ADMIN` *o* ownership en `PlaceOwnership`. Owners heredan
- * permisos de admin sobre el contenido (hide/delete/reviewFlag).
+ * `isAdmin` = membership al `PermissionGroup` preset *o* ownership en
+ * `PlaceOwnership`. Owners heredan permisos de admin sobre el contenido
+ * (hide/delete/reviewFlag). Reemplazó al legacy `Membership.role === 'ADMIN'`
+ * durante el cleanup G.7 (ADR `2026-05-03-drop-membership-role-rls-impact.md`).
  */
 export type DiscussionActor = {
   actorId: string
@@ -22,7 +24,7 @@ export type DiscussionActor = {
   userId: string
   placeId: string
   placeSlug: string
-  membership: { id: string; role: MembershipRole }
+  membership: { id: string }
   isAdmin: boolean
   user: {
     displayName: string
@@ -69,9 +71,10 @@ export async function resolveActorForPlace(params: {
     throw new NotFoundError('Place archivado.', { placeId: place.id })
   }
 
-  const [membership, isOwner, user] = await Promise.all([
+  const [membership, isOwner, isAdminPreset, user] = await Promise.all([
     findActiveMembership(actorId, place.id),
     findPlaceOwnership(actorId, place.id),
+    findIsPlaceAdmin(actorId, place.id),
     findUserProfile(actorId),
   ])
 
@@ -88,7 +91,7 @@ export async function resolveActorForPlace(params: {
     placeId: place.id,
     placeSlug: place.slug,
     membership,
-    isAdmin: membership.role === 'ADMIN' || isOwner,
+    isAdmin: isOwner || isAdminPreset,
     user,
   }
 }

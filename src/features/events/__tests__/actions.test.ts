@@ -1,5 +1,4 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { MembershipRole } from '@prisma/client'
 import {
   AuthorizationError,
   ConflictError,
@@ -11,6 +10,7 @@ const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const eventCreate = vi.fn()
 const eventFindUnique = vi.fn()
 const eventUpdate = vi.fn()
@@ -28,6 +28,9 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
     event: {
       findUnique: (...a: unknown[]) => eventFindUnique(...a),
       update: (...a: unknown[]) => eventUpdate(...a),
@@ -65,14 +68,15 @@ vi.mock('@/features/discussions/public.server', () => ({
     const place = await placeFindUnique({ where: { id: placeId } })
     const membership = await membershipFindFirst()
     const ownership = await ownershipFindUnique()
+    const isPresetMember = await groupMembershipFindFirst()
     const user = await userFindUnique()
     return {
       actorId: userId,
       userId,
       placeId: place?.id ?? placeId,
       placeSlug: place?.slug ?? 'the-place',
-      membership: membership ?? { id: 'm-1', role: 'MEMBER' },
-      isAdmin: membership?.role === 'ADMIN' || ownership !== null,
+      membership: membership ?? { id: 'm-1' },
+      isAdmin: ownership !== null || isPresetMember !== null,
       user: user ?? { displayName: 'Max', avatarUrl: null },
     }
   },
@@ -98,11 +102,12 @@ import { updateEventAction } from '../server/actions/update'
 import { cancelEventAction } from '../server/actions/cancel'
 import { rsvpEventAction } from '../server/actions/rsvp'
 
-function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
+function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: 'user-1' } } })
   placeFindUnique.mockResolvedValue({ id: 'place-1', slug: 'the-place', archivedAt: null })
-  membershipFindFirst.mockResolvedValue({ id: 'm-1', role })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue(opts.asAdmin ? { id: 'gm-mock' } : null)
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
   assertPlaceOpenFn.mockResolvedValue(undefined)
 }
@@ -241,7 +246,7 @@ describe('updateEventAction', () => {
   })
 
   it('no-author no-admin → AuthorizationError', async () => {
-    mockActiveMember(MembershipRole.MEMBER)
+    mockActiveMember()
     setupExistingEvent('other-user')
     await expect(
       updateEventAction({
@@ -255,7 +260,7 @@ describe('updateEventAction', () => {
   })
 
   it('admin puede actualizar evento ajeno', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     setupExistingEvent('other-user')
     eventUpdate.mockResolvedValue({ id: 'evt-1' })
     const result = await updateEventAction({
@@ -308,7 +313,7 @@ describe('cancelEventAction', () => {
   })
 
   it('no-author no-admin → AuthorizationError', async () => {
-    mockActiveMember(MembershipRole.MEMBER)
+    mockActiveMember()
     eventFindUnique.mockResolvedValue({
       id: 'evt-1',
       placeId: 'place-1',

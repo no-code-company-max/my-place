@@ -6,6 +6,7 @@ import { prisma } from '@/db/client'
 import { logger } from '@/shared/lib/logger'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { hardDeletePost } from '@/features/discussions/public.server'
+import { buildAuthorSnapshot } from '@/features/discussions/public'
 import { FlagAlreadyExists } from '../domain/errors'
 import { flagInputSchema, reviewFlagInputSchema } from '../schemas'
 import { resolveActorForPlace, type FlagActor } from './actor'
@@ -34,7 +35,7 @@ export async function flagAction(input: unknown): Promise<{ ok: true; flagId: st
   const data = parseFlagInput(input)
   const target = await resolveFlaggableTarget(data.targetType, data.targetId)
   const actor = await resolveActorForPlace({ placeId: target.placeId })
-  const flagId = await createFlagOrConflict(data, target.placeId, actor.actorId)
+  const flagId = await createFlagOrConflict(data, target.placeId, actor)
 
   logger.info(
     {
@@ -68,15 +69,21 @@ function parseFlagInput(input: unknown): ReturnType<typeof flagInputSchema.parse
 async function createFlagOrConflict(
   data: ReturnType<typeof parseFlagInput>,
   placeId: string,
-  reporterUserId: string,
+  actor: FlagActor,
 ): Promise<string> {
+  // `reporterSnapshot` se congela al momento de crear — patrón snapshot
+  // erasure 365d (ADR `2026-04-24-erasure-365d.md`). El job de erasure
+  // reescribe `reporterUserId` a null y `reporterSnapshot.displayName` a
+  // "ex-miembro" sin perder la pieza histórica.
+  const reporterSnapshot = buildAuthorSnapshot(actor.user)
   try {
     const created = await prisma.flag.create({
       data: {
         targetType: data.targetType,
         targetId: data.targetId,
         placeId,
-        reporterUserId,
+        reporterUserId: actor.actorId,
+        reporterSnapshot: reporterSnapshot as Prisma.InputJsonValue,
         reason: data.reason,
         reasonNote: data.reasonNote ?? null,
       },
@@ -88,7 +95,7 @@ async function createFlagOrConflict(
       throw new FlagAlreadyExists({
         targetType: data.targetType,
         targetId: data.targetId,
-        reporterUserId,
+        reporterUserId: actor.actorId,
       })
     }
     throw err

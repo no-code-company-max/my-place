@@ -5,7 +5,10 @@ import { logger } from '@/shared/lib/logger'
 import { clientEnv } from '@/shared/config/env'
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { resendInvitationSchema, type ResendInvitationInput } from '@/features/members/schemas'
-import { assertInviterHasRole, assertPlaceActive } from '@/features/members/domain/invariants'
+import {
+  assertInviterHasAdminAccess,
+  assertPlaceActive,
+} from '@/features/members/domain/invariants'
 import { findInvitationById, findInviterPermissions } from '@/features/members/server/queries'
 import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { deliverInvitationEmail, fetchInviterDisplayName } from './shared'
@@ -31,7 +34,7 @@ export async function resendInvitationAction(
   assertInvitationResendable(invitation)
 
   const perms = await findInviterPermissions(actorId, invitation.placeId)
-  assertInviterHasRole(perms)
+  assertInviterHasAdminAccess(perms)
 
   await deliverInvitationEmail({
     invitationId: invitation.id,

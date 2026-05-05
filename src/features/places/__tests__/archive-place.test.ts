@@ -27,6 +27,16 @@ vi.mock('next/cache', () => ({
 
 vi.mock('server-only', () => ({}))
 
+vi.mock('@/shared/config/env', () => ({
+  clientEnv: {
+    NEXT_PUBLIC_APP_URL: 'http://lvh.me:3000',
+    NEXT_PUBLIC_APP_DOMAIN: 'lvh.me:3000',
+    NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+  },
+  serverEnv: { SUPABASE_SERVICE_ROLE_KEY: 'service', NODE_ENV: 'test' },
+}))
+
 import { archivePlaceAction } from '../server/actions'
 
 const AUTH_OK = { data: { user: { id: 'user-1' } } }

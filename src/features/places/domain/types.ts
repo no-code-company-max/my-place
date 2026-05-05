@@ -1,4 +1,4 @@
-import type { BillingMode, MembershipRole } from '@prisma/client'
+import type { BillingMode } from '@prisma/client'
 
 /**
  * Tipos de dominio del slice `places`. Puros, sin dependencias de Next/React.
@@ -18,10 +18,17 @@ export type Place = {
   createdAt: Date
 }
 
+/**
+ * Place del que el viewer es miembro activo.
+ *
+ * `isAdmin`: membership al `PermissionGroup` preset del place — owner ⇒
+ * true. Reemplazó al legacy `Membership.role === 'ADMIN'` durante el
+ * cleanup G.7 (ADR `2026-05-03-drop-membership-role-rls-impact.md`).
+ */
 export type MyPlace = Place & {
-  role: MembershipRole
   isOwner: boolean
+  isAdmin: boolean
   joinedAt: Date
 }
 
-export { type BillingMode, type MembershipRole } from '@prisma/client'
+export { type BillingMode } from '@prisma/client'

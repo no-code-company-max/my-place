@@ -15,12 +15,29 @@
 import type { ContributionPolicy } from './types'
 
 /**
- * Viewer mínimo para evaluar permisos. Lo provee `resolveActorForPlace`
- * de discussions (ya carga membership + ownership).
+ * Viewer mínimo para evaluar permisos. Lo provee `resolveLibraryViewer`
+ * en `library/server/viewer.ts` (cacheable React.cache por request).
+ *
+ * - `userId`: actor del request (siempre poblado, RouteAuthError 401 sino).
+ * - `isAdmin`: derivado de `findIsPlaceAdmin` (membership al preset
+ *   "Administradores" del place; ver ADR `2026-05-03-drop-membership-role-rls-impact.md`).
+ *   También true si owner (consistente con el patrón established del slice).
+ * - `isOwner`: `PlaceOwnership` activa para este user en el place. Owner
+ *   bypassa la mayoría de gates (ver ADR `2026-05-04-library-courses-and-read-access.md` § decisión #C).
+ * - `groupIds`: ids de `PermissionGroup` del que el user es miembro en el
+ *   place (incluye preset + grupos custom). Usado por `canCreateInCategory`
+ *   con policy=SELECTED_GROUPS y por `canReadCategory` con kind=GROUPS.
+ * - `tierIds`: ids de `Tier` con `TierMembership` activa (no expirada) del
+ *   user en el place. Usado por `canReadCategory` con kind=TIERS.
+ *
+ * `ReadonlyArray` para evitar mutación accidental que invalide invariantes.
  */
 export type LibraryViewer = {
   userId: string
-  isAdmin: boolean // membership ADMIN ∨ PlaceOwnership
+  isAdmin: boolean
+  isOwner: boolean
+  groupIds: ReadonlyArray<string>
+  tierIds: ReadonlyArray<string>
 }
 
 export type CategoryForPermissions = {
@@ -28,16 +45,26 @@ export type CategoryForPermissions = {
   /** Lista de userIds designated. Se popula solo cuando policy=DESIGNATED;
    *  para otras policies el caller puede pasar [] sin importar. */
   designatedUserIds: ReadonlyArray<string>
+  /** Lista de groupIds asignados al scope SELECTED_GROUPS. Se popula sólo
+   *  cuando policy=SELECTED_GROUPS; para otras policies el caller puede
+   *  pasar [] sin importar. Match con `viewer.groupIds` en `canCreateInCategory`. */
+  groupScopeIds?: ReadonlyArray<string>
 }
 
 /**
  * ¿Puede el viewer crear un item en esta categoría?
  *
  * - admin/owner: siempre
- * - policy=ADMIN_ONLY: solo admin
  * - policy=DESIGNATED: admin o miembro listado
  * - policy=MEMBERS_OPEN: cualquier miembro activo (asumido por el
  *   caller — la membership ya fue verificada por `resolveActorForPlace`)
+ * - policy=SELECTED_GROUPS: la evaluación NO se hace acá — vive en los
+ *   sub-slices `library/contributors/` (group scope check). Default
+ *   cerrado: si el caller no pasó la lógica de grupos, este helper
+ *   retorna false.
+ *
+ * `ADMIN_ONLY` fue eliminado (migration 20260504010000) — ver ADR
+ * `2026-05-04-library-contribution-policy-groups.md`.
  */
 export function canCreateInCategory(
   category: CategoryForPermissions,
@@ -45,12 +72,14 @@ export function canCreateInCategory(
 ): boolean {
   if (viewer.isAdmin) return true
   switch (category.contributionPolicy) {
-    case 'ADMIN_ONLY':
-      return false
     case 'DESIGNATED':
       return category.designatedUserIds.includes(viewer.userId)
     case 'MEMBERS_OPEN':
       return true
+    case 'SELECTED_GROUPS':
+      // Evaluado en `library/contributors/` con el group scope. Default
+      // cerrado acá si el caller no enriqueció la decisión.
+      return false
   }
 }
 

@@ -8,12 +8,30 @@ import {
   type LibraryViewer,
 } from '../domain/permissions'
 
-const adminViewer: LibraryViewer = { userId: 'admin-1', isAdmin: true }
-const memberViewer: LibraryViewer = { userId: 'member-1', isAdmin: false }
-const memberB: LibraryViewer = { userId: 'member-2', isAdmin: false }
+const adminViewer: LibraryViewer = {
+  userId: 'admin-1',
+  isAdmin: true,
+  isOwner: false,
+  groupIds: [],
+  tierIds: [],
+}
+const memberViewer: LibraryViewer = {
+  userId: 'member-1',
+  isAdmin: false,
+  isOwner: false,
+  groupIds: [],
+  tierIds: [],
+}
+const memberB: LibraryViewer = {
+  userId: 'member-2',
+  isAdmin: false,
+  isOwner: false,
+  groupIds: [],
+  tierIds: [],
+}
 
 const adminOnlyCat: CategoryForPermissions = {
-  contributionPolicy: 'ADMIN_ONLY',
+  contributionPolicy: 'DESIGNATED',
   designatedUserIds: [],
 }
 const designatedCat: CategoryForPermissions = {

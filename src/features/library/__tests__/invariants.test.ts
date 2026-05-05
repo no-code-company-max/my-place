@@ -77,13 +77,17 @@ describe('library invariants — categoría', () => {
 
   describe('validateContributionPolicy', () => {
     it('acepta los 3 valores válidos', () => {
-      expect(() => validateContributionPolicy('ADMIN_ONLY')).not.toThrow()
       expect(() => validateContributionPolicy('DESIGNATED')).not.toThrow()
       expect(() => validateContributionPolicy('MEMBERS_OPEN')).not.toThrow()
+      expect(() => validateContributionPolicy('SELECTED_GROUPS')).not.toThrow()
     })
 
     it('rechaza valor inventado', () => {
       expect(() => validateContributionPolicy('PUBLIC')).toThrow(ValidationError)
+    })
+
+    it('rechaza ADMIN_ONLY (eliminado en migration 20260504010000)', () => {
+      expect(() => validateContributionPolicy('ADMIN_ONLY')).toThrow(ValidationError)
     })
   })
 

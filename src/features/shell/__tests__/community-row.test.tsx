@@ -15,8 +15,8 @@ const basePlace = {
   billingMode: 'OWNER_PAYS' as const,
   archivedAt: null,
   createdAt: new Date('2026-01-01'),
-  role: 'MEMBER' as const,
   isOwner: false,
+  isAdmin: false,
   joinedAt: new Date('2026-01-15'),
 }
 
@@ -28,22 +28,22 @@ describe('CommunityRow', () => {
     expect(screen.getByText('T')).toBeInTheDocument() // initial
   })
 
-  it('rol "Miembro" cuando role=MEMBER e isOwner=false', () => {
+  it('rol "Miembro" cuando isAdmin=false e isOwner=false', () => {
     render(<CommunityRow place={basePlace} isCurrent={false} onSelect={vi.fn()} />)
     expect(screen.getByText('Miembro')).toBeInTheDocument()
   })
 
-  it('rol "Admin" cuando role=ADMIN', () => {
+  it('rol "Admin" cuando isAdmin=true', () => {
     render(
-      <CommunityRow place={{ ...basePlace, role: 'ADMIN' }} isCurrent={false} onSelect={vi.fn()} />,
+      <CommunityRow place={{ ...basePlace, isAdmin: true }} isCurrent={false} onSelect={vi.fn()} />,
     )
     expect(screen.getByText('Admin')).toBeInTheDocument()
   })
 
-  it('rol "Owner" cuando isOwner=true (override role)', () => {
+  it('rol "Owner" cuando isOwner=true (override isAdmin)', () => {
     render(
       <CommunityRow
-        place={{ ...basePlace, role: 'ADMIN', isOwner: true }}
+        place={{ ...basePlace, isAdmin: true, isOwner: true }}
         isCurrent={false}
         onSelect={vi.fn()}
       />,

@@ -42,7 +42,7 @@ export const reviewFlagInputSchema = z
     flagId: z.string().min(1),
     decision: z.enum(['REVIEWED_ACTIONED', 'REVIEWED_DISMISSED']),
     reviewNote: z.string().max(FLAG_NOTE_MAX_LENGTH).optional(),
-    sideEffect: z.enum(['HIDE_TARGET', 'DELETE_TARGET']).nullable().default(null),
+    sideEffect: z.enum(['HIDE_TARGET', 'DELETE_TARGET', 'CANCEL_EVENT']).nullable().default(null),
   })
   .refine((data) => data.decision !== 'REVIEWED_DISMISSED' || data.sideEffect === null, {
     message: 'Una revisión DISMISSED no puede llevar sideEffect.',

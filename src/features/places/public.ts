@@ -3,7 +3,7 @@
  * Ver `docs/architecture.md` § boundaries.
  */
 
-export type { Place, MyPlace, PlaceId, Slug, BillingMode, MembershipRole } from './domain/types'
+export type { Place, MyPlace, PlaceId, Slug, BillingMode } from './domain/types'
 export {
   createPlaceSchema,
   transferOwnershipSchema,
@@ -12,7 +12,7 @@ export {
 } from './schemas'
 export { assertMinOneOwner } from './domain/invariants'
 export { archivePlaceAction, createPlaceAction, transferOwnershipAction } from './server/actions'
-export { listMyPlaces } from './server/queries'
 export { PlaceCreateForm } from './ui/place-create-form'
 export { PlacesList } from './ui/places-list'
 export { TransferOwnershipForm } from './ui/transfer-ownership-form'
+export { TransferOwnershipSheet } from './ui/transfer-ownership-sheet'

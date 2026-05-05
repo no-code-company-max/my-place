@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { resolveViewerForPlace } from '@/features/discussions/public.server'
 import {
   CategoryHeaderBar,
   EmptyItemList,
@@ -11,6 +10,7 @@ import {
   findLibraryCategoryBySlug,
   listCategoryContributorUserIds,
   listItemsByCategory,
+  resolveLibraryViewer,
 } from '@/features/library/public.server'
 
 type Props = {
@@ -35,7 +35,7 @@ export default async function LibraryCategoryPage({ params }: Props) {
   const place = await loadPlaceBySlug(placeSlug)
   if (!place) notFound()
 
-  const viewer = await resolveViewerForPlace({ placeSlug })
+  const { viewer } = await resolveLibraryViewer({ placeSlug })
   const category = await findLibraryCategoryBySlug(place.id, categorySlug, {
     includeArchived: viewer.isAdmin,
   })
@@ -51,7 +51,7 @@ export default async function LibraryCategoryPage({ params }: Props) {
       contributionPolicy: category.contributionPolicy,
       designatedUserIds,
     },
-    { userId: viewer.actorId, isAdmin: viewer.isAdmin },
+    viewer,
   )
 
   const items = await listItemsByCategory(category.id)

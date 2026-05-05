@@ -1,6 +1,5 @@
 import 'server-only'
 import { cache } from 'react'
-import type { MembershipRole } from '@prisma/client'
 import { prisma } from '@/db/client'
 
 /**
@@ -18,10 +17,10 @@ import { prisma } from '@/db/client'
  */
 
 export const findActiveMembership = cache(
-  async (userId: string, placeId: string): Promise<{ id: string; role: MembershipRole } | null> => {
+  async (userId: string, placeId: string): Promise<{ id: string } | null> => {
     return prisma.membership.findFirst({
       where: { userId, placeId, leftAt: null },
-      select: { id: true, role: true },
+      select: { id: true },
     })
   },
 )
@@ -44,3 +43,22 @@ export const findUserProfile = cache(
     })
   },
 )
+
+/**
+ * `true` si el `userId` es membership de algún `PermissionGroup` preset del
+ * place (`group.isPreset === true`, naming convencional "Administradores").
+ * Reemplaza el legacy `Membership.role === 'ADMIN'` durante el cleanup G.7
+ * (ver `docs/decisions/2026-05-03-drop-membership-role-rls-impact.md`).
+ *
+ * Owner del place NO se chequea acá — los callers que necesiten "owner OR
+ * admin" componen con `findPlaceOwnership` (ver
+ * `members/server/queries.ts:findInviterPermissions` y
+ * `directory/server/directory-queries.ts:findMemberDetailForOwner`).
+ */
+export const findIsPlaceAdmin = cache(async (userId: string, placeId: string): Promise<boolean> => {
+  const row = await prisma.groupMembership.findFirst({
+    where: { userId, placeId, group: { isPreset: true } },
+    select: { id: true },
+  })
+  return row !== null
+})

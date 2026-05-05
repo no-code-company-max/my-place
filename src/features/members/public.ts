@@ -25,18 +25,30 @@ export type {
   InvitationDeliveryStatus,
   InvitationId,
   InviterPermissions,
-  MembershipRole,
   PendingInvitation,
 } from './domain/types'
 
 // ---------------------------------------------------------------
-// Schemas Zod
+// Schemas Zod + constants de moderación
 // ---------------------------------------------------------------
 export {
+  BLOCK_MEMBER_REASON_MAX_LENGTH,
+  EXPEL_MEMBER_REASON_MAX_LENGTH,
+  UNBLOCK_MEMBER_MESSAGE_MAX_LENGTH,
+  acceptInvitationTokenSchema,
+  blockMemberInputSchema,
+  expelMemberInputSchema,
   inviteMemberSchema,
+  leaveMembershipPlaceSlugSchema,
   resendInvitationSchema,
+  unblockMemberInputSchema,
+  type AcceptInvitationToken,
+  type BlockMemberInput,
+  type ExpelMemberInput,
   type InviteMemberInput,
+  type LeaveMembershipPlaceSlug,
   type ResendInvitationInput,
+  type UnblockMemberInput,
 } from './schemas'
 
 // ---------------------------------------------------------------
@@ -57,6 +69,9 @@ export { InviteMemberForm } from './ui/invite-form'
 export { AcceptInvitationView } from './ui/accept-invitation-view'
 export { LeaveButton } from './ui/leave-button'
 export { ResendInvitationButton } from './ui/resend-invitation-button'
+export { OwnersAccessPanel } from './ui/owners-access-panel'
+export { BlockMemberDialog } from './moderation/ui/block-member-dialog'
+export { ExpelMemberDialog } from './moderation/ui/expel-member-dialog'
 
 // ---------------------------------------------------------------
 // Helpers puros (sin imports server-only)

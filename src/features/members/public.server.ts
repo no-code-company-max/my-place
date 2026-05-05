@@ -25,6 +25,19 @@ export {
   type MemberProfile,
 } from './server/queries'
 
+// Directory queries (server-only) — sub-slice members/directory/
+export {
+  findMemberBlockInfo,
+  findMemberDetailForOwner,
+  searchMembers,
+  type MemberBlockInfo,
+  type MemberDetail,
+  type MemberSummary,
+} from './directory/server/directory-queries'
+
+// Permissions helper (server-only)
+export { hasPermission } from './server/permissions'
+
 // Server-only UI (consume queries internamente)
 export { PendingInvitationsList } from './ui/pending-invitations-list'
 

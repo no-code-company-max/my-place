@@ -45,14 +45,14 @@ export default async function MemberProfilePage({ params }: Props) {
   ])
   // Visitor debe ser miembro activo del place — sino, 404 (no podés ver perfiles de
   // un place al que no pertenecés).
-  if (!visitorPerms.role) {
+  if (!visitorPerms.isMember && !visitorPerms.isOwner) {
     notFound()
   }
   if (!profile) {
     notFound()
   }
 
-  const roleLabel = profile.isOwner ? 'owner' : profile.role === 'ADMIN' ? 'admin' : 'miembro'
+  const roleLabel = profile.isOwner ? 'owner' : profile.isAdmin ? 'admin' : 'miembro'
 
   return (
     <div className="space-y-8 p-8">

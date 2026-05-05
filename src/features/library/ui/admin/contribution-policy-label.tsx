@@ -6,12 +6,12 @@ import type { ContributionPolicy } from '@/features/library/public'
  */
 export function contributionPolicyLabel(policy: ContributionPolicy): string {
   switch (policy) {
-    case 'ADMIN_ONLY':
-      return 'Solo admins'
     case 'DESIGNATED':
       return 'Personas designadas'
     case 'MEMBERS_OPEN':
       return 'Cualquier miembro'
+    case 'SELECTED_GROUPS':
+      return 'Grupos seleccionados'
   }
 }
 
@@ -20,11 +20,11 @@ export function contributionPolicyLabel(policy: ContributionPolicy): string {
  */
 export function contributionPolicyDescription(policy: ContributionPolicy): string {
   switch (policy) {
-    case 'ADMIN_ONLY':
-      return 'Solo admins y owner pueden agregar contenido en esta categoría.'
     case 'DESIGNATED':
       return 'Solo los miembros que vos designes pueden agregar contenido (además de admins).'
     case 'MEMBERS_OPEN':
       return 'Cualquier miembro del place puede agregar contenido en esta categoría.'
+    case 'SELECTED_GROUPS':
+      return 'Sólo los miembros de los grupos que vos asignes pueden agregar contenido (además de admins).'
   }
 }

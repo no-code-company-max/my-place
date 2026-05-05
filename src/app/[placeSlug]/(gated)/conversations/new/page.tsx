@@ -1,12 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import {
-  PostComposer,
-  canEditPost,
-  findPostById,
-  resolveViewerForPlace,
-} from '@/features/discussions/public'
+import { PostComposer, canEditPost } from '@/features/discussions/public'
+import { findPostById, resolveViewerForPlace } from '@/features/discussions/public.server'
 
 export const metadata: Metadata = {
   title: 'Nueva conversación',

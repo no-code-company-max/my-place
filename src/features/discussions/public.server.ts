@@ -31,3 +31,37 @@ export {
   type DiscussionActor,
   type DiscussionViewer,
 } from './server/actor'
+
+// Queries Prisma + page size constants. Viven server-only porque
+// importan `import 'server-only'` directo o transitivo. Cualquier
+// Server Component / Server Action que las necesite las consume desde
+// este barrel; Client Components pasan por `public.ts` (sin queries).
+export {
+  COMMENT_PAGE_SIZE,
+  POST_PAGE_SIZE,
+  findCommentById,
+  findPostById,
+  findPostBySlug,
+  listCommentsByPost,
+  listPostsByPlace,
+  listReadersByPost,
+  type CommentView,
+  type PostReader,
+} from './server/queries'
+
+export {
+  aggregateReactions,
+  reactionMapKey,
+  type AggregatedReaction,
+  type ReactionAggregationMap,
+} from './server/reactions-aggregation'
+
+export { findOrCreateCurrentOpening } from './server/place-opening'
+
+// Server Components que importan queries/aggregation server-only directo.
+// No pueden viajar via `public.ts` porque Next traza los imports al bundle
+// del cliente cuando algún Client Component los importa transitivamente.
+export { CommentThread } from './ui/comment-thread'
+export { PostDetail } from './ui/post-detail'
+export { PostList } from './ui/post-list'
+export { PostReadersBlock } from './ui/post-readers-block'

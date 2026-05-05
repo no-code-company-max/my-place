@@ -18,7 +18,7 @@ import {
   CATEGORY_TITLE_MIN_LENGTH,
   ITEM_COVER_URL_MAX_LENGTH,
 } from './domain/invariants'
-import { CONTRIBUTION_POLICY_VALUES } from './domain/types'
+import { CONTRIBUTION_POLICY_VALUES, LIBRARY_CATEGORY_KIND_VALUES } from './domain/types'
 
 // ---------------------------------------------------------------
 // Building blocks
@@ -35,10 +35,15 @@ const titleSchema = z
 const emojiSchema = z.string().min(CATEGORY_EMOJI_MIN_LENGTH).max(CATEGORY_EMOJI_MAX_LENGTH)
 
 const contributionPolicySchema = z.enum([
-  'ADMIN_ONLY',
   'DESIGNATED',
   'MEMBERS_OPEN',
+  'SELECTED_GROUPS',
 ] as const satisfies readonly (typeof CONTRIBUTION_POLICY_VALUES)[number][])
+
+const categoryKindSchema = z.enum([
+  'GENERAL',
+  'COURSE',
+] as const satisfies readonly (typeof LIBRARY_CATEGORY_KIND_VALUES)[number][])
 
 // ---------------------------------------------------------------
 // Inputs por action
@@ -48,7 +53,9 @@ export const createCategoryInputSchema = z.object({
   placeId: z.string().min(1),
   emoji: emojiSchema,
   title: titleSchema,
-  contributionPolicy: contributionPolicySchema.optional().default('ADMIN_ONLY'),
+  contributionPolicy: contributionPolicySchema.optional().default('MEMBERS_OPEN'),
+  /** G.5+6.b (2026-05-04): GENERAL = lista plana, COURSE = wizard prereqs. */
+  kind: categoryKindSchema.optional().default('GENERAL'),
 })
 export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>
 
@@ -57,6 +64,7 @@ export const updateCategoryInputSchema = z.object({
   emoji: emojiSchema,
   title: titleSchema,
   contributionPolicy: contributionPolicySchema,
+  kind: categoryKindSchema.optional(),
 })
 export type UpdateCategoryInput = z.infer<typeof updateCategoryInputSchema>
 
@@ -90,6 +98,39 @@ export const removeContributorInputSchema = z.object({
 })
 export type RemoveContributorInput = z.infer<typeof removeContributorInputSchema>
 
+/**
+ * Override completo del scope de grupos de una categoría library.
+ * Pasar `groupIds: []` deja la categoría sin grupos asignados.
+ *
+ * Cap `.max(50)` consistente con `reorderCategoriesInputSchema` —
+ * 50 grupos es muy por encima del uso esperado (un place típico
+ * tiene 2-5 grupos) y protege contra payloads abusivos. La validación
+ * de pertenencia al place se hace en la action.
+ */
+export const setLibraryCategoryGroupScopeInputSchema = z.object({
+  categoryId: z.string().min(1),
+  groupIds: z.array(z.string().min(1)).max(50),
+})
+export type SetLibraryCategoryGroupScopeInput = z.infer<
+  typeof setLibraryCategoryGroupScopeInputSchema
+>
+
+/**
+ * Override completo de la lista de contribuidores designados de una
+ * categoría. Pasar `userIds: []` deja la categoría sin contribuidores.
+ *
+ * Cap `.max(150)` alineado con el invariante `MAX_MEMBERS_PER_PLACE`:
+ * jamás puede haber más users designados que miembros activos del
+ * place. La validación de membership se hace en la action.
+ */
+export const setLibraryCategoryDesignatedContributorsInputSchema = z.object({
+  categoryId: z.string().min(1),
+  userIds: z.array(z.string().min(1)).max(150),
+})
+export type SetLibraryCategoryDesignatedContributorsInput = z.infer<
+  typeof setLibraryCategoryDesignatedContributorsInputSchema
+>
+
 // ---------------------------------------------------------------
 // Items (R.7.6)
 // ---------------------------------------------------------------
@@ -118,6 +159,10 @@ export const updateItemInputSchema = z.object({
   title: itemTitleSchema,
   body: richTextDocumentSchema,
   coverUrl: coverUrlSchema,
+  /** Versión del Post al momento de abrir el editor (optimistic locking).
+   *  Si otro editor pisó el item entremedio, `updateMany` matchea 0 filas
+   *  → ConflictError. Ver `update-item.ts`. */
+  expectedVersion: z.number().int().min(0),
 })
 export type UpdateItemInput = z.infer<typeof updateItemInputSchema>
 

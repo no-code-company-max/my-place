@@ -6,6 +6,8 @@ const placeFindUnique = vi.fn()
 const placeCreate = vi.fn()
 const ownershipCreate = vi.fn()
 const membershipCreate = vi.fn()
+const permissionGroupCreate = vi.fn()
+const groupMembershipCreate = vi.fn()
 const transactionFn = vi.fn()
 const getUserFn = vi.fn()
 const revalidatePathFn = vi.fn()
@@ -21,6 +23,12 @@ vi.mock('@/db/client', () => ({
     },
     membership: {
       create: (...args: unknown[]) => membershipCreate(...args),
+    },
+    permissionGroup: {
+      create: (...args: unknown[]) => permissionGroupCreate(...args),
+    },
+    groupMembership: {
+      create: (...args: unknown[]) => groupMembershipCreate(...args),
     },
     $transaction: (fn: (tx: unknown) => unknown) => transactionFn(fn),
   },
@@ -38,6 +46,16 @@ vi.mock('next/cache', () => ({
 
 vi.mock('server-only', () => ({}))
 
+vi.mock('@/shared/config/env', () => ({
+  clientEnv: {
+    NEXT_PUBLIC_APP_URL: 'http://lvh.me:3000',
+    NEXT_PUBLIC_APP_DOMAIN: 'lvh.me:3000',
+    NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+  },
+  serverEnv: { SUPABASE_SERVICE_ROLE_KEY: 'service', NODE_ENV: 'test' },
+}))
+
 import { createPlaceAction } from '../server/actions'
 
 const validInput = {
@@ -54,9 +72,16 @@ beforeEach(() => {
   placeCreate.mockReset()
   ownershipCreate.mockReset()
   membershipCreate.mockReset()
+  permissionGroupCreate.mockReset()
+  groupMembershipCreate.mockReset()
   transactionFn.mockReset()
   getUserFn.mockReset()
   revalidatePathFn.mockReset()
+
+  // Default mock for the preset PermissionGroup insert; tests that need a
+  // distinct id can override per-call.
+  permissionGroupCreate.mockResolvedValue({ id: 'group-preset-1' })
+  groupMembershipCreate.mockResolvedValue({})
 
   // Default: runs the inner transaction callback against a tx proxy.
   transactionFn.mockImplementation((fn: (tx: unknown) => unknown) =>
@@ -64,6 +89,8 @@ beforeEach(() => {
       place: { create: placeCreate },
       placeOwnership: { create: ownershipCreate },
       membership: { create: membershipCreate },
+      permissionGroup: { create: permissionGroupCreate },
+      groupMembership: { create: groupMembershipCreate },
     }),
   )
 })
@@ -110,12 +137,14 @@ describe('createPlaceAction', () => {
     await expect(createPlaceAction(validInput)).rejects.toBeInstanceOf(ConflictError)
   })
 
-  it('happy path: crea Place + PlaceOwnership + Membership(ADMIN) en transacción', async () => {
+  it('happy path: crea Place + PlaceOwnership + Membership + preset PermissionGroup + GroupMembership en transacción', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue(null)
     placeCreate.mockResolvedValue({ id: 'place-1', slug: 'my-place' })
     ownershipCreate.mockResolvedValue({})
     membershipCreate.mockResolvedValue({})
+    permissionGroupCreate.mockResolvedValue({ id: 'group-preset-1' })
+    groupMembershipCreate.mockResolvedValue({})
 
     const res = await createPlaceAction(validInput)
 
@@ -135,7 +164,18 @@ describe('createPlaceAction', () => {
       data: { userId: 'user-1', placeId: 'place-1' },
     })
     expect(membershipCreate).toHaveBeenCalledWith({
-      data: { userId: 'user-1', placeId: 'place-1', role: 'ADMIN' },
+      data: { userId: 'user-1', placeId: 'place-1' },
+    })
+    expect(permissionGroupCreate).toHaveBeenCalledTimes(1)
+    expect(permissionGroupCreate.mock.calls[0]?.[0]).toMatchObject({
+      data: expect.objectContaining({
+        placeId: 'place-1',
+        isPreset: true,
+      }),
+      select: { id: true },
+    })
+    expect(groupMembershipCreate).toHaveBeenCalledWith({
+      data: { userId: 'user-1', placeId: 'place-1', groupId: 'group-preset-1' },
     })
     expect(revalidatePathFn).toHaveBeenCalledWith('/inbox')
   })
@@ -156,5 +196,7 @@ describe('createPlaceAction', () => {
     expect(transactionFn).toHaveBeenCalledTimes(2)
     expect(ownershipCreate).toHaveBeenCalledTimes(2)
     expect(membershipCreate).toHaveBeenCalledTimes(2)
+    expect(permissionGroupCreate).toHaveBeenCalledTimes(2)
+    expect(groupMembershipCreate).toHaveBeenCalledTimes(2)
   })
 })

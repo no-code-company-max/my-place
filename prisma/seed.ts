@@ -1,8 +1,12 @@
-import { PrismaClient, BillingMode, MembershipRole } from '@prisma/client'
+import { PrismaClient, BillingMode } from '@prisma/client'
 
 /**
  * Seed mínimo para desarrollo local.
- * Crea 1 usuario, 1 place en modo OWNER_PAYS, su ownership y membership ADMIN.
+ * Crea 1 usuario, 1 place en modo OWNER_PAYS, su ownership y membership.
+ * El admin status se deriva de membership al `PermissionGroup` preset
+ * "Administradores", que el flujo de creación de place crea en una sola tx
+ * (`places/server/actions:createPlaceAction`). Acá el seed crea solo
+ * Membership + Ownership para el dev local — los grupos los configurás vía UI.
  * No se usa en tests E2E (esos arman su propia fixture).
  */
 const prisma = new PrismaClient()
@@ -41,7 +45,6 @@ async function main() {
     create: {
       userId: user.id,
       placeId: place.id,
-      role: MembershipRole.ADMIN,
     },
   })
 

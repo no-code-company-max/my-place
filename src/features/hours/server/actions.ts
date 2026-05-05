@@ -40,7 +40,7 @@ export async function updatePlaceHoursAction(input: unknown): Promise<{ ok: true
   }
 
   const perms = await findMemberPermissions(actorId, place.id)
-  if (!perms.isOwner && perms.role !== 'ADMIN') {
+  if (!perms.isAdmin) {
     throw new AuthorizationError('Solo admins y owners pueden editar el horario.', {
       placeId: place.id,
       actorId,

@@ -1,9 +1,9 @@
 import 'server-only'
 import { cache } from 'react'
 import { prisma } from '@/db/client'
-import type { MembershipRole } from '@prisma/client'
 import {
   findActiveMembership as cachedFindActiveMembership,
+  findIsPlaceAdmin,
   findPlaceOwnership,
 } from '@/shared/lib/identity-cache'
 import type {
@@ -32,11 +32,16 @@ export async function countActiveMemberships(placeId: string): Promise<number> {
 
 export const findInviterPermissions = cache(
   async (userId: string, placeId: string): Promise<InviterPermissions> => {
-    const [membership, isOwner] = await Promise.all([
+    const [membership, isOwner, isAdminPreset] = await Promise.all([
       cachedFindActiveMembership(userId, placeId),
       findPlaceOwnership(userId, placeId),
+      findIsPlaceAdmin(userId, placeId),
     ])
-    return { role: membership?.role ?? null, isOwner }
+    return {
+      isMember: membership !== null,
+      isOwner,
+      isAdmin: isOwner || isAdminPreset,
+    }
   },
 )
 
@@ -67,6 +72,7 @@ export async function findInvitationByToken(token: string): Promise<InvitationWi
       email: true,
       invitedBy: true,
       asAdmin: true,
+      asOwner: true,
       acceptedAt: true,
       expiresAt: true,
       token: true,
@@ -91,6 +97,7 @@ export async function findInvitationById(
       email: true,
       invitedBy: true,
       asAdmin: true,
+      asOwner: true,
       acceptedAt: true,
       expiresAt: true,
       token: true,
@@ -124,6 +131,7 @@ export async function listPendingInvitationsByPlace(
       email: true,
       invitedBy: true,
       asAdmin: true,
+      asOwner: true,
       acceptedAt: true,
       expiresAt: true,
       token: true,
@@ -148,6 +156,7 @@ export async function listPendingInvitationsByPlace(
     email: r.email,
     invitedBy: r.invitedBy,
     asAdmin: r.asAdmin,
+    asOwner: r.asOwner,
     acceptedAt: r.acceptedAt,
     expiresAt: r.expiresAt,
     token: r.token,
@@ -169,19 +178,21 @@ export const findActiveMembership = cachedFindActiveMembership
 export type ActiveMember = {
   userId: string
   membershipId: string
-  role: MembershipRole
   joinedAt: Date
   isOwner: boolean
+  /** Membership al grupo preset del place. Owner ⇒ true. */
+  isAdmin: boolean
   user: { displayName: string; handle: string | null; avatarUrl: string | null }
 }
 
 /**
- * Lista los miembros activos del place con `isOwner` derivado de `PlaceOwnership`.
- * Ordenado por antigüedad ascendente — el primer miembro es el creador (o quien
- * haya quedado como owner más antiguo tras transferencias).
+ * Lista los miembros activos del place con `isOwner` derivado de
+ * `PlaceOwnership` y `isAdmin` derivado de `GroupMembership` al preset.
+ * Ordenado por antigüedad ascendente — el primer miembro es el creador
+ * (o quien haya quedado como owner más antiguo tras transferencias).
  */
 export async function listActiveMembers(placeId: string): Promise<ActiveMember[]> {
-  const [memberships, ownerships] = await Promise.all([
+  const [memberships, ownerships, presetMemberships] = await Promise.all([
     prisma.membership.findMany({
       where: { placeId, leftAt: null },
       include: {
@@ -193,24 +204,33 @@ export async function listActiveMembers(placeId: string): Promise<ActiveMember[]
       where: { placeId },
       select: { userId: true },
     }),
+    prisma.groupMembership.findMany({
+      where: { placeId, group: { isPreset: true } },
+      select: { userId: true },
+    }),
   ])
   const ownerIds = new Set(ownerships.map((o) => o.userId))
-  return memberships.map((m) => ({
-    userId: m.userId,
-    membershipId: m.id,
-    role: m.role,
-    joinedAt: m.joinedAt,
-    isOwner: ownerIds.has(m.userId),
-    user: m.user,
-  }))
+  const adminUserIds = new Set(presetMemberships.map((g) => g.userId))
+  return memberships.map((m) => {
+    const isOwner = ownerIds.has(m.userId)
+    return {
+      userId: m.userId,
+      membershipId: m.id,
+      joinedAt: m.joinedAt,
+      isOwner,
+      isAdmin: isOwner || adminUserIds.has(m.userId),
+      user: m.user,
+    }
+  })
 }
 
 export type MemberProfile = {
   userId: string
   membershipId: string
-  role: MembershipRole
   joinedAt: Date
   isOwner: boolean
+  /** Membership al grupo preset del place. Owner ⇒ true. */
+  isAdmin: boolean
   user: { displayName: string; handle: string | null; avatarUrl: string | null }
 }
 
@@ -223,12 +243,11 @@ export async function findMemberProfile(
   placeId: string,
   userId: string,
 ): Promise<MemberProfile | null> {
-  const [membership, ownership] = await Promise.all([
+  const [membership, ownership, isAdminPreset] = await Promise.all([
     prisma.membership.findFirst({
       where: { userId, placeId, leftAt: null },
       select: {
         id: true,
-        role: true,
         joinedAt: true,
         user: { select: { displayName: true, handle: true, avatarUrl: true } },
       },
@@ -237,14 +256,16 @@ export async function findMemberProfile(
       where: { userId_placeId: { userId, placeId } },
       select: { userId: true },
     }),
+    findIsPlaceAdmin(userId, placeId),
   ])
   if (!membership) return null
+  const isOwner = !!ownership
   return {
     userId,
     membershipId: membership.id,
-    role: membership.role,
     joinedAt: membership.joinedAt,
-    isOwner: !!ownership,
+    isOwner,
+    isAdmin: isOwner || isAdminPreset,
     user: membership.user,
   }
 }

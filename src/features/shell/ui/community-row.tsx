@@ -37,7 +37,7 @@ const COMMUNITY_PALETTE: ReadonlyArray<string> = [
 export function CommunityRow({ place, isCurrent, onSelect }: Props): React.ReactNode {
   const initial = (place.name.trim()[0] ?? '?').toUpperCase()
   const color = COMMUNITY_PALETTE[hashToIndex(place.slug, COMMUNITY_PALETTE.length)]
-  const roleLabel = place.isOwner ? 'Owner' : place.role === 'ADMIN' ? 'Admin' : 'Miembro'
+  const roleLabel = place.isOwner ? 'Owner' : place.isAdmin ? 'Admin' : 'Miembro'
 
   return (
     <button

@@ -1,5 +1,5 @@
 import 'server-only'
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 
 /**
  * Revalida las rutas afectadas por un cambio sobre una categoría o
@@ -8,12 +8,29 @@ import { revalidatePath } from 'next/cache'
  * Next cachea por path exacto, así que cada bucket
  * (`/library`, `/library/[slug]`, `/settings/library`) debe listarse
  * explícitamente.
+ *
+ * L.PERF (2026-05-04): además del `revalidatePath`, invalidamos el
+ * bucket de `unstable_cache` cuyas keys tienen tag
+ * `place:<placeId>:library-categories` para que las queries
+ * `listLibraryCategories`, `findLibraryCategoryBySlug` y
+ * `countLibraryCategories` re-ejecuten en el próximo render. Sin el tag
+ * las cache entries quedarían stale hasta el próximo `revalidate: 30`.
+ * Si `placeId` no se pasa (callers legacy que sólo conocen el slug),
+ * el `revalidateTag` se omite (el `revalidatePath` ya basta para el
+ * uso actual).
  */
-export function revalidateLibraryCategoryPaths(placeSlug: string, categorySlug?: string): void {
+export function revalidateLibraryCategoryPaths(
+  placeSlug: string,
+  categorySlug?: string,
+  placeId?: string,
+): void {
   revalidatePath(`/${placeSlug}/library`)
   revalidatePath(`/${placeSlug}/settings/library`)
   if (categorySlug) {
     revalidatePath(`/${placeSlug}/library/${categorySlug}`)
+  }
+  if (placeId) {
+    revalidateTag(`place:${placeId}:library-categories`)
   }
 }
 

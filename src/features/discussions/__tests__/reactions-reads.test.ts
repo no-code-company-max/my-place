@@ -1,11 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { MembershipRole, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { NotFoundError, OutOfHoursError, ValidationError } from '@/shared/errors/domain-error'
 
 const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const postFindUnique = vi.fn()
 const commentFindUnique = vi.fn()
 const reactionCreate = vi.fn()
@@ -25,6 +26,9 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
     post: { findUnique: (...a: unknown[]) => postFindUnique(...a) },
     comment: { findUnique: (...a: unknown[]) => commentFindUnique(...a) },
     reaction: {
@@ -60,11 +64,12 @@ vi.mock('server-only', () => ({}))
 import { reactAction, unreactAction } from '../server/actions/reactions'
 import { markPostReadAction } from '../server/actions/reads'
 
-function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
+function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: 'user-1' } } })
   placeFindUnique.mockResolvedValue({ id: 'place-1', slug: 'the-place', archivedAt: null })
-  membershipFindFirst.mockResolvedValue({ id: 'm-1', role })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue(opts.asAdmin ? { id: 'gm-mock' } : null)
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
   assertPlaceOpenFn.mockResolvedValue(undefined)
 }

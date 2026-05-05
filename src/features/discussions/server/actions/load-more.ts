@@ -6,7 +6,11 @@ import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import type { PostListView } from '@/features/discussions/domain/types'
 import { postListFilterSchema } from '@/features/discussions/domain/filter'
 import { resolveActorForPlace } from '../actor'
-import { listCommentsByPost, listPostsByPlace, type CommentView } from '../queries'
+import { listPostsByPlace } from '../queries'
+import {
+  listCommentsByPost,
+  type CommentView,
+} from '@/features/discussions/comments/server/queries/comments'
 
 /**
  * Cursor serializado para load-more. El callsite cliente recibe `nextCursor`

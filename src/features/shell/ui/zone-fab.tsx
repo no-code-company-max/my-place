@@ -1,98 +1,58 @@
-'use client'
-
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Sparkles } from 'lucide-react'
-import { FAB } from '@/shared/ui/fab'
-import { DropdownMenuItem } from '@/shared/ui/dropdown-menu'
-import { ZONES } from '../domain/zones'
-import { isZoneRootPath } from '../domain/swiper-snap'
+import { Suspense } from 'react'
+import { canCreateInAnyCategoryForViewer } from '@/features/library/public.server'
+import { ZoneFabClient } from './zone-fab-client'
 
 /**
- * Orquestador del FAB cross-zona (R.2.6) — wrappea el primitivo
- * `<FAB>` con la lógica de visibilidad y los items del menú.
+ * Wrapper Server del FAB cross-zona (R.2.6) — separa el lookup de
+ * `canCreateInAnyCategoryForViewer` (1 round-trip al pooler Postgres
+ * en el peor caso para members no admin) del shell paint del layout
+ * (gated).
  *
- * Visibilidad:
- *  - Solo zonas root (`/`, `/conversations`, `/events`, `/library`)
- *    vía `isZoneRootPath` reusado de R.2.5 (mismo gate del swiper).
- *  - Sub-pages (thread detail, event detail, /m/, new forms): retorna
- *    null. El user está enfocado en algo específico, "Nueva
- *    discusión" sería ruido.
- *  - `/settings/*`: este componente NO se monta ahí porque vive en
- *    `(gated)/layout.tsx`, settings está fuera del gated.
- *  - PlaceClosedView: `(gated)/layout.tsx` retorna PlaceClosedView
- *    antes de mountar este componente.
+ * Contexto del refactor (2026-05-04): antes el `(gated)/layout.tsx`
+ * resolvía `canCreateLibraryResource` con un `await` previo al
+ * render, lo cual bloqueaba TODAS las pages bajo `(gated)` por una
+ * capability que solo el FAB consume. Ahora el lookup vive dentro
+ * del propio `<ZoneFab>` envuelto en `<Suspense fallback={null}>`:
+ * Next streamea el shell + zona inmediatamente y el FAB aparece en
+ * cuanto la query resuelve. Si la query falla o tarda, el shell
+ * sigue interactivo.
  *
- * Items del menú (MVP, hardcoded):
- *  - "Nueva discusión" → `/conversations/new`.
- *  - "Proponer evento" → `/events/new`.
- *  - "Nuevo recurso" → `/library` (R.7.X follow-up). El user
- *    elige categoría desde la zona biblioteca y ahí crea via
- *    "Crear el primero" (empty state) o navegando a la categoría.
- *    Pickr cross-categoría como sub-modal queda diferido.
+ * `fallback={null}` evita flicker visible: el FAB no tiene "estado
+ * de carga"; o se muestra (canCreate=true) o no (canCreate=false).
+ * Mientras Suspende, simplemente no hay nada renderizado — idéntico
+ * al estado final cuando canCreate=false. Cuando resuelve, el FAB
+ * "aparece" recién entonces, lo que es aceptable para un overlay
+ * decorativo (no es contenido principal de la zona).
  *
- * Mismo set en las 4 zonas (no zona-aware en MVP — costo cognitivo
- * de "el menú cambia según donde estoy" supera el beneficio para una
- * app de 150 members). Futuro: si producto pide priorizar acción de
- * la zona actual, agregar reorder/highlight (no breaking).
+ * Boundary: el import a `@/features/library/public.server` es
+ * cross-slice válido (shell → library) vía la public surface
+ * top-level del slice. La query usa el `prisma` singleton (service
+ * role) y bypassea RLS; `placeId` y `userId` ya fueron validados
+ * por el layout padre (auth + membership + hours).
  *
- * Boundary: NO importa de `discussions` ni `events` — los paths son
- * strings literales. Cero violación de aislamiento.
- *
- * Ver `docs/features/shell/spec.md` § 17 + ADR
- * `docs/decisions/2026-04-26-zone-fab.md`.
+ * El componente cliente (`<ZoneFabClient>`) sigue siendo un Client
+ * Component porque depende de `usePathname()` para decidir
+ * visibilidad por zona. Ver `zone-fab-client.tsx` para la lógica.
  */
-const ZONE_PATHS = ZONES.map((z) => z.path)
+type Props = {
+  placeId: string
+  userId: string
+  isAdmin: boolean
+}
 
-export function ZoneFab(): React.ReactNode {
-  const pathname = usePathname()
-  // El FAB se muestra en zonas root + sub-page de categoría library.
-  // En `/library/[cat]` el item "Nuevo recurso" linkea directo a
-  // `/library/[cat]/new` (sin selector de categoría). En zonas root
-  // linkea a `/library/new` (con selector). Excepción a la regla
-  // "solo zonas root" de R.2.6 — necesaria para que el flow "estoy
-  // adentro de Recetas y quiero subir algo nuevo a Recetas" sea 1
-  // tap sin volver a /library.
-  if (!isZoneRootPath(pathname, ZONE_PATHS) && !isLibraryCategorySubpage(pathname)) {
-    return null
-  }
-
-  const newResourceHref = computeNewResourceHref(pathname)
-
+export function ZoneFab(props: Props): React.ReactNode {
   return (
-    <FAB icon={<Sparkles size={20} aria-hidden="true" />} triggerLabel="Acciones">
-      <DropdownMenuItem asChild>
-        <Link href="/conversations/new">Nueva discusión</Link>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <Link href="/events/new">Proponer evento</Link>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <Link href={newResourceHref}>Nuevo recurso</Link>
-      </DropdownMenuItem>
-    </FAB>
+    <Suspense fallback={null}>
+      <ZoneFabResolver {...props} />
+    </Suspense>
   )
 }
 
-/**
- * `/library/<slug>` (sub-page de categoría) — pero NO sub-paths más
- * profundos (`/library/<slug>/<item>` o `/library/<slug>/new`).
- */
-function isLibraryCategorySubpage(pathname: string): boolean {
-  const normalized = pathname.replace(/\/+$/, '') || '/'
-  return /^\/library\/[^/]+$/.test(normalized)
-}
-
-/**
- * Resuelve la URL del item "Nuevo recurso" del FAB según el
- * pathname actual:
- *  - `/library/[categorySlug]` → `/library/[categorySlug]/new`
- *    (form con categoría fija).
- *  - cualquier otro path → `/library/new` (form con selector).
- */
-function computeNewResourceHref(pathname: string): string {
-  const normalized = pathname.replace(/\/+$/, '') || '/'
-  const match = normalized.match(/^\/library\/([^/]+)$/)
-  if (match) return `/library/${match[1]}/new`
-  return '/library/new'
+async function ZoneFabResolver({ placeId, userId, isAdmin }: Props) {
+  const canCreateLibraryResource = await canCreateInAnyCategoryForViewer({
+    placeId,
+    userId,
+    isAdmin,
+  })
+  return <ZoneFabClient canCreateLibraryResource={canCreateLibraryResource} />
 }

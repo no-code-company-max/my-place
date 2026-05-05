@@ -1,0 +1,15 @@
+# Vercel ignora `.git` y `node_modules` por default.
+# Acá agregamos lo específico del repo: artefactos de tests, scripts de
+# scaffolding, y carpetas de output local que no deben subir al deploy.
+
+# Playwright + E2E artefactos (storageState con cookies sensibles, traces, reports).
+playwright-report/
+tests/.auth/
+test-results/
+
+# Output de scripts perf locales (no usados en runtime).
+scripts/perf/run-output/
+
+# Logs locales.
+*.log
+.env.local

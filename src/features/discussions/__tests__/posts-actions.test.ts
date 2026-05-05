@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { MembershipRole, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import {
   AuthorizationError,
   ConflictError,
@@ -12,6 +12,7 @@ const placeFindUnique = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
 const userFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const postCreate = vi.fn()
 const postFindUnique = vi.fn()
 const postFindMany = vi.fn()
@@ -27,6 +28,9 @@ vi.mock('@/db/client', () => ({
     membership: { findFirst: (...a: unknown[]) => membershipFindFirst(...a) },
     placeOwnership: { findUnique: (...a: unknown[]) => ownershipFindUnique(...a) },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
+    },
     post: {
       create: (...a: unknown[]) => postCreate(...a),
       findUnique: (...a: unknown[]) => postFindUnique(...a),
@@ -76,11 +80,12 @@ const bodyDoc = {
   content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hola' }] }],
 }
 
-function mockActiveMember(role: MembershipRole = MembershipRole.MEMBER): void {
+function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: 'user-1' } } })
   placeFindUnique.mockResolvedValue({ id: 'place-1', slug: 'the-place', archivedAt: null })
-  membershipFindFirst.mockResolvedValue({ id: 'm-1', role })
+  membershipFindFirst.mockResolvedValue({ id: 'm-1' })
   ownershipFindUnique.mockResolvedValue(null)
+  groupMembershipFindFirst.mockResolvedValue(opts.asAdmin ? { id: 'gm-mock' } : null)
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
   assertPlaceOpenFn.mockResolvedValue(undefined)
 }
@@ -289,7 +294,7 @@ describe('editPostAction', () => {
   })
 
   it('admin puede editar un post ajeno fuera de la ventana de 60s', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -436,7 +441,7 @@ describe('editPostAction', () => {
   })
 
   it('admin no necesita token (aunque lo mande, se ignora)', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -487,7 +492,7 @@ describe('openPostEditSession', () => {
   })
 
   it('admin: adminBypass sin token', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -518,7 +523,7 @@ describe('openPostEditSession', () => {
 
 describe('hidePostAction', () => {
   it('AuthorizationError si no es admin', async () => {
-    mockActiveMember(MembershipRole.MEMBER)
+    mockActiveMember()
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -530,7 +535,7 @@ describe('hidePostAction', () => {
   })
 
   it('ADMIN hide happy path', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -544,7 +549,7 @@ describe('hidePostAction', () => {
 
 describe('deletePostAction', () => {
   it('admin borra post ajeno via hard delete', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',
@@ -577,7 +582,7 @@ describe('deletePostAction', () => {
   })
 
   it('NotFoundError si el post no existe', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue(null)
     await expect(deletePostAction({ postId: 'po-1', expectedVersion: 0 })).rejects.toBeInstanceOf(
       NotFoundError,
@@ -586,7 +591,7 @@ describe('deletePostAction', () => {
   })
 
   it('ConflictError si expectedVersion no matchea', async () => {
-    mockActiveMember(MembershipRole.ADMIN)
+    mockActiveMember({ asAdmin: true })
     postFindUnique.mockResolvedValue({
       id: 'po-1',
       placeId: 'place-1',

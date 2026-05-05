@@ -1,8 +1,8 @@
 import 'server-only'
-import type { MembershipRole } from '@prisma/client'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import {
   findActiveMembership,
+  findIsPlaceAdmin,
   findPlaceOwnership,
   findUserProfile,
 } from '@/shared/lib/identity-cache'
@@ -12,8 +12,8 @@ import { AuthorizationError, NotFoundError } from '@/shared/errors/domain-error'
 /**
  * Actor resuelto para una acción del slice `flags`. Semánticamente idéntico a
  * `DiscussionActor`: un user + su contexto en un place + si es admin
- * (rol `ADMIN` o `PlaceOwnership`). Duplicado acá a propósito para que `flags`
- * no dependa de `discussions/server/actor` — ver
+ * (membership al `PermissionGroup` preset o `PlaceOwnership`). Duplicado acá
+ * a propósito para que `flags` no dependa de `discussions/server/actor` — ver
  * `docs/decisions/2026-04-21-flags-subslice-split.md` §3. Si a futuro un
  * tercer slice necesita el mismo helper, candidato a subir a `shared/lib/`.
  *
@@ -23,7 +23,7 @@ export type FlagActor = {
   actorId: string
   placeId: string
   placeSlug: string
-  membership: { id: string; role: MembershipRole }
+  membership: { id: string }
   isAdmin: boolean
   user: {
     displayName: string
@@ -53,9 +53,10 @@ export async function resolveActorForPlace(params: {
     throw new NotFoundError('Place archivado.', { placeId: place.id })
   }
 
-  const [membership, isOwner, user] = await Promise.all([
+  const [membership, isOwner, isAdminPreset, user] = await Promise.all([
     findActiveMembership(actorId, place.id),
     findPlaceOwnership(actorId, place.id),
+    findIsPlaceAdmin(actorId, place.id),
     findUserProfile(actorId),
   ])
 
@@ -71,7 +72,7 @@ export async function resolveActorForPlace(params: {
     placeId: place.id,
     placeSlug: place.slug,
     membership,
-    isAdmin: membership.role === 'ADMIN' || isOwner,
+    isAdmin: isOwner || isAdminPreset,
     user,
   }
 }

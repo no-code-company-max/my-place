@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { resolveViewerForPlace } from '@/features/discussions/public.server'
 import { LibraryItemForm, canCreateInCategory } from '@/features/library/public'
 import {
   findLibraryCategoryBySlug,
   listCategoryContributorUserIds,
+  resolveLibraryViewer,
 } from '@/features/library/public.server'
 
 type Props = {
@@ -31,7 +31,7 @@ export default async function NewLibraryItemPage({ params }: Props) {
   const place = await loadPlaceBySlug(placeSlug)
   if (!place || place.archivedAt) notFound()
 
-  const viewer = await resolveViewerForPlace({ placeSlug })
+  const { viewer } = await resolveLibraryViewer({ placeSlug })
 
   const category = await findLibraryCategoryBySlug(place.id, categorySlug)
   if (!category) notFound()
@@ -46,7 +46,7 @@ export default async function NewLibraryItemPage({ params }: Props) {
       contributionPolicy: category.contributionPolicy,
       designatedUserIds,
     },
-    { userId: viewer.actorId, isAdmin: viewer.isAdmin },
+    viewer,
   )
   if (!canCreate) notFound()
 

@@ -69,7 +69,7 @@ export function CategoryFormDialog({ mode, trigger }: Props): React.ReactNode {
 
   const initialValues: FormValues =
     mode.kind === 'create'
-      ? { emoji: '', title: '', contributionPolicy: 'ADMIN_ONLY' }
+      ? { emoji: '', title: '', contributionPolicy: 'MEMBERS_OPEN' }
       : {
           emoji: mode.initialEmoji,
           title: mode.initialTitle,

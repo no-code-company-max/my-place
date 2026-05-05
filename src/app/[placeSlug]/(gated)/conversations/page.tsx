@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
+import { parsePostListFilter } from '@/features/discussions/public'
 import {
   PostList,
   listPostsByPlace,
-  parsePostListFilter,
   resolveViewerForPlace,
-} from '@/features/discussions/public'
+} from '@/features/discussions/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string }>

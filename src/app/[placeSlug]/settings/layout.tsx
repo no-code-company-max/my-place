@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { findMemberPermissions } from '@/features/members/public.server'
+import { SettingsNavFab } from '@/features/shell/public'
 
 type Props = {
   children: React.ReactNode
@@ -31,9 +32,19 @@ export default async function SettingsLayout({ children, params }: Props) {
   }
 
   const perms = await findMemberPermissions(auth.id, place.id)
-  if (!perms.isOwner && perms.role !== 'ADMIN') {
+  if (!perms.isAdmin) {
     notFound()
   }
 
-  return <>{children}</>
+  // FAB de sub-navegación entre settings — único affordance para saltar entre
+  // General · Horarios · Biblioteca · Acceso · Miembros · Reportes sin volver
+  // al inbox. Sibling de `{children}` (no wrapper), patrón coherente con
+  // `<ZoneFab>` en `(gated)/layout.tsx`. Visibilidad gateada por este layout
+  // (admin/owner ya validado arriba); el componente no es admin-aware.
+  return (
+    <>
+      {children}
+      <SettingsNavFab isOwner={perms.isOwner} />
+    </>
+  )
 }

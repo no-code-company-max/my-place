@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { MembershipRole } from '@prisma/client'
 import {
   PLACE_MAX_MEMBERS,
-  assertInviterHasRole,
+  assertInviterHasAdminAccess,
   assertPlaceActive,
   assertPlaceHasCapacity,
   generateInvitationToken,
@@ -24,27 +23,29 @@ describe('assertPlaceHasCapacity', () => {
   })
 })
 
-describe('assertInviterHasRole', () => {
-  it('acepta owner sin membership', () => {
-    expect(() => assertInviterHasRole({ role: null, isOwner: true })).not.toThrow()
+describe('assertInviterHasAdminAccess', () => {
+  it('acepta owner (isAdmin=true por herencia)', () => {
+    expect(() =>
+      assertInviterHasAdminAccess({ isMember: true, isOwner: true, isAdmin: true }),
+    ).not.toThrow()
   })
 
-  it('acepta owner con membership MEMBER (inusual pero posible)', () => {
-    expect(() => assertInviterHasRole({ role: MembershipRole.MEMBER, isOwner: true })).not.toThrow()
+  it('acepta admin de preset group sin ownership', () => {
+    expect(() =>
+      assertInviterHasAdminAccess({ isMember: true, isOwner: false, isAdmin: true }),
+    ).not.toThrow()
   })
 
-  it('acepta ADMIN sin ownership', () => {
-    expect(() => assertInviterHasRole({ role: MembershipRole.ADMIN, isOwner: false })).not.toThrow()
-  })
-
-  it('rechaza MEMBER simple con AuthorizationError', () => {
-    expect(() => assertInviterHasRole({ role: MembershipRole.MEMBER, isOwner: false })).toThrow(
-      AuthorizationError,
-    )
+  it('rechaza miembro simple con AuthorizationError', () => {
+    expect(() =>
+      assertInviterHasAdminAccess({ isMember: true, isOwner: false, isAdmin: false }),
+    ).toThrow(AuthorizationError)
   })
 
   it('rechaza ausencia de permisos con AuthorizationError', () => {
-    expect(() => assertInviterHasRole({ role: null, isOwner: false })).toThrow(AuthorizationError)
+    expect(() =>
+      assertInviterHasAdminAccess({ isMember: false, isOwner: false, isAdmin: false }),
+    ).toThrow(AuthorizationError)
   })
 })
 

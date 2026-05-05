@@ -5,6 +5,7 @@ const placeFindUnique = vi.fn()
 const placeUpdate = vi.fn()
 const membershipFindFirst = vi.fn()
 const ownershipFindUnique = vi.fn()
+const groupMembershipFindFirst = vi.fn()
 const getUserFn = vi.fn()
 const revalidatePathFn = vi.fn()
 
@@ -19,6 +20,9 @@ vi.mock('@/db/client', () => ({
     },
     placeOwnership: {
       findUnique: (...a: unknown[]) => ownershipFindUnique(...a),
+    },
+    groupMembership: {
+      findFirst: (...a: unknown[]) => groupMembershipFindFirst(...a),
     },
   },
 }))
@@ -60,8 +64,11 @@ beforeEach(() => {
   placeUpdate.mockReset()
   membershipFindFirst.mockReset()
   ownershipFindUnique.mockReset()
+  groupMembershipFindFirst.mockReset()
   getUserFn.mockReset()
   revalidatePathFn.mockReset()
+  // Default: ningún preset GroupMembership (no es admin via grupos).
+  groupMembershipFindFirst.mockResolvedValue(null)
 })
 
 describe('updatePlaceHoursAction', () => {
@@ -123,8 +130,9 @@ describe('updatePlaceHoursAction', () => {
       slug: 'the-company',
       archivedAt: null,
     })
-    membershipFindFirst.mockResolvedValue({ role: 'MEMBER' })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue(null)
     await expect(updatePlaceHoursAction(validInput)).rejects.toBeInstanceOf(AuthorizationError)
   })
 
@@ -135,8 +143,11 @@ describe('updatePlaceHoursAction', () => {
       slug: 'the-company',
       archivedAt: null,
     })
-    membershipFindFirst.mockResolvedValue({ role: 'ADMIN' })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    // Admin-via-preset-group (G.7 cleanup): GroupMembership al preset
+    // Administradores marca isAdmin=true vía findIsPlaceAdmin.
+    groupMembershipFindFirst.mockResolvedValue({ id: 'gm-1' })
     placeUpdate.mockResolvedValue({})
 
     const res = await updatePlaceHoursAction(validInput)
@@ -156,15 +167,17 @@ describe('updatePlaceHoursAction', () => {
     expect(revalidatePathFn).toHaveBeenCalledWith('/the-company', 'layout')
   })
 
-  it('happy path owner sin role ADMIN también pasa', async () => {
+  it('happy path owner (sin GroupMembership preset) también pasa', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue({
       id: 'place-1',
       slug: 'the-company',
       archivedAt: null,
     })
-    membershipFindFirst.mockResolvedValue({ role: 'MEMBER' })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
+    // Owner ⇒ isAdmin via findInviterPermissions.isOwner||isAdminPreset.
     ownershipFindUnique.mockResolvedValue({ userId: 'user-1' })
+    groupMembershipFindFirst.mockResolvedValue(null)
     placeUpdate.mockResolvedValue({})
 
     await expect(updatePlaceHoursAction(validInput)).resolves.toEqual({ ok: true })
@@ -178,8 +191,9 @@ describe('updatePlaceHoursAction', () => {
       slug: 'the-company',
       archivedAt: null,
     })
-    membershipFindFirst.mockResolvedValue({ role: 'ADMIN' })
+    membershipFindFirst.mockResolvedValue({ id: 'm-1' })
     ownershipFindUnique.mockResolvedValue(null)
+    groupMembershipFindFirst.mockResolvedValue({ id: 'gm-1' })
     placeUpdate.mockResolvedValue({})
 
     const input = {

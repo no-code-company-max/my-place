@@ -7,6 +7,27 @@ import path from 'node:path'
  */
 const isProd = process.env.NODE_ENV === 'production'
 
+/**
+ * Hostname del bucket público de Supabase Storage (avatares hoy, futuros
+ * covers de library). Derivado de `NEXT_PUBLIC_SUPABASE_URL`: el host del
+ * proyecto Supabase sirve `/storage/v1/object/public/<bucket>/<path>`.
+ *
+ * Si la env no está al cargar config, devolvemos undefined y `remotePatterns`
+ * queda sin entry de Supabase — el optimizer rechaza el host en runtime con
+ * un 400 explícito (mejor que cachear default 60s sobre un host no permitido).
+ */
+function supabaseStorageHostname(): string | undefined {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!raw) return undefined
+  try {
+    return new URL(raw).hostname
+  } catch {
+    return undefined
+  }
+}
+
+const supabaseHost = supabaseStorageHostname()
+
 const cspDirectives = [
   "default-src 'self'",
   // Next necesita 'unsafe-inline' para hydration en dev. En prod usar nonces cuando se agregue SSR de formularios.
@@ -59,6 +80,29 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
+  },
+  // Caché agresivo para avatares (y futuros covers de library) servidos vía
+  // `next/image`. El optimizer de Next proxea las URLs externas, las
+  // re-emite optimizadas y devuelve `Cache-Control: public, max-age=<TTL>`.
+  //
+  // - `minimumCacheTTL = 31536000` (1 año) → el browser y el CDN cachean
+  //   por un año sin revalidar. Safe porque los paths de Supabase Storage
+  //   incluyen el UUID del file: un upload nuevo genera URL nueva, no reuso.
+  // - `remotePatterns` permite el host de Supabase Storage (avatares hoy,
+  //   covers mañana). Se omite si `NEXT_PUBLIC_SUPABASE_URL` no está
+  //   disponible al build — el optimizer responderá 400 hasta que se setee.
+  //
+  // OJO: el header `immutable` literal NO se puede setear desde acá; Next
+  // sólo emite `public, max-age=...` en el optimizer. Para servir avatares
+  // **directo** desde `<supabase>.supabase.co` (bypass del optimizer) hay
+  // que pasar `cacheControl: '31536000'` en `storage.upload(..., options)`.
+  // Ese upload helper todavía no existe en el repo; cuando se sume, el slice
+  // dueño debe setear el cacheControl ahí.
+  images: {
+    minimumCacheTTL: 31536000,
+    remotePatterns: supabaseHost
+      ? [{ protocol: 'https', hostname: supabaseHost, pathname: '/storage/v1/object/public/**' }]
+      : [],
   },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]

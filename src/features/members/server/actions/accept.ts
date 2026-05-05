@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { MembershipRole, Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
 import { logger } from '@/shared/lib/logger'
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
@@ -118,9 +118,35 @@ async function acceptInvitationTx(
         data: {
           userId: actorId,
           placeId: invitation.placeId,
-          role: invitation.asAdmin ? MembershipRole.ADMIN : MembershipRole.MEMBER,
         },
       })
+
+      // Si la invitación es admin, sumamos al user al PermissionGroup preset
+      // del place. El preset tiene `permissions: PERMISSIONS_ALL` y se crea
+      // junto al place (ver `places/server/actions:createPlaceAction`); si
+      // por algún motivo no existe (caso edge muy raro de scaffolding), lo
+      // dejamos pasar con un warn — el accept no debe fallar por eso, ya
+      // que el owner puede asignar grupos manualmente desde /settings/access.
+      if (invitation.asAdmin) {
+        const preset = await tx.permissionGroup.findFirst({
+          where: { placeId: invitation.placeId, isPreset: true },
+          select: { id: true },
+        })
+        if (preset) {
+          await tx.groupMembership.create({
+            data: {
+              userId: actorId,
+              placeId: invitation.placeId,
+              groupId: preset.id,
+            },
+          })
+        } else {
+          logger.warn(
+            { placeId: invitation.placeId, invitationId: invitation.id },
+            'admin invitation accepted but preset group missing',
+          )
+        }
+      }
 
       await tx.invitation.updateMany({
         where: { id: invitation.id, acceptedAt: null },

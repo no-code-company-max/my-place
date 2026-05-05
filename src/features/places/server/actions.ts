@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { Prisma, MembershipRole } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
 import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { logger } from '@/shared/lib/logger'
@@ -11,6 +11,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/domain-error'
+import { ADMIN_PRESET_NAME, presetPermissions } from '@/features/groups/public'
 import {
   createPlaceSchema,
   transferOwnershipSchema,
@@ -21,8 +22,10 @@ import { assertMinOneOwner, assertSlugFormat, assertSlugNotReserved } from '../d
 import { findPlaceBySlug, findPlaceOwnership } from './queries'
 
 /**
- * Crea un place + PlaceOwnership + Membership(ADMIN) del creador en una transacción.
- * Ver `docs/features/places/spec.md` § "Crear un place".
+ * Crea un place + PlaceOwnership + Membership + PermissionGroup preset
+ * + GroupMembership del creador al preset, todo en una transacción.
+ * El preset hereda `permissions: PERMISSIONS_ALL` y queda como entry-point
+ * de admin del place. Ver `docs/features/places/spec.md` § "Crear un place".
  */
 export async function createPlaceAction(
   input: unknown,
@@ -70,9 +73,13 @@ function parseCreatePlaceInput(input: unknown): CreatePlaceInput {
 }
 
 /**
- * Tx del create: tres inserts atómicos (place + ownership + membership del
- * creador como ADMIN). El caller maneja P2002 fuera de la tx y mapea a
- * `ConflictError` con copy final de usuario.
+ * Tx del create: cinco inserts atómicos (place + ownership + membership +
+ * preset PermissionGroup + group membership del creador al preset). El
+ * preset es el entry-point de admin: cualquier asignación posterior de
+ * "admin" pasa por agregar miembros a este grupo.
+ *
+ * El caller maneja P2002 fuera de la tx y mapea a `ConflictError` con
+ * copy final de usuario.
  */
 async function createPlaceTx(
   tx: Prisma.TransactionClient,
@@ -90,7 +97,19 @@ async function createPlaceTx(
   })
   await tx.placeOwnership.create({ data: { userId: actorId, placeId: created.id } })
   await tx.membership.create({
-    data: { userId: actorId, placeId: created.id, role: MembershipRole.ADMIN },
+    data: { userId: actorId, placeId: created.id },
+  })
+  const preset = await tx.permissionGroup.create({
+    data: {
+      placeId: created.id,
+      name: ADMIN_PRESET_NAME,
+      isPreset: true,
+      permissions: presetPermissions(),
+    },
+    select: { id: true },
+  })
+  await tx.groupMembership.create({
+    data: { userId: actorId, placeId: created.id, groupId: preset.id },
   })
   return created
 }

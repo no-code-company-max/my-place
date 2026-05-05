@@ -28,6 +28,7 @@
     "prisma:migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "prisma:migrate:status": "dotenv -e .env.local -- prisma migrate status",
     "prisma:studio": "dotenv -e .env.local -- prisma studio",
+    "perf": "dotenv -e .env.local -- tsx scripts/perf/measure-perf.ts",
     "prisma:seed": "dotenv -e .env.local -- tsx prisma/seed.ts",
     "prepare": "husky",
     "ci": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build"

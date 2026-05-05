@@ -1,29 +1,26 @@
+import { Suspense } from 'react'
 import { notFound, permanentRedirect } from 'next/navigation'
-import { prisma } from '@/db/client'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { logger } from '@/shared/lib/logger'
 import {
-  CommentThread,
   DwellTracker,
   PostAdminMenu,
-  PostDetail,
-  PostReadersBlock,
   ReactionBar,
   ThreadHeaderBar,
   ThreadPresence,
+} from '@/features/discussions/public'
+import {
+  PostDetail,
   aggregateReactions,
   findOrCreateCurrentOpening,
   findPostBySlug,
-  listCommentsByPost,
-  listReadersByPost,
   reactionMapKey,
   resolveViewerForPlace,
-  type PostReader,
   type ReactionAggregationMap,
-} from '@/features/discussions/public'
-import type { QuoteTargetState } from '@/features/discussions/public'
+} from '@/features/discussions/public.server'
 import { EventActionsMenu, EventMetadataHeader } from '@/features/events/public'
 import { getEvent } from '@/features/events/public.server'
+import { CommentsSection, CommentsSkeleton } from './_comments-section'
 
 type Props = { params: Promise<{ placeSlug: string; postSlug: string }> }
 
@@ -39,6 +36,11 @@ type Props = { params: Promise<{ placeSlug: string; postSlug: string }> }
  *
  * `pb-32` reserva espacio para el `<CommentComposer>` que vive `fixed
  * bottom-0` — sin este padding el último comment quedaría tapado.
+ *
+ * Streaming: el shell (header + PostDetail / EventMetadataHeader +
+ * ReactionBar del POST) pinta primero. Comments + readers + quoteState
+ * viven bajo `<Suspense>` en `<CommentsSection>` (sibling
+ * `_comments-section.tsx`) — esas queries son las más pesadas.
  */
 export default async function PostDetailPage({ params }: Props) {
   const { placeSlug, postSlug } = await params
@@ -77,12 +79,16 @@ export default async function PostDetailPage({ params }: Props) {
   // (`post.event` poblado en `findPostBySlug`), levantamos el detalle
   // completo del evento y renderizamos `EventMetadataHeader` arriba del
   // PostDetail. Sin event poblado, la page se comporta como antes (Post
-  // standalone).
-  const [{ items: comments, nextCursor }, eventDetail] = await Promise.all([
-    listCommentsByPost({
-      postId: post.id,
-      includeDeleted: viewer.isAdmin,
-    }),
+  // standalone). El detail del evento es shell-crítico (header del thread
+  // muestra título/fecha/lugar), así que NO va dentro del Suspense.
+  //
+  // Reactions del POST: solo necesitamos las del propio post para pintar
+  // la `<ReactionBar>` del shell (PostDetail o EventMetadataHeader). Las
+  // de los comments se agregan dentro de `<CommentsSection>` junto con
+  // las del POST en una sola call combinada — esto causa una pequeña
+  // duplicación (1 fetch del POST acá + 1 batch combinado en el suspense)
+  // a cambio de que la bar del POST pinte sin esperar el listado.
+  const [eventDetail, postReactions] = await Promise.all([
     post.event
       ? getEvent({
           eventId: post.event.id,
@@ -90,28 +96,10 @@ export default async function PostDetailPage({ params }: Props) {
           viewerUserId: viewer.actorId,
         })
       : Promise.resolve(null),
-  ])
-
-  // Group 3: reactions + quoteState + readers. `listReadersByPost` depende
-  // de post.id y opening.id, ambos ya disponibles. Si no hay opening,
-  // pasamos array vacío (el componente devuelve null en ese caso).
-  const [reactionsByKey, quoteStateByCommentId, readers] = await Promise.all([
     aggregateReactions({
-      targets: [
-        { type: 'POST', id: post.id },
-        ...comments.map((c) => ({ type: 'COMMENT' as const, id: c.id })),
-      ],
+      targets: [{ type: 'POST', id: post.id }],
       viewerUserId: viewer.actorId,
     }) as Promise<ReactionAggregationMap>,
-    resolveQuoteTargetStates(comments),
-    opening
-      ? listReadersByPost({
-          postId: post.id,
-          placeId: place.id,
-          placeOpeningId: opening.id,
-          excludeUserId: viewer.actorId,
-        })
-      : Promise.resolve([] as PostReader[]),
   ])
 
   // Resolver el rightSlot del ThreadHeaderBar:
@@ -156,7 +144,7 @@ export default async function PostDetailPage({ params }: Props) {
             <ReactionBar
               targetType="POST"
               targetId={post.id}
-              initial={reactionsByKey.get(reactionMapKey('POST', post.id)) ?? []}
+              initial={postReactions.get(reactionMapKey('POST', post.id)) ?? []}
             />
           </div>
         </>
@@ -165,48 +153,20 @@ export default async function PostDetailPage({ params }: Props) {
           post={post}
           viewerUserId={viewer.actorId}
           placeSlug={viewer.placeSlug}
-          reactions={reactionsByKey.get(reactionMapKey('POST', post.id)) ?? []}
+          reactions={postReactions.get(reactionMapKey('POST', post.id)) ?? []}
         />
       )}
 
-      <div className="mt-3">
-        <PostReadersBlock readers={readers} />
-      </div>
-
-      <CommentThread
-        postId={post.id}
-        placeSlug={viewer.placeSlug}
-        viewerUserId={viewer.actorId}
-        viewerIsAdmin={viewer.isAdmin}
-        items={comments}
-        nextCursor={
-          nextCursor ? { createdAt: nextCursor.createdAt.toISOString(), id: nextCursor.id } : null
-        }
-        reactionsByKey={reactionsByKey}
-        quoteStateByCommentId={quoteStateByCommentId}
-      />
+      <Suspense fallback={<CommentsSkeleton />}>
+        <CommentsSection
+          postId={post.id}
+          placeId={place.id}
+          placeSlug={viewer.placeSlug}
+          viewerUserId={viewer.actorId}
+          viewerIsAdmin={viewer.isAdmin}
+          placeOpeningId={opening?.id ?? null}
+        />
+      </Suspense>
     </div>
   )
-}
-
-/**
- * Resuelve el estado actual (VISIBLE/DELETED) de todos los comments citados
- * presentes en la página. Permite al renderer mostrar `[mensaje eliminado]`
- * cuando el target fue borrado desde que se congeló el snapshot. Una sola
- * query `IN (...)` sobre los ids.
- */
-async function resolveQuoteTargetStates(
-  comments: Array<{ quotedCommentId: string | null }>,
-): Promise<Map<string, QuoteTargetState>> {
-  const ids = comments.map((c) => c.quotedCommentId).filter((v): v is string => v !== null)
-  if (ids.length === 0) return new Map()
-  const rows = await prisma.comment.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, deletedAt: true },
-  })
-  const map = new Map<string, QuoteTargetState>()
-  for (const row of rows) {
-    map.set(row.id, row.deletedAt ? 'DELETED' : 'VISIBLE')
-  }
-  return map
 }

@@ -18,15 +18,20 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@supabase/supabase-js'
-import { BillingMode, MembershipRole, PlaceOpeningSource, PrismaClient } from '@prisma/client'
+import { BillingMode, PlaceOpeningSource, PrismaClient } from '@prisma/client'
 import type { Prisma } from '@prisma/client'
 
 import {
   E2E_BASELINE_POST_SLUG,
   E2E_DISPLAY_NAMES,
   E2E_EMAILS,
+  E2E_GROUP_MEMBERSHIPS,
+  E2E_GROUPS,
+  E2E_LIBRARY_CATEGORIES,
+  E2E_LIBRARY_ITEMS,
   E2E_PLACES,
   E2E_ROLES,
+  E2E_TIERS,
   type E2ERole,
 } from './e2e-data'
 
@@ -75,9 +80,49 @@ async function wipeE2EContent(placeIds: string[]): Promise<void> {
     where: { post: { placeId: { in: placeIds } } },
   })
   await prisma.comment.deleteMany({ where: { placeId: { in: placeIds } } })
+  // Library: completions y items cascadean por Post (FK Cascade), pero los
+  // borramos explícito para defendernos de items huérfanos creados por specs
+  // que dejaron Post manual sin pasar por la action. Orden FK-safe:
+  // completion → item → contributor → readScopes → category. Los read
+  // scopes y contributors cascadean del category; quedan listados acá
+  // como `defensive deleteMany` para corridas donde la FK Cascade no
+  // limpió por algún motivo (ej: state inconsistente entre runs).
+  await prisma.libraryItemCompletion.deleteMany({
+    where: { item: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryItem.deleteMany({ where: { placeId: { in: placeIds } } })
+  await prisma.libraryCategoryContributor.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryCategoryGroupReadScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryCategoryTierReadScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryCategoryUserReadScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
   await prisma.post.deleteMany({ where: { placeId: { in: placeIds } } })
+  // Library categories ya sin items (Restrict de LibraryItem.categoryId
+  // satisfecho). Cascadea contributors/readScopes/groupCategoryScope.
+  await prisma.libraryCategory.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.placeOpening.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.invitation.deleteMany({ where: { placeId: { in: placeIds } } })
+  // Groups: orden FK-safe (scopes → memberships → groups). El delete de
+  // `permissionGroup` cubre tanto los baseline (con id estable) como
+  // cualquier temp group que un spec mutativo haya dejado huérfano por
+  // un afterAll que falló — defensivo.
+  await prisma.groupCategoryScope.deleteMany({
+    where: { group: { placeId: { in: placeIds } } },
+  })
+  await prisma.groupMembership.deleteMany({ where: { placeId: { in: placeIds } } })
+  await prisma.permissionGroup.deleteMany({ where: { placeId: { in: placeIds } } })
+  // Tiers: tierMembership Restrict desde Tier → borrar memberships antes
+  // del tier. Membership del User al Place se borra después (membership
+  // table es independiente de tierMembership).
+  await prisma.tierMembership.deleteMany({ where: { placeId: { in: placeIds } } })
+  await prisma.tier.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.membership.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.placeOwnership.deleteMany({ where: { placeId: { in: placeIds } } })
 }
@@ -152,19 +197,46 @@ async function main(): Promise<void> {
 
   await prisma.membership.createMany({
     data: [
-      { userId: userIds.owner, placeId: palermoId, role: MembershipRole.ADMIN },
-      { userId: userIds.owner, placeId: belgranoId, role: MembershipRole.ADMIN },
-      { userId: userIds.admin, placeId: palermoId, role: MembershipRole.ADMIN },
-      { userId: userIds.memberA, placeId: palermoId, role: MembershipRole.MEMBER },
-      { userId: userIds.memberB, placeId: belgranoId, role: MembershipRole.MEMBER },
+      { userId: userIds.owner, placeId: palermoId },
+      { userId: userIds.owner, placeId: belgranoId },
+      { userId: userIds.admin, placeId: palermoId },
+      { userId: userIds.memberA, placeId: palermoId },
+      { userId: userIds.memberB, placeId: belgranoId },
       {
         userId: userIds.exMember,
         placeId: palermoId,
-        role: MembershipRole.MEMBER,
         leftAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
       },
     ],
   })
+
+  // Groups baseline (palermo). Wipe ya borró todos los groups de los placeIds
+  // E2E al inicio, así que estos creates parten de un estado limpio (idempotente
+  // a nivel run completo del seed). IDs deterministas con prefijo `grp_e2e_*`.
+  for (const groupKey of Object.keys(E2E_GROUPS) as Array<keyof typeof E2E_GROUPS>) {
+    const g = E2E_GROUPS[groupKey]
+    await prisma.permissionGroup.create({
+      data: {
+        id: g.id,
+        placeId: g.placeId,
+        name: g.name,
+        isPreset: g.isPreset,
+        permissions: [...g.permissions],
+      },
+    })
+    console.log(`[e2e-seed] group ${groupKey} (${g.name}) → ${g.id}`)
+  }
+  for (const gm of E2E_GROUP_MEMBERSHIPS) {
+    const group = E2E_GROUPS[gm.groupKey]
+    await prisma.groupMembership.create({
+      data: {
+        userId: userIds[gm.userRole],
+        placeId: group.placeId,
+        groupId: group.id,
+      },
+    })
+  }
+  console.log(`[e2e-seed] group memberships → ${E2E_GROUP_MEMBERSHIPS.length} rows`)
 
   const openingStart = new Date(Date.now() - 24 * 60 * 60 * 1000)
   for (const placeId of placeIds) {
@@ -203,6 +275,102 @@ async function main(): Promise<void> {
       body: baselineBody('Baseline post en Belgrano E2E.'),
     },
   })
+
+  // -------------------------------------------------------------
+  // Tiers baseline (palermo). Wipe ya borró todos los tiers de los
+  // placeIds E2E al inicio, así que los creates parten de un estado
+  // limpio (idempotente a nivel run completo del seed).
+  // -------------------------------------------------------------
+  for (const tierKey of Object.keys(E2E_TIERS) as Array<keyof typeof E2E_TIERS>) {
+    const t = E2E_TIERS[tierKey]
+    await prisma.tier.create({
+      data: {
+        id: t.id,
+        placeId: t.placeId,
+        name: t.name,
+        priceCents: t.priceCents,
+        duration: t.duration,
+        visibility: t.visibility,
+      },
+    })
+    console.log(`[e2e-seed] tier ${tierKey} (${t.name}) → ${t.id}`)
+  }
+
+  // -------------------------------------------------------------
+  // Library categories baseline (palermo). Idem tiers: wipe limpia
+  // todo, los creates corren sobre estado vacío.
+  // -------------------------------------------------------------
+  for (const catKey of Object.keys(E2E_LIBRARY_CATEGORIES) as Array<
+    keyof typeof E2E_LIBRARY_CATEGORIES
+  >) {
+    const c = E2E_LIBRARY_CATEGORIES[catKey]
+    await prisma.libraryCategory.create({
+      data: {
+        id: c.id,
+        placeId: c.placeId,
+        slug: c.slug,
+        title: c.title,
+        emoji: c.emoji,
+        position: c.position,
+        contributionPolicy: c.policy,
+        kind: c.kind,
+        readAccessKind: c.readAccessKind,
+      },
+    })
+    // Contributors designados por la fixture.
+    for (const role of c.contributorRoles) {
+      await prisma.libraryCategoryContributor.create({
+        data: {
+          categoryId: c.id,
+          userId: userIds[role],
+          // Inviter por convención: owner del place. Sólo se usa para
+          // audit log; los specs no lo testean.
+          invitedByUserId: userIds.owner,
+        },
+      })
+    }
+    console.log(
+      `[e2e-seed] library category ${catKey} (${c.slug}) → ${c.id} ` +
+        `contributors=${c.contributorRoles.length}`,
+    )
+  }
+
+  // -------------------------------------------------------------
+  // Library items baseline (palermo). Cada item necesita un Post 1:1
+  // (FK unique). Creamos Post + LibraryItem en par, ambos con IDs
+  // deterministas y placeId/authorUserId consistentes (invariante del
+  // slice library).
+  // -------------------------------------------------------------
+  for (const itemKey of Object.keys(E2E_LIBRARY_ITEMS) as Array<keyof typeof E2E_LIBRARY_ITEMS>) {
+    const it = E2E_LIBRARY_ITEMS[itemKey]
+    const cat = E2E_LIBRARY_CATEGORIES[it.categoryKey]
+    const authorUserId = userIds[it.authorRole]
+    const authorDisplayName = E2E_DISPLAY_NAMES[it.authorRole]
+    const authorSnapshot = { displayName: authorDisplayName, avatarUrl: null }
+
+    await prisma.post.create({
+      data: {
+        id: it.postId,
+        placeId: it.placeId,
+        authorUserId,
+        authorSnapshot,
+        title: it.title,
+        slug: it.postSlug,
+        body: baselineBody(`${it.title} — baseline E2E.`),
+      },
+    })
+    await prisma.libraryItem.create({
+      data: {
+        id: it.id,
+        placeId: it.placeId,
+        categoryId: cat.id,
+        postId: it.postId,
+        authorUserId,
+        authorSnapshot,
+      },
+    })
+    console.log(`[e2e-seed] library item ${itemKey} (${it.postSlug}) → ${it.id}`)
+  }
 
   console.log('[e2e-seed] done:', {
     users: userIds,

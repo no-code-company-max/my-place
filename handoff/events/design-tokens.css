@@ -1,0 +1,84 @@
+/* ──────────────────────────────────────────────────────────
+ * My place — Design Tokens
+ *
+ * Copy this into your app/globals.css (or equivalent).
+ * These tokens are the source of truth for the visual system
+ * and are shared across all slices.
+ *
+ * Theme is "warm" by default (the production default).
+ * ────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Surfaces & text ── */
+  --bg: oklch(0.985 0.006 75);
+  --surface: oklch(1 0 0);
+  --text: oklch(0.22 0.008 60);
+  --muted: oklch(0.55 0.012 60);
+  --soft: oklch(0.95 0.008 75);
+  --border: oklch(0.9 0.008 75);
+  --dot: oklch(0.82 0.008 75);
+
+  /* ── Accent ── */
+  --accent: #b5633a;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+
+  /* ── Density (regular default) ── */
+  --pad: 14px;
+  --radius-card: 16px;
+
+  /* ── Type ── */
+  --title-font: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  --body-font: 'Inter', -apple-system, system-ui, sans-serif;
+  --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ── Density variants (apply to a wrapping element if needed) ── */
+[data-density='compact'] {
+  --pad: 12px;
+  --radius-card: 14px;
+}
+[data-density='comfy'] {
+  --pad: 18px;
+  --radius-card: 20px;
+}
+
+/* ── Theme variants (toggle via [data-theme="cool|mono|dark"]) ── */
+[data-theme='cool'] {
+  --bg: oklch(0.985 0.004 240);
+  --surface: oklch(1 0 0);
+  --text: oklch(0.22 0.01 250);
+  --muted: oklch(0.55 0.014 245);
+  --soft: oklch(0.95 0.008 240);
+  --border: oklch(0.9 0.01 240);
+  --dot: oklch(0.82 0.008 240);
+}
+[data-theme='mono'] {
+  --bg: oklch(0.99 0 0);
+  --surface: oklch(1 0 0);
+  --text: oklch(0.18 0 0);
+  --muted: oklch(0.52 0 0);
+  --soft: oklch(0.95 0 0);
+  --border: oklch(0.9 0 0);
+  --dot: oklch(0.8 0 0);
+}
+[data-theme='dark'] {
+  --bg: oklch(0.18 0.006 70);
+  --surface: oklch(0.22 0.008 70);
+  --text: oklch(0.97 0.004 75);
+  --muted: oklch(0.65 0.01 70);
+  --soft: oklch(0.25 0.01 70);
+  --border: oklch(0.3 0.01 70);
+  --dot: oklch(0.4 0.01 70);
+}
+
+/* ── Member avatar palette (for deterministic colors) ── */
+:root {
+  --member-1: #c0825b;
+  --member-2: #7a8c5a;
+  --member-3: #4f6b85;
+  --member-4: #8b6aa3;
+  --member-5: #b08a3e;
+  --member-6: #8a5a2b;
+  --member-7: #9a6b4e;
+  --member-8: #5e7d6f;
+}

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { resolveViewerForPlace } from '@/features/discussions/public.server'
 import { PostComposerWrapper } from '@/features/discussions/public'
+import { getEditorConfigForPlace } from '@/features/editor-config/public.server'
 
 export const metadata: Metadata = {
   title: 'Nueva conversación',
@@ -18,8 +19,8 @@ type Props = {
  * del slice `rich-text` con `createPostAction` + resolvers de mention
  * importados de `members/events/library`.
  *
- * `enabledEmbeds`: por ahora todos true; F.5 lo lee de
- * `Place.editorPluginsConfig`.
+ * `enabledEmbeds`: F.5 lee `Place.editorPluginsConfig` via
+ * `getEditorConfigForPlace` (cacheado por `unstable_cache` + tag).
  */
 export default async function NewPostPage({ params }: Props) {
   const { placeSlug } = await params
@@ -30,6 +31,8 @@ export default async function NewPostPage({ params }: Props) {
   // re-validamos para evitar render inútil del composer si timing raro.
   await resolveViewerForPlace({ placeSlug })
 
+  const enabledEmbeds = await getEditorConfigForPlace(place.id)
+
   return (
     <div className="space-y-6 p-4 md:p-8">
       <header>
@@ -38,15 +41,7 @@ export default async function NewPostPage({ params }: Props) {
           Sin apuro. Escribí y publicá cuando tenga sentido.
         </p>
       </header>
-      <PostComposerWrapper
-        placeId={place.id}
-        enabledEmbeds={{
-          youtube: true,
-          spotify: true,
-          applePodcasts: true,
-          ivoox: true,
-        }}
-      />
+      <PostComposerWrapper placeId={place.id} enabledEmbeds={enabledEmbeds} />
     </div>
   )
 }

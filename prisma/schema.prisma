@@ -76,6 +76,13 @@ model Place {
 
   enabledFeatures Json @default("[\"conversations\",\"events\",\"members\"]")
 
+  // F.5 (2026-05-06): toggles por place de los 4 plugins de embed del editor
+  // (YouTube, Spotify, Apple Podcasts, Ivoox). Default abierto. Schema Zod
+  // canónico vive en `@/features/editor-config/public`. La columna controla
+  // **creación** (qué embeds ofrece el composer), no rendering retroactivo —
+  // contenido pre-existente con un embed desactivado sigue renderizando.
+  editorPluginsConfig Json @default("{\"youtube\":true,\"spotify\":true,\"applePodcasts\":true,\"ivoox\":true}")
+
   createdAt  DateTime  @default(now())
   archivedAt DateTime?
 

@@ -6,7 +6,7 @@ import {
 } from '@/features/shell/domain/settings-sections'
 
 describe('SETTINGS_SECTIONS', () => {
-  it('expone las 8 secciones canónicas en orden (post G.5 plan permission-groups)', () => {
+  it('expone las 9 secciones canónicas en orden (post F.5 plan rich-text)', () => {
     expect(SETTINGS_SECTIONS.map((s) => s.slug)).toEqual([
       '',
       'hours',
@@ -16,6 +16,7 @@ describe('SETTINGS_SECTIONS', () => {
       'flags',
       'groups',
       'tiers',
+      'editor',
     ])
   })
 
@@ -29,14 +30,15 @@ describe('SETTINGS_SECTIONS', () => {
       'Reportes',
       'Grupos',
       'Tiers',
+      'Editor',
     ])
   })
 
-  it('"Miembros", "Grupos" y "Tiers" son los items con requiredRole=owner', () => {
+  it('"Miembros", "Grupos", "Tiers" y "Editor" son los items con requiredRole=owner', () => {
     const ownerOnly = SETTINGS_SECTIONS.filter(
       (s) => 'requiredRole' in s && s.requiredRole === 'owner',
     ).map((s) => s.slug)
-    expect(ownerOnly).toEqual(['members', 'groups', 'tiers'])
+    expect(ownerOnly).toEqual(['members', 'groups', 'tiers', 'editor'])
   })
 
   it('"access" está inmediatamente antes de "members" (semántica: workflows admin antes de directorio)', () => {
@@ -57,19 +59,21 @@ describe('SETTINGS_SECTIONS', () => {
 })
 
 describe('deriveVisibleSettingsSections', () => {
-  it('owner ve los 8 items (incluyendo "Miembros", "Grupos" y "Tiers")', () => {
+  it('owner ve los 9 items (incluyendo "Miembros", "Grupos", "Tiers" y "Editor")', () => {
     const result = deriveVisibleSettingsSections({ isOwner: true })
     expect(result.length).toBe(SETTINGS_SECTIONS.length)
     expect(result.map((s) => s.slug)).toContain('members')
     expect(result.map((s) => s.slug)).toContain('groups')
     expect(result.map((s) => s.slug)).toContain('tiers')
+    expect(result.map((s) => s.slug)).toContain('editor')
   })
 
-  it('non-owner (admin) NO ve items con requiredRole=owner ("Miembros", "Grupos" ni "Tiers")', () => {
+  it('non-owner (admin) NO ve items con requiredRole=owner ("Miembros", "Grupos", "Tiers" ni "Editor")', () => {
     const result = deriveVisibleSettingsSections({ isOwner: false })
     expect(result.map((s) => s.slug)).not.toContain('members')
     expect(result.map((s) => s.slug)).not.toContain('groups')
     expect(result.map((s) => s.slug)).not.toContain('tiers')
+    expect(result.map((s) => s.slug)).not.toContain('editor')
   })
 
   it('non-owner ve los 5 items default (admin baseline incluye access)', () => {
@@ -100,6 +104,7 @@ describe('deriveActiveSettingsSection', () => {
     expect(deriveActiveSettingsSection('/settings/flags')).toBe('flags')
     expect(deriveActiveSettingsSection('/settings/groups')).toBe('groups')
     expect(deriveActiveSettingsSection('/settings/tiers')).toBe('tiers')
+    expect(deriveActiveSettingsSection('/settings/editor')).toBe('editor')
   })
 
   it('tolera trailing slash en sub-pages', () => {

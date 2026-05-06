@@ -7,6 +7,7 @@ import {
   resolveLibraryViewer,
 } from '@/features/library/public.server'
 import { LibraryItemComposerForm } from '@/features/discussions/public'
+import { getEditorConfigForPlace } from '@/features/editor-config/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string }>
@@ -51,6 +52,8 @@ export default async function NewLibraryItemPage({ params }: Props) {
   )
   if (!canCreate) notFound()
 
+  const enabledEmbeds = await getEditorConfigForPlace(place.id)
+
   return (
     <div className="px-3 py-6">
       <header className="mb-5 flex items-center gap-3">
@@ -73,12 +76,7 @@ export default async function NewLibraryItemPage({ params }: Props) {
           categorySlug: category.slug,
           onCreate: createLibraryItemAction,
         }}
-        enabledEmbeds={{
-          youtube: true,
-          spotify: true,
-          applePodcasts: true,
-          ivoox: true,
-        }}
+        enabledEmbeds={enabledEmbeds}
       />
     </div>
   )

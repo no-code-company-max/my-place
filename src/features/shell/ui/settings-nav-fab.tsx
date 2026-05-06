@@ -8,6 +8,7 @@ import {
   Flag,
   KeyRound,
   Menu,
+  PenLine,
   Shield,
   SlidersHorizontal,
   Tag,
@@ -55,6 +56,7 @@ const SECTION_ICON: Record<SettingsSectionSlug, React.ComponentType<{ size?: num
   flags: Flag,
   groups: Shield,
   tiers: Tag,
+  editor: PenLine,
 }
 
 type Props = {

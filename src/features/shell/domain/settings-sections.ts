@@ -36,6 +36,9 @@ export const SETTINGS_SECTIONS = [
   // migran al grupo preset.
   { slug: 'groups', label: 'Grupos', requiredRole: 'owner' },
   { slug: 'tiers', label: 'Tiers', requiredRole: 'owner' },
+  // 'editor' (F.5 plan rich-text): owner-only toggles de los 4 plugins de
+  // embed (YouTube, Spotify, Apple Podcasts, iVoox) que ofrece el composer.
+  { slug: 'editor', label: 'Editor', requiredRole: 'owner' },
 ] as const
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]

@@ -4,6 +4,7 @@ import { canEditItem, updateLibraryItemAction } from '@/features/library/public'
 import { findItemBySlug, resolveLibraryViewer } from '@/features/library/public.server'
 import { LibraryItemComposerForm } from '@/features/discussions/public'
 import type { LexicalDocument } from '@/features/rich-text/public'
+import { getEditorConfigForPlace } from '@/features/editor-config/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string; itemSlug: string }>
@@ -31,6 +32,8 @@ export default async function EditLibraryItemPage({ params }: Props) {
   const canEdit = canEditItem({ authorUserId: item.authorUserId }, vctx.viewer)
   if (!canEdit) notFound()
 
+  const enabledEmbeds = await getEditorConfigForPlace(place.id)
+
   return (
     <div className="px-3 py-6">
       <header className="mb-5 flex items-center gap-3">
@@ -57,12 +60,7 @@ export default async function EditLibraryItemPage({ params }: Props) {
           initialCoverUrl: item.coverUrl,
           onUpdate: updateLibraryItemAction,
         }}
-        enabledEmbeds={{
-          youtube: true,
-          spotify: true,
-          applePodcasts: true,
-          ivoox: true,
-        }}
+        enabledEmbeds={enabledEmbeds}
       />
     </div>
   )

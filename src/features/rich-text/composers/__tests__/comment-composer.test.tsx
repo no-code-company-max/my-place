@@ -16,7 +16,7 @@ import * as React from 'react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { CommentComposer } from '../ui/comment-composer'
-import type { LexicalDocument } from '../domain/types'
+import type { LexicalDocument } from '@/features/rich-text/domain/types'
 
 vi.mock('sonner', () => ({
   toast: {

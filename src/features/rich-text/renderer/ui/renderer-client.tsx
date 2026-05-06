@@ -13,7 +13,7 @@ import type {
   MentionNode,
   ParagraphNode,
   TextNode,
-} from '../domain/types'
+} from '@/features/rich-text/domain/types'
 
 /**
  * Client renderer ligero del Lexical AST. Usado por las islas client que

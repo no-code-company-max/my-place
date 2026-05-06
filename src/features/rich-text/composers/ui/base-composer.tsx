@@ -14,13 +14,13 @@ import type { Klass, LexicalNode } from 'lexical'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { ListItemNode, ListNode } from '@lexical/list'
 import { LinkNode } from '@lexical/link'
-import type { LexicalDocument } from '../domain/types'
-import { MentionNode } from './mentions/mention-node'
+import type { LexicalDocument } from '@/features/rich-text/domain/types'
 import {
+  MentionNode,
   MentionPlugin,
   type ComposerMentionResolvers,
   type MentionResolversForEditor,
-} from './mentions/mention-plugin'
+} from '@/features/rich-text/mentions/public'
 import {
   ApplePodcastNode,
   ApplePodcastPlugin,
@@ -30,7 +30,7 @@ import {
   SpotifyPlugin,
   YouTubeNode,
   YouTubePlugin,
-} from '../embeds/public'
+} from '@/features/rich-text/embeds/public'
 
 export type ComposerSurface = 'comment' | 'post' | 'event' | 'library-item'
 

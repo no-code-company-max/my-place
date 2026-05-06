@@ -20,7 +20,7 @@ import type {
   MentionNode,
   ParagraphNode,
   TextNode,
-} from '../domain/types'
+} from '@/features/rich-text/domain/types'
 
 function emptyDoc(): LexicalDocument {
   return {

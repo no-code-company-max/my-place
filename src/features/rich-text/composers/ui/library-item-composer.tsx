@@ -4,10 +4,10 @@ import * as React from 'react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { BaseComposer, type EnabledEmbeds } from './base-composer'
-import { assertRichTextSize } from '../domain/size'
-import { RichTextTooDeepError, RichTextTooLargeError } from '../domain/errors'
-import type { LexicalDocument } from '../domain/types'
-import type { ComposerMentionResolvers } from './mentions/mention-plugin'
+import { assertRichTextSize } from '@/features/rich-text/domain/size'
+import { RichTextTooDeepError, RichTextTooLargeError } from '@/features/rich-text/domain/errors'
+import type { LexicalDocument } from '@/features/rich-text/domain/types'
+import type { ComposerMentionResolvers } from '@/features/rich-text/mentions/public'
 
 export type LibraryItemComposerProps = {
   placeId: string

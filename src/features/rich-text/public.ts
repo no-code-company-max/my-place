@@ -1,9 +1,65 @@
 /**
  * Superficie pública del slice `rich-text`.
  *
- * Sólo exports client-safe + tipos. Server-only (queries, resolvers de mention)
- * viven en `public.server.ts`. Ver gotcha sobre split público en CLAUDE.md.
+ * Barrel general: agrega los `public.ts` de los sub-slices internos
+ * (`mentions/`, `composers/`, `renderer/`, `embeds/` se importa directo
+ * por consumers que activan embeds — no se re-exporta acá) más los
+ * primitivos del dominio (`domain/`).
+ *
+ * Sólo exports client-safe + tipos. Server-only (renderer SSR async,
+ * resolvers de mention con queries Prisma) viven en `public.server.ts`.
+ * Ver gotcha sobre split público en CLAUDE.md.
+ *
+ * Cada sub-slice tiene su propio cap 1500 LOC; el split honesto reemplaza
+ * la excepción provisoria que existió post-migración TipTap → Lexical.
  */
+
+// ---------------------------------------------------------------
+// Sub-slices del slice `rich-text`
+// ---------------------------------------------------------------
+
+// Mentions: `MentionNode` + plugin polimórfico (`@`, `/event`, `/library`).
+export {
+  MentionNode as MentionLexicalNode,
+  $createMentionNode,
+  $isMentionNode,
+} from './mentions/public'
+export type {
+  ComposerMentionResolvers,
+  MentionEventResult,
+  MentionKind,
+  MentionLibraryCategoryResult,
+  MentionLibraryItemResult,
+  MentionPayload,
+  MentionResolversForEditor,
+  MentionUserResult,
+} from './mentions/public'
+
+// Composers: 4 surfaces + base.
+export {
+  BaseComposer,
+  CommentComposer,
+  EventComposer,
+  LibraryItemComposer,
+  PostComposer,
+} from './composers/public'
+export type {
+  BaseComposerProps,
+  CommentComposerProps,
+  ComposerSurface,
+  EnabledEmbeds,
+  EventComposerProps,
+  LibraryItemComposerProps,
+  PostComposerProps,
+} from './composers/public'
+
+// Renderer client-safe (el SSR vive en `public.server.ts`).
+export { RichTextRendererClient } from './renderer/public'
+
+// ---------------------------------------------------------------
+// Domain primitives (siguen viviendo en `domain/`, comunes a todos
+// los sub-slices del rich-text — no son un sub-slice por sí mismos).
+// ---------------------------------------------------------------
 
 export type {
   ApplePodcastEmbed,
@@ -70,43 +126,3 @@ export { richTextExcerpt } from './domain/excerpt'
 
 export { buildQuoteSnapshot } from './domain/snapshot'
 export type { BuildQuoteSnapshotInput } from './domain/snapshot'
-
-// ---------------------------------------------------------------
-// UI client-safe (Client Components con `'use client'` o tipos puros)
-// ---------------------------------------------------------------
-
-export { RichTextRendererClient } from './ui/renderer-client'
-
-export { BaseComposer } from './ui/base-composer'
-export type { BaseComposerProps, ComposerSurface } from './ui/base-composer'
-
-export { CommentComposer } from './ui/comment-composer'
-export type { CommentComposerProps } from './ui/comment-composer'
-
-export {
-  MentionNode as MentionLexicalNode,
-  $createMentionNode,
-  $isMentionNode,
-} from './ui/mentions/mention-node'
-export type { MentionKind, MentionPayload } from './ui/mentions/mention-node'
-
-export type {
-  ComposerMentionResolvers,
-  MentionEventResult,
-  MentionLibraryCategoryResult,
-  MentionLibraryItemResult,
-  MentionResolversForEditor,
-  MentionUserResult,
-} from './ui/mentions/mention-plugin'
-
-// F.4: surface composers
-export { PostComposer } from './ui/post-composer'
-export type { PostComposerProps } from './ui/post-composer'
-
-export { EventComposer } from './ui/event-composer'
-export type { EventComposerProps } from './ui/event-composer'
-
-export { LibraryItemComposer } from './ui/library-item-composer'
-export type { LibraryItemComposerProps } from './ui/library-item-composer'
-
-export type { EnabledEmbeds } from './ui/base-composer'

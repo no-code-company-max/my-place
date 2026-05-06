@@ -11,8 +11,8 @@ import * as React from 'react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { PostComposer } from '../ui/post-composer'
-import type { ComposerMentionResolvers } from '../ui/mentions/mention-plugin'
-import type { LexicalDocument } from '../domain/types'
+import type { ComposerMentionResolvers } from '@/features/rich-text/mentions/public'
+import type { LexicalDocument } from '@/features/rich-text/domain/types'
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },

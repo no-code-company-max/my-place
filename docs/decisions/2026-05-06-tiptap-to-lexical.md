@@ -1,6 +1,6 @@
 # 2026-05-06 — Migración del editor: TipTap → Lexical
 
-**Estado: ✅ ejecutado 2026-05-06.** Plan operacional cerrado en `docs/plans/2026-05-06-tiptap-to-lexical-migration.md`. ADR de excepción al cap del slice `rich-text` en `docs/decisions/2026-05-06-rich-text-size-exception.md`.
+**Estado: ✅ ejecutado 2026-05-06.** Plan operacional cerrado en `docs/plans/2026-05-06-tiptap-to-lexical-migration.md`. El slice `rich-text` se partió en sub-slices (`mentions/`, `composers/`, `renderer/`, `embeds/`) post-cierre para respetar el cap 1500 LOC del paradigma sin necesidad de excepción.
 
 ## Contexto
 

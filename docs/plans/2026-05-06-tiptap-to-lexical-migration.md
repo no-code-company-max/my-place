@@ -1,6 +1,6 @@
 # Plan — Migración TipTap → Lexical
 
-**Estado: ✅ ejecutado 2026-05-06.** Todas las sub-fases F.0–F.6 cerradas en una sola sesión secuencial. Suite verde: 1942 tests / 202 files. Cero residuos TipTap. Excepción al cap del slice rich-text registrada en `docs/decisions/2026-05-06-rich-text-size-exception.md`.
+**Estado: ✅ ejecutado 2026-05-06.** Todas las sub-fases F.0–F.6 cerradas en una sola sesión secuencial. Suite verde: 1942 tests / 202 files. Cero residuos TipTap. Post-cierre se ejecutó split del slice `rich-text` en sub-slices (`mentions/`, `composers/`, `renderer/`, `embeds/`) para cumplir el cap 1500 LOC del paradigma sin excepción.
 
 ## Contexto
 

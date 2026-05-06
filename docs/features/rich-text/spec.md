@@ -221,28 +221,27 @@ Performance: el renderer hace lookup de mentions en paralelo con `Promise.all` p
 
 ## Tamaño del slice
 
-Estimación inicial (target ≤1500 LOC para no requerir excepción):
+El slice se partió en sub-slices independientes para que cada uno respete el cap 1500 LOC del paradigma (`docs/architecture.md` § Límites de tamaño). No requiere excepción.
 
-- `domain/`: ~250 LOC (types + schemas + size + snapshot)
-- `ui/base-composer.tsx`: ~100 LOC
-- `ui/renderer.tsx`: ~150 LOC
-- `plugins/<each>/`: ~80 LOC × 4 plugins (YT/Spotify/Apple/Ivoox) = 320 LOC
-- `plugins/mention/`: ~250 LOC (autocomplete + node + 3 trigger handlers)
-- `public.ts` + `public.server.ts`: ~50 LOC
-- Tests: ~500 LOC
+| Sub-slice                                     | LOC sin tests | Responsabilidad                                                                                                                              |
+| --------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/features/rich-text/domain/`              | ~750 LOC      | Types canónicos, schemas Zod (general + 3 por surface), size cap, excerpt, snapshot defensivo, errores. Comunes a todos los sub-slices.      |
+| `src/features/rich-text/embeds/`              | ~903 LOC      | 4 plugins de embed (YouTube, Spotify, Apple Podcasts, Ivoox): cada uno con `parse-url`, `embed-node`, `embed-plugin`.                        |
+| `src/features/rich-text/mentions/`            | ~612 LOC      | `MentionNode` polimórfico (kind: user / event / library-item) + plugin de typeahead con 3 triggers (`@`, `/event`, `/library`).              |
+| `src/features/rich-text/composers/`           | ~624 LOC      | `BaseComposer` parametrizable per-surface + 4 surface composers (`CommentComposer`, `PostComposer`, `EventComposer`, `LibraryItemComposer`). |
+| `src/features/rich-text/renderer/`            | ~465 LOC      | `RichTextRenderer` (SSR async con resolvers de mention) + `RichTextRendererClient` (síncrono, sin lookup).                                   |
+| Slice raíz (`public.ts` + `public.server.ts`) | ~125 LOC      | Barrel general que re-exporta superficie pública de los sub-slices + dominio.                                                                |
 
-Total: ~1620 LOC. Si supera el cap, evaluar split del slice (`rich-text/embeds/` como sub-slice como hace `discussions/flags`). Por ahora cabe en un solo slice.
+Cada sub-slice tiene su propio `public.ts` (y `public.server.ts` cuando corresponde, hoy sólo `renderer/`). Los sub-slices del mismo slice padre se comunican entre sí únicamente vía esos `public.ts`. El boundary `domain/` se importa directo (es el shared del slice padre, no un sub-slice independiente).
 
-### Conteo real post-F.4 (2026-05-06)
+Verificación rápida:
 
-- Slice principal `src/features/rich-text/` (excluye `embeds/`, sin tests): **~2581 LOC**
-- Sub-slice `src/features/rich-text/embeds/` (sin tests): **~906 LOC**
-- Combined sin tests: **~3487 LOC**
-
-Sub-slice ya creado (`embeds/`) absorbe los 4 plugins de embed (~906 LOC). Aún así el slice principal supera el cap 1500. F.6 evaluará:
-
-- Split de `ui/mentions/` (~600 LOC con plugin polimórfico extendido) en sub-slice propio.
-- ADR de excepción análogo a `2026-04-20-discussions-size-exception.md` documentando que el slice rich-text es densidad inherente del dominio (4 surfaces + AST polimórfico + 4 embeds + 3 triggers de mention + renderer SSR sin Lexical runtime).
+```bash
+for sub in mentions composers renderer embeds; do
+  loc=$(find "src/features/rich-text/$sub" -type f \( -name '*.ts' -o -name '*.tsx' \) -not -path '*/__tests__/*' -not -name '*.test.*' | xargs wc -l | tail -1 | awk '{print $1}')
+  echo "$sub: $loc LOC"
+done
+```
 
 ## Boundary
 

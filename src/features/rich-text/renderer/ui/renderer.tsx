@@ -12,7 +12,7 @@ import type {
   MentionNode,
   ParagraphNode,
   TextNode,
-} from '../domain/types'
+} from '@/features/rich-text/domain/types'
 
 /**
  * Resolvers inyectados por la page consumer para resolver mentions a su href

@@ -3,8 +3,8 @@
 import * as React from 'react'
 import { useState } from 'react'
 import { BaseComposer } from './base-composer'
-import type { LexicalDocument } from '../domain/types'
-import type { ComposerMentionResolvers } from './mentions/mention-plugin'
+import type { LexicalDocument } from '@/features/rich-text/domain/types'
+import type { ComposerMentionResolvers } from '@/features/rich-text/mentions/public'
 
 export type EventComposerProps = {
   placeId: string

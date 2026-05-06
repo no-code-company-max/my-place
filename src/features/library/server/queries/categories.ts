@@ -134,16 +134,26 @@ export async function findLibraryCategoryBySlug(
 
 /** Para admin actions / system events. Acepta archivadas (no las filtra).
  *
- *  Nota: este helper recibe `categoryId` (no `placeId`), así que el cache
- *  bucket está taggeado con un tag genérico
- *  `library-categories:by-id:<categoryId>`. Las mutation actions también
- *  llaman `revalidateTag(place:<placeId>:library-categories)` — pero ese
- *  tag no aplica acá. Para invalidar findById hay que invalidar el tag
- *  específico cuando muta un id puntual (no se hace hoy: este helper es
- *  best-effort en lecturas que toleran 30s de stale; los callers
- *  son admin / system events, no flujos críticos de membership).
+ *  Bucket cacheado bajo dos tags:
+ *  - `place:<placeId>:library-categories` (set genérico que invalidan las
+ *    mutation actions del slice via `revalidateLibraryCategoryPaths`).
+ *  - `library-category:<categoryId>` (puntual, por si una mutation futura
+ *    quiere invalidar sólo una category sin tirar el set entero).
+ *
+ *  Como el caller pasa sólo `categoryId`, hacemos un primer lookup mínimo
+ *  para extraer el `placeId` y poder taggear correctamente. Es 1 query
+ *  extra fuera del bucket cacheado, pero garantiza que las mutations
+ *  existentes ya invaliden este helper sin código nuevo en cada action.
  */
 export async function findLibraryCategoryById(categoryId: string): Promise<LibraryCategory | null> {
+  // Lookup ligero para resolver el placeId (necesario para el tag del set).
+  // Retornamos `null` early si la category no existe — saltea el bucket.
+  const meta = await prisma.libraryCategory.findUnique({
+    where: { id: categoryId },
+    select: { placeId: true },
+  })
+  if (!meta) return null
+
   return unstable_cache(
     async () => {
       const row = await prisma.libraryCategory.findUnique({
@@ -156,7 +166,7 @@ export async function findLibraryCategoryById(categoryId: string): Promise<Libra
     ['library-categories:by-id', categoryId],
     {
       revalidate: CATEGORIES_CACHE_REVALIDATE_SECONDS,
-      tags: [`library-categories:by-id:${categoryId}`],
+      tags: [categoriesTag(meta.placeId), `library-category:${categoryId}`],
     },
   )()
 }

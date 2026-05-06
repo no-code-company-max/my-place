@@ -43,24 +43,14 @@ export async function CommentsSection({
   viewerIsAdmin,
   placeOpeningId,
 }: CommentsSectionProps) {
-  // Group 1: lista de comments (gating la query de reactions y quoteState).
-  const { items: comments, nextCursor } = await listCommentsByPost({
-    postId,
-    includeDeleted: viewerIsAdmin,
-  })
-
-  // Group 2: reactions (POST + comments en una sola call) + readers + quoteState.
-  // Combinar POST + comments en `targets` ahorra 1 round-trip respecto de
-  // agregarlos por separado. `resolveQuoteTargetStates` corre en paralelo.
-  const [reactionsByKey, quoteStateByCommentId, readers] = await Promise.all([
-    aggregateReactions({
-      targets: [
-        { type: 'POST', id: postId },
-        ...comments.map((c) => ({ type: 'COMMENT' as const, id: c.id })),
-      ],
-      viewerUserId,
-    }) as Promise<ReactionAggregationMap>,
-    resolveQuoteTargetStates(comments),
+  // Group 1: lista de comments (gating reactions/quoteState que dependen de los
+  // ids) + readers (independiente de los comments — sólo necesita postId). Antes
+  // readers viajaba en el group 2 esperando innecesariamente al fetch de comments.
+  const [{ items: comments, nextCursor }, readers] = await Promise.all([
+    listCommentsByPost({
+      postId,
+      includeDeleted: viewerIsAdmin,
+    }),
     placeOpeningId
       ? listReadersByPost({
           postId,
@@ -69,6 +59,20 @@ export async function CommentsSection({
           excludeUserId: viewerUserId,
         })
       : Promise.resolve([] as PostReader[]),
+  ])
+
+  // Group 2: reactions (POST + comments en una sola call) + quoteState — ambas
+  // dependen de los comment ids. Combinar POST + comments en `targets` ahorra
+  // 1 round-trip respecto de agregarlos por separado.
+  const [reactionsByKey, quoteStateByCommentId] = await Promise.all([
+    aggregateReactions({
+      targets: [
+        { type: 'POST', id: postId },
+        ...comments.map((c) => ({ type: 'COMMENT' as const, id: c.id })),
+      ],
+      viewerUserId,
+    }) as Promise<ReactionAggregationMap>,
+    resolveQuoteTargetStates(comments),
   ])
 
   return (

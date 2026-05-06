@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { prisma } from '@/db/client'
 import { requireAuthUserId } from '@/shared/lib/auth-user'
 import { logger } from '@/shared/lib/logger'
@@ -71,7 +71,24 @@ export async function updatePlaceHoursAction(input: unknown): Promise<{ ok: true
     'place hours updated',
   )
 
-  revalidatePath(`/${place.slug}`, 'layout')
+  // Antes hacíamos `revalidatePath(/${slug}, 'layout')` que invalidaba TODA
+  // la subtree del place (~25 routes) por un cambio que sólo afecta
+  // `place.openingHours`. Ahora invalidamos por tag granular + path puntual:
+  //
+  //  - `revalidateTag(place:${slug})`: cuando `loadPlaceBySlug` se envuelva
+  //    con `unstable_cache` taggeado (Sesión 5.1), este tag tirará el cache
+  //    bucket que guarda `place.openingHours`. Hasta que eso se aplique, el
+  //    `revalidateTag` es no-op pero ya queda en su lugar.
+  //  - `revalidatePath('/${slug}/settings/hours')`: la página del editor
+  //    re-renderiza con el JSON nuevo después del save.
+  //
+  // No invalidamos `/${slug}/events` ni el resto del subtree: las páginas
+  // del place leen `openingHours` vía `loadPlaceBySlug`, así que cuando el
+  // tag esté activo se invalidará todo donde se necesite. Mientras tanto,
+  // el subtree se re-renderiza naturalmente en el próximo request (no hay
+  // cache extra que persista hours stale fuera de la propia función).
+  revalidateTag(`place:${place.slug}`)
+  revalidatePath(`/${place.slug}/settings/hours`)
 
   return { ok: true }
 }

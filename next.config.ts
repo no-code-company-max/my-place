@@ -80,6 +80,20 @@ const nextConfig: NextConfig = {
       dynamic: 30,
       static: 180,
     },
+    // Tree-shake agresivo + barrel optimization para libs que se usan con
+    // imports nombrados en muchos files. Evita que webpack arrastre el
+    // index completo cuando sólo necesitamos un export. Impacto típico:
+    // 5-30 kB shared. Lista cerrada para no entrar en babel-loader paths
+    // raros.
+    optimizePackageImports: [
+      'lucide-react',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-popover',
+      '@tiptap/react',
+      '@tiptap/starter-kit',
+      'sonner',
+    ],
   },
   // Caché agresivo para avatares (y futuros covers de library) servidos vía
   // `next/image`. El optimizer de Next proxea las URLs externas, las

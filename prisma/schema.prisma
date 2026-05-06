@@ -19,16 +19,20 @@ model User {
   avatarUrl   String?
   createdAt   DateTime @default(now())
 
-  memberships    Membership[]
-  ownedPlaces    PlaceOwnership[]
-  posts          Post[]           @relation("PostAuthor")
-  comments       Comment[]        @relation("CommentAuthor")
-  reactions      Reaction[]
-  postReads      PostRead[]
-  flagsFiled     Flag[]           @relation("FlagReporter")
-  flagsReviewed  Flag[]           @relation("FlagReviewer")
-  eventsAuthored Event[]          @relation("EventAuthor")
-  eventRsvps     EventRSVP[]
+  memberships     Membership[]
+  ownedPlaces     PlaceOwnership[]
+  posts           Post[]           @relation("PostAuthor")
+  comments        Comment[]        @relation("CommentAuthor")
+  reactions       Reaction[]
+  postReads       PostRead[]
+  flagsFiled      Flag[]           @relation("FlagReporter")
+  flagsReviewed   Flag[]           @relation("FlagReviewer")
+  eventsAuthored  Event[]          @relation("EventAuthor")
+  eventRsvps      EventRSVP[]
+  // Invitations donde este User figura como inviter. La FK la declara
+  // `Invitation.inviter`; acá sólo expresamos la inversa para poder hacer
+  // `include: { inviter }` en queries de listado pendientes.
+  invitationsSent Invitation[]     @relation("InvitationInviter")
 
   libraryContributions        LibraryCategoryContributor[]   @relation("LibraryContributor")
   libraryContributionsInvited LibraryCategoryContributor[]   @relation("LibraryContributorInvitedBy")
@@ -164,7 +168,12 @@ model Invitation {
   lastDeliveryError String?
   lastSentAt        DateTime?
 
-  place Place @relation(fields: [placeId], references: [id])
+  place   Place @relation(fields: [placeId], references: [id])
+  // Relación declarativa al User inviter. La columna `invitedBy` ya existe en
+  // la DB desde la migración inicial — esta relación NO crea migration nueva,
+  // solo permite hacer `include: { inviter }` en `listPendingInvitationsByPlace`
+  // y eliminar el lookup por batch (`prisma.user.findMany`) que se hacía antes.
+  inviter User  @relation("InvitationInviter", fields: [invitedBy], references: [id])
   // Unique parcial `WHERE "acceptedAt" IS NULL` sobre (placeId, lower(email))
   // está definido en la migración 20260420000000_members_invitation_fields.
   // Prisma no soporta expresar índices parciales declarativamente — ver docs/features/members/spec.md.
@@ -264,6 +273,13 @@ model Reaction {
 
   @@unique([targetType, targetId, userId, emoji])
   @@index([targetType, targetId])
+  // Index compuesto para el lookup del viewer en `aggregateReactions`:
+  //   findMany({ where: { userId, OR: [{targetType, targetId}, ...] } })
+  // El index `(targetType, targetId)` cubre el `groupBy` global, pero el
+  // query del viewer filtra primero por `userId`. Sin (userId, targetType,
+  // targetId), Postgres usa `Reaction_userId_idx` y filtra ~50 targets en
+  // memoria; con este, el lookup es index-only.
+  @@index([userId, targetType, targetId])
 }
 
 model PlaceOpening {

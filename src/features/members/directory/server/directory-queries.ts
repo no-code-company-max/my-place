@@ -300,8 +300,9 @@ export type MemberBlockInfo = {
  *  - El user no tiene `Membership` en el place.
  *  - O la membership tiene `blockedAt IS NULL`.
  *
- * Trae `blockedByDisplayName` con un segundo lookup en `User` cuando
- * `blockedByUserId` no es null. Sin N+1 — 2 queries planas como mucho.
+ * Trae `blockedByDisplayName` resolviendo la relación `blockedBy` inline
+ * (1 sola query con JOIN). Antes esto eran 2 queries serializadas (lookup
+ * de membership + lookup de User por id).
  */
 export async function findMemberBlockInfo(
   userId: string,
@@ -314,24 +315,16 @@ export async function findMemberBlockInfo(
       blockedReason: true,
       blockedContactEmail: true,
       blockedByUserId: true,
+      blockedBy: { select: { displayName: true } },
     },
   })
   if (!row || row.blockedAt === null) return null
-
-  let blockedByDisplayName: string | null = null
-  if (row.blockedByUserId) {
-    const blockedBy = await prisma.user.findUnique({
-      where: { id: row.blockedByUserId },
-      select: { displayName: true },
-    })
-    blockedByDisplayName = blockedBy?.displayName ?? null
-  }
 
   return {
     blockedAt: row.blockedAt,
     blockedReason: row.blockedReason,
     blockedContactEmail: row.blockedContactEmail,
     blockedByUserId: row.blockedByUserId,
-    blockedByDisplayName,
+    blockedByDisplayName: row.blockedBy?.displayName ?? null,
   }
 }

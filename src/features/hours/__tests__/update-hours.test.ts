@@ -8,6 +8,7 @@ const ownershipFindUnique = vi.fn()
 const groupMembershipFindFirst = vi.fn()
 const getUserFn = vi.fn()
 const revalidatePathFn = vi.fn()
+const revalidateTagFn = vi.fn()
 
 vi.mock('@/db/client', () => ({
   prisma: {
@@ -33,6 +34,7 @@ vi.mock('@/shared/lib/supabase/server', () => ({
 
 vi.mock('next/cache', () => ({
   revalidatePath: (...a: unknown[]) => revalidatePathFn(...a),
+  revalidateTag: (...a: unknown[]) => revalidateTagFn(...a),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -67,6 +69,7 @@ beforeEach(() => {
   groupMembershipFindFirst.mockReset()
   getUserFn.mockReset()
   revalidatePathFn.mockReset()
+  revalidateTagFn.mockReset()
   // Default: ningún preset GroupMembership (no es admin via grupos).
   groupMembershipFindFirst.mockResolvedValue(null)
 })
@@ -136,7 +139,7 @@ describe('updatePlaceHoursAction', () => {
     await expect(updatePlaceHoursAction(validInput)).rejects.toBeInstanceOf(AuthorizationError)
   })
 
-  it('happy path admin: persiste el JSON esperado y revalida el layout', async () => {
+  it('happy path admin: persiste el JSON esperado y revalida tag granular + path puntual', async () => {
     getUserFn.mockResolvedValue(AUTH_OK)
     placeFindUnique.mockResolvedValue({
       id: 'place-1',
@@ -164,7 +167,10 @@ describe('updatePlaceHoursAction', () => {
         },
       },
     })
-    expect(revalidatePathFn).toHaveBeenCalledWith('/the-company', 'layout')
+    expect(revalidateTagFn).toHaveBeenCalledWith('place:the-company')
+    expect(revalidatePathFn).toHaveBeenCalledWith('/the-company/settings/hours')
+    // Antes invalidaba 'layout' completo (~25 routes); ya no debería pasar.
+    expect(revalidatePathFn).not.toHaveBeenCalledWith('/the-company', 'layout')
   })
 
   it('happy path owner (sin GroupMembership preset) también pasa', async () => {

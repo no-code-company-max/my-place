@@ -73,19 +73,22 @@ export async function listEvents(params: {
 
   const eventIds = events.map((e) => e.id)
 
-  // Counts de confirmados (GOING + GOING_CONDITIONAL) por evento.
-  const counts = await prisma.eventRSVP.groupBy({
-    by: ['eventId'],
-    where: { eventId: { in: eventIds }, state: { in: [...PUBLIC_RSVP_STATES] } },
-    _count: { _all: true },
-  })
+  // Paralelizamos counts agregados + RSVPs del viewer: ambas son IN (...) sobre
+  // los mismos eventIds y no dependen entre sí. Antes corrían serializadas.
+  const [counts, viewerRsvps] = await Promise.all([
+    // Counts de confirmados (GOING + GOING_CONDITIONAL) por evento.
+    prisma.eventRSVP.groupBy({
+      by: ['eventId'],
+      where: { eventId: { in: eventIds }, state: { in: [...PUBLIC_RSVP_STATES] } },
+      _count: { _all: true },
+    }),
+    // RSVPs del viewer sobre estos eventos.
+    prisma.eventRSVP.findMany({
+      where: { eventId: { in: eventIds }, userId: params.viewerUserId },
+      select: { eventId: true, state: true },
+    }),
+  ])
   const countByEventId = new Map(counts.map((c) => [c.eventId, c._count._all]))
-
-  // RSVPs del viewer sobre estos eventos.
-  const viewerRsvps = await prisma.eventRSVP.findMany({
-    where: { eventId: { in: eventIds }, userId: params.viewerUserId },
-    select: { eventId: true, state: true },
-  })
   const viewerStateByEventId = new Map(viewerRsvps.map((r) => [r.eventId, r.state]))
 
   return events.map((e) => ({

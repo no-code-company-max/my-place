@@ -114,6 +114,10 @@ export async function findInvitationById(
  * Lista invitaciones abiertas (no aceptadas, no vencidas) de un place, con el
  * `displayName` del inviter para renderizar la row. Se usa en la sección
  * "Invitaciones pendientes" de `/settings/members`.
+ *
+ * Ahora con `include: { inviter }` (relación declarativa en el schema): un
+ * solo round-trip a la DB en lugar de dos serializadas (`findMany` invitations
+ * + `findMany` users por batch de IDs).
  */
 export async function listPendingInvitationsByPlace(
   placeId: string,
@@ -139,17 +143,10 @@ export async function listPendingInvitationsByPlace(
       providerMessageId: true,
       lastDeliveryError: true,
       lastSentAt: true,
+      inviter: { select: { displayName: true } },
     },
     orderBy: { expiresAt: 'asc' },
   })
-  if (rows.length === 0) return []
-  // No hay relación `inviter` en el schema — lookup explícito por batch.
-  const inviterIds = Array.from(new Set(rows.map((r) => r.invitedBy)))
-  const inviters = await prisma.user.findMany({
-    where: { id: { in: inviterIds } },
-    select: { id: true, displayName: true },
-  })
-  const nameById = new Map(inviters.map((u) => [u.id, u.displayName]))
   return rows.map((r) => ({
     id: r.id,
     placeId: r.placeId,
@@ -164,7 +161,7 @@ export async function listPendingInvitationsByPlace(
     providerMessageId: r.providerMessageId,
     lastDeliveryError: r.lastDeliveryError,
     lastSentAt: r.lastSentAt,
-    inviter: { displayName: nameById.get(r.invitedBy) ?? '—' },
+    inviter: { displayName: r.inviter.displayName },
   }))
 }
 

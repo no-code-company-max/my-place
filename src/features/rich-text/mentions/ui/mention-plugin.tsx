@@ -9,7 +9,7 @@ import {
   MenuOption,
   useBasicTypeaheadTriggerMatch,
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
-import { $insertNodes, type TextNode } from 'lexical'
+import { $createTextNode, $insertNodes, type TextNode } from 'lexical'
 import { $createMentionNode } from './mention-node'
 
 // ---------------------------------------------------------------
@@ -185,33 +185,18 @@ export function MentionPlugin({
 
   const triggerFn = useCallback(
     (text: string) => {
-      // 1. Probamos `/library/<cat>` y `/library/<cat>/<q>` antes que `/library`
-      //    bare — la forma con cat es más específica.
-      if (supportsLibrary) {
-        const libItem = matchLibraryItem(text)
-        if (libItem) {
-          setTrigger({
-            kind: 'library-item',
-            categorySlug: libItem.categorySlug,
-            query: libItem.query,
-          })
-          return libItem.match
+      // 1. Slash commands (/event, /library, prefix matching).
+      const slash = matchSlashCommand(text)
+      if (slash) {
+        const t = slash.trigger
+        if (t.kind === 'library-item' || t.kind === 'library-category') {
+          if (!supportsLibrary) return null
         }
-        const libCat = matchLibraryCategory(text)
-        if (libCat) {
-          setTrigger({ kind: 'library-category', query: libCat.query })
-          return libCat.match
-        }
+        if (t.kind === 'event' && !supportsEvents) return null
+        setTrigger(t)
+        return slash.match
       }
-      // 2. `/event <query>`
-      if (supportsEvents) {
-        const ev = matchEvent(text)
-        if (ev) {
-          setTrigger({ kind: 'event', query: ev.query })
-          return ev.match
-        }
-      }
-      // 3. fallback `@<query>`
+      // 2. fallback `@<query>` (user mentions).
       const userMatch = userTriggerFn(text, editor)
       if (userMatch) {
         setTrigger({ kind: 'user', query: userMatch.matchingString })
@@ -261,6 +246,24 @@ export function MentionPlugin({
 
   const onSelectOption = useCallback(
     (selected: GenericMenuOption, nodeToReplace: TextNode | null, closeMenu: () => void) => {
+      // Two-step library: seleccionar categoría no inserta mention todavía,
+      // sustituye el texto typeado por `/library/<slug>/` y deja que el
+      // typeahead re-trigger automáticamente con LIBRARY_CAT_RE → muestra
+      // items de la categoría. El user selecciona ahí el item para insertar
+      // la mention final.
+      if (selected.payload.type === 'library-category') {
+        const slug = selected.payload.category.slug
+        editor.update(() => {
+          const replacement = $createTextNode(`/library/${slug}/`)
+          if (nodeToReplace) {
+            nodeToReplace.replace(replacement)
+          } else {
+            $insertNodes([replacement])
+          }
+          replacement.select()
+        })
+        return
+      }
       editor.update(() => {
         const node = buildMentionFromPayload(selected.payload, composer.placeId)
         if (nodeToReplace) {
@@ -390,60 +393,64 @@ function MentionRow({ payload }: { payload: MenuPayload }): React.JSX.Element {
 // Helpers — match patterns por trigger
 // ---------------------------------------------------------------
 
-type LibraryItemMatch = {
+type SlashMatch = {
   match: { leadOffset: number; matchingString: string; replaceableString: string }
-  categorySlug: string
-  query: string
-}
+} & (
+  | { trigger: { kind: 'event'; query: string } }
+  | { trigger: { kind: 'library-category'; query: string } }
+  | { trigger: { kind: 'library-item'; categorySlug: string; query: string } }
+)
 
-type Match = {
-  match: { leadOffset: number; matchingString: string; replaceableString: string }
-  query: string
-}
+/**
+ * Regex unificada para slash commands. Capturas:
+ *   m[3] = comando (ej: "event", "library", "lib", "eve")
+ *   m[4] = sub-segmento opcional después de "/" (ej: "/library/recursos" → "recursos")
+ *   m[5] = query opcional después de espacio (ej: "/event hola" → "hola")
+ *
+ * Triggers en prefix: typear `/eve` muestra eventos, `/lib` muestra
+ * categorías. Apenas el prefix es único hacia algún comando, el menú
+ * aparece (no hace falta escribir el comando completo).
+ */
+const SLASH_RE = /(^|[\s\n])(\/([a-z]+)(?:\/([\w-]+))?(?:[ ]([\w-]*))?)$/
 
-// `/event` dispara el typeahead apenas se completa el trigger, igual que `@`
-// y `/library` — el espacio + query son opcionales. `/eventually` no matchea
-// porque el grupo opcional sólo acepta `[ ]` después de `event`.
-const EVENT_RE = /(^|[\s\n])(\/event(?:[ ]([\w-]*))?)$/
-const LIBRARY_BARE_RE = /(^|[\s\n])(\/library)$/
-const LIBRARY_CAT_RE = /(^|[\s\n])(\/library\/([\w-]+)([ ]([\w-]*))?)$/
-
-function matchEvent(text: string): Match | null {
-  const m = text.match(EVENT_RE)
+function matchSlashCommand(text: string): SlashMatch | null {
+  const m = SLASH_RE.exec(text)
   if (!m) return null
-  const query = m[3] ?? ''
+  const cmd = m[3] ?? ''
+  const sub = m[4] ?? ''
+  const after = m[5] ?? ''
   const replaceable = m[2] ?? ''
   const leadOffset = (m.index ?? 0) + (m[1]?.length ?? 0)
-  return {
-    match: { leadOffset, matchingString: query, replaceableString: replaceable },
-    query,
-  }
-}
+  const matchObj = { leadOffset, matchingString: '', replaceableString: replaceable }
 
-function matchLibraryCategory(text: string): Match | null {
-  const m = text.match(LIBRARY_BARE_RE)
-  if (!m) return null
-  const replaceable = m[2] ?? ''
-  const leadOffset = (m.index ?? 0) + (m[1]?.length ?? 0)
-  return {
-    match: { leadOffset, matchingString: '', replaceableString: replaceable },
-    query: '',
+  // /library/<cat>[ <q>]: paso 2 del flujo de biblioteca.
+  if (cmd === 'library' && sub.length > 0) {
+    return {
+      trigger: { kind: 'library-item', categorySlug: sub, query: after },
+      match: { ...matchObj, matchingString: after },
+    }
   }
-}
-
-function matchLibraryItem(text: string): LibraryItemMatch | null {
-  const m = text.match(LIBRARY_CAT_RE)
-  if (!m) return null
-  const categorySlug = m[3] ?? ''
-  const query = m[5] ?? ''
-  if (!categorySlug) return null
-  const replaceable = m[2] ?? ''
-  const leadOffset = (m.index ?? 0) + (m[1]?.length ?? 0)
-  return {
-    match: { leadOffset, matchingString: query, replaceableString: replaceable },
-    categorySlug,
-    query,
+  // /event exacto + query opcional.
+  if (cmd === 'event') {
+    return {
+      trigger: { kind: 'event', query: after },
+      match: { ...matchObj, matchingString: after },
+    }
   }
+  // /library exacto sin sub.
+  if (cmd === 'library' && sub === '') {
+    return { trigger: { kind: 'library-category', query: '' }, match: matchObj }
+  }
+  // Prefijo de /event (ej: /e, /ev, /eve). Sólo si no hay sub ni query —
+  // un usuario escribiendo no llegó todavía al comando completo.
+  if (cmd.length > 0 && sub === '' && after === '' && 'event'.startsWith(cmd)) {
+    return { trigger: { kind: 'event', query: '' }, match: matchObj }
+  }
+  // Prefijo de /library.
+  if (cmd.length > 0 && sub === '' && after === '' && 'library'.startsWith(cmd)) {
+    return { trigger: { kind: 'library-category', query: '' }, match: matchObj }
+  }
+  return null
 }
 
 // ---------------------------------------------------------------

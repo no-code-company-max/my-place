@@ -146,7 +146,21 @@ h3,
   text-underline-offset: 3px;
 }
 .rich-text-mention {
-  @apply font-medium;
+  @apply inline-flex items-center gap-1 rounded-md bg-neutral-100 px-1.5 py-0.5 align-baseline text-[0.95em] font-medium text-neutral-900 no-underline;
+}
+.rich-text-mention:hover {
+  @apply bg-neutral-200;
+}
+.rich-text-mention-icon {
+  @apply text-neutral-500;
+}
+.rich-text-mention-event,
+.rich-text-mention-library-item {
+  @apply bg-neutral-50;
+}
+.rich-text-mention-event:hover,
+.rich-text-mention-library-item:hover {
+  @apply bg-neutral-100;
 }
 .rich-text-mention-fallback {
   @apply italic text-neutral-400;

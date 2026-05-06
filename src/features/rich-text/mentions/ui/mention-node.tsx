@@ -107,8 +107,14 @@ export class MentionNode extends DecoratorNode<React.JSX.Element> {
   }
 
   override decorate(): React.JSX.Element {
-    const prefix = this.__kind === 'user' ? '@' : ''
-    return <span className="rich-text-mention">{`${prefix}${this.__label}`}</span>
+    return (
+      <span className={`rich-text-mention rich-text-mention-${this.__kind}`}>
+        <span aria-hidden className="rich-text-mention-icon">
+          {mentionIcon(this.__kind)}
+        </span>
+        <span className="rich-text-mention-label">{this.__label}</span>
+      </span>
+    )
   }
 
   override exportJSON(): SerializedMentionNode {
@@ -140,4 +146,14 @@ export function $createMentionNode(payload: MentionPayload): MentionNode {
 
 export function $isMentionNode(node: LexicalNode | null | undefined): node is MentionNode {
   return node instanceof MentionNode
+}
+
+/**
+ * Icono inline por tipo de mention. Compartido con el renderer SSR para
+ * que el editor y el documento renderizado se vean iguales.
+ */
+export function mentionIcon(kind: MentionKind): string {
+  if (kind === 'user') return '@'
+  if (kind === 'event') return '🎉'
+  return '📄'
 }

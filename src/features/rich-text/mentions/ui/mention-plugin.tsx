@@ -120,6 +120,17 @@ export function MentionPlugin({
   const [trigger, setTrigger] = useState<Trigger | null>(null)
   const [options, setOptions] = useState<GenericMenuOption[]>([])
 
+  // Caches client-side: prefetch al mount los listados base (top-N
+  // sin filtro). Cuando el trigger se dispara con query vacía
+  // ("/event", "/library", "@") devolvemos el cache instantáneamente,
+  // sin Server Action round-trip. Con `connection_limit=1` en prod el
+  // RTT serializado costaba ~500-1000ms — el cache lo hace inmediato.
+  const [cachedUsers, setCachedUsers] = useState<MentionUserResult[] | null>(null)
+  const [cachedEvents, setCachedEvents] = useState<MentionEventResult[] | null>(null)
+  const [cachedCategories, setCachedCategories] = useState<MentionLibraryCategoryResult[] | null>(
+    null,
+  )
+
   // El typeahead `@user` usa el matcher built-in (mantiene comportamiento
   // de F.3). Triggers `/event` y `/library` los detectamos manualmente
   // via callback.
@@ -132,6 +143,41 @@ export function MentionPlugin({
   const supportsLibrary =
     typeof composer.listCategories === 'function' &&
     typeof composer.searchLibraryItems === 'function'
+
+  // Prefetch on mount — fuego una sola vez por placeId. Errores se
+  // silencian: si la red falla, el cache queda null y el flujo cae al
+  // fetch live como fallback.
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const tasks: Array<Promise<unknown>> = [
+        composer
+          .searchUsers('')
+          .then((r) => active && setCachedUsers(r))
+          .catch(() => {}),
+      ]
+      if (supportsEvents && composer.searchEvents) {
+        tasks.push(
+          composer
+            .searchEvents('')
+            .then((r) => active && setCachedEvents(r))
+            .catch(() => {}),
+        )
+      }
+      if (supportsLibrary && composer.listCategories) {
+        tasks.push(
+          composer
+            .listCategories()
+            .then((r) => active && setCachedCategories(r))
+            .catch(() => {}),
+        )
+      }
+      await Promise.all(tasks)
+    })()
+    return () => {
+      active = false
+    }
+  }, [composer, supportsEvents, supportsLibrary])
 
   // -----------------------------
   // Match function combinada
@@ -186,6 +232,18 @@ export function MentionPlugin({
       setOptions([])
       return
     }
+    // Cache-first para query vacía: armamos opciones desde el state
+    // cacheado al mount. Saltea el round-trip al server. Si el cache
+    // todavía no llegó (mount race), cae al fetch live abajo.
+    const sync = trySyncFromCache(trigger, {
+      users: cachedUsers,
+      events: cachedEvents,
+      categories: cachedCategories,
+    })
+    if (sync !== null) {
+      setOptions(sync.slice(0, MAX_RESULTS))
+      return
+    }
     let active = true
     void (async () => {
       const results = await fetchOptionsForTrigger(trigger, composer)
@@ -195,7 +253,7 @@ export function MentionPlugin({
     return () => {
       active = false
     }
-  }, [trigger, composer])
+  }, [trigger, composer, cachedUsers, cachedEvents, cachedCategories])
 
   // -----------------------------
   // Selección
@@ -263,8 +321,8 @@ function MentionMenu({
   onClick: (option: GenericMenuOption) => void
 }): React.JSX.Element {
   return (
-    <div className="rich-text-mention-menu rounded-md border border-neutral-200 bg-white py-1 shadow-md">
-      <ul role="listbox" className="m-0 list-none p-0">
+    <div className="rich-text-mention-menu min-w-[280px] max-w-md overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
+      <ul role="listbox" className="m-0 max-h-72 list-none overflow-y-auto p-0">
         {options.map((option, idx) => (
           <li
             key={option.payload.id}
@@ -278,11 +336,9 @@ function MentionMenu({
               onClick(option)
             }}
             className={[
-              'cursor-pointer px-3 py-2 text-sm',
-              selectedIndex === idx ? 'bg-neutral-100' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
+              'flex cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-2 text-sm leading-tight',
+              selectedIndex === idx ? 'bg-neutral-100' : 'bg-white hover:bg-neutral-50',
+            ].join(' ')}
           >
             <MentionRow payload={option.payload} />
           </li>
@@ -296,27 +352,38 @@ function MentionRow({ payload }: { payload: MenuPayload }): React.JSX.Element {
   if (payload.type === 'user') {
     return (
       <>
-        <span className="font-medium">{payload.user.displayName}</span>
+        <span aria-hidden className="text-neutral-400">
+          @
+        </span>
+        <span className="truncate font-medium text-neutral-900">{payload.user.displayName}</span>
         {payload.user.handle ? (
-          <span className="ml-2 text-neutral-500">@{payload.user.handle}</span>
+          <span className="ml-auto truncate text-xs text-neutral-500">@{payload.user.handle}</span>
         ) : null}
       </>
     )
   }
   if (payload.type === 'event') {
     return (
-      <span>
-        <span className="mr-1" aria-hidden>
-          🎉
-        </span>
-        <span>{payload.event.title}</span>
-      </span>
+      <>
+        <span aria-hidden>🎉</span>
+        <span className="truncate text-neutral-900">{payload.event.title}</span>
+      </>
     )
   }
   if (payload.type === 'library-category') {
-    return <span>{payload.category.name}</span>
+    return (
+      <>
+        <span aria-hidden>📚</span>
+        <span className="truncate text-neutral-900">{payload.category.name}</span>
+      </>
+    )
   }
-  return <span>{payload.item.title}</span>
+  return (
+    <>
+      <span aria-hidden>📄</span>
+      <span className="truncate text-neutral-900">{payload.item.title}</span>
+    </>
+  )
 }
 
 // ---------------------------------------------------------------
@@ -382,6 +449,57 @@ function matchLibraryItem(text: string): LibraryItemMatch | null {
 // ---------------------------------------------------------------
 // Fetch helpers + payload builders
 // ---------------------------------------------------------------
+
+type Caches = {
+  users: MentionUserResult[] | null
+  events: MentionEventResult[] | null
+  categories: MentionLibraryCategoryResult[] | null
+}
+
+/**
+ * Devuelve opciones desde el cache local cuando es seguro (cache hit
+ * inmediato, sin round-trip). Casos cubiertos:
+ *  - `@`, `/event`, `/library` con query vacía → lista cacheada al mount.
+ *  - `@<q>`, `/event <q>` → filter case-insensitive sobre el cache (top-N).
+ *
+ * `library-item` siempre fetch live: items dependen de la categoría
+ * seleccionada, no se prefetchean para no inflar el payload de mount.
+ *
+ * Retorna `null` si el cache no está poblado o no aplica — el caller
+ * cae al fetch live como fallback.
+ */
+function trySyncFromCache(trigger: Trigger, caches: Caches): GenericMenuOption[] | null {
+  if (trigger.kind === 'user' && caches.users !== null) {
+    const filtered = filterByQuery(caches.users, trigger.query, (u) => u.displayName)
+    return filtered.map(
+      (u) => new GenericMenuOption({ id: u.userId, type: 'user', user: u } satisfies MenuPayload),
+    )
+  }
+  if (trigger.kind === 'event' && caches.events !== null) {
+    const filtered = filterByQuery(caches.events, trigger.query, (e) => e.title)
+    return filtered.map(
+      (e) =>
+        new GenericMenuOption({ id: e.eventId, type: 'event', event: e } satisfies MenuPayload),
+    )
+  }
+  if (trigger.kind === 'library-category' && caches.categories !== null) {
+    return caches.categories.map(
+      (c) =>
+        new GenericMenuOption({
+          id: c.categoryId,
+          type: 'library-category',
+          category: c,
+        } satisfies MenuPayload),
+    )
+  }
+  return null
+}
+
+function filterByQuery<T>(items: ReadonlyArray<T>, query: string, label: (t: T) => string): T[] {
+  const q = query.trim().toLowerCase()
+  if (q.length === 0) return [...items]
+  return items.filter((i) => label(i).toLowerCase().includes(q))
+}
 
 async function fetchOptionsForTrigger(
   trigger: Trigger,

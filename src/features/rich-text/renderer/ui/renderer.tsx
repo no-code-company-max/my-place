@@ -229,9 +229,17 @@ async function renderMention(
       </span>
     )
   }
+  const icon = node.kind === 'user' ? '@' : node.kind === 'event' ? '🎉' : '📄'
   return (
-    <a key={key} href={resolved.href} className="rich-text-mention">
-      @{resolved.label}
+    <a
+      key={key}
+      href={resolved.href}
+      className={`rich-text-mention rich-text-mention-${node.kind}`}
+    >
+      <span aria-hidden className="rich-text-mention-icon">
+        {icon}
+      </span>
+      <span className="rich-text-mention-label">{resolved.label}</span>
     </a>
   )
 }

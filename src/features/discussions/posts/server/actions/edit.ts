@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/domain-error'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import {
   editPostInputSchema,
   openPostEditSessionInputSchema,
@@ -62,7 +63,7 @@ export async function editPostAction(input: unknown): Promise<{ ok: true; versio
     }
   }
 
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  if (data.body) assertRichTextSize(data.body)
 
   const nextVersion = await applyEdit(post, data, now)
   logPostEdited(actor, post, isOwner)

@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod'
+import { libraryItemDocumentSchema } from '@/features/rich-text/public'
 import { POST_TITLE_MAX_LENGTH, POST_TITLE_MIN_LENGTH } from '@/features/discussions/public'
 import {
   CATEGORY_EMOJI_MAX_LENGTH,
@@ -148,8 +149,7 @@ export const createItemInputSchema = z.object({
   placeId: z.string().min(1),
   categoryId: z.string().min(1),
   title: itemTitleSchema,
-  // stub F.1, re-apretar a richTextDocumentSchema en F.2
-  body: z.unknown(),
+  body: libraryItemDocumentSchema,
   coverUrl: coverUrlSchema,
 })
 export type CreateItemInput = z.infer<typeof createItemInputSchema>
@@ -157,8 +157,7 @@ export type CreateItemInput = z.infer<typeof createItemInputSchema>
 export const updateItemInputSchema = z.object({
   itemId: z.string().min(1),
   title: itemTitleSchema,
-  // stub F.1, re-apretar a richTextDocumentSchema en F.2
-  body: z.unknown(),
+  body: libraryItemDocumentSchema,
   coverUrl: coverUrlSchema,
   /** Versión del Post al momento de abrir el editor (optimistic locking).
    *  Si otro editor pisó el item entremedio, `updateMany` matchea 0 filas

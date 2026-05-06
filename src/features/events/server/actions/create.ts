@@ -5,6 +5,7 @@ import { prisma } from '@/db/client'
 import { ValidationError } from '@/shared/errors/domain-error'
 import { logger } from '@/shared/lib/logger'
 import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import { resolveActorForPlace } from '@/features/discussions/public.server'
 import { createPostFromSystemHelper } from '@/features/discussions/public.server'
 import {
@@ -57,7 +58,7 @@ export async function createEventAction(
   })
   validateEventTimezone(data.timezone)
   validateEventLocation(data.location ?? null)
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  if (data.description) assertRichTextSize(data.description)
 
   const trimmedTitle = data.title.trim()
   const authorSnapshot = buildEventAuthorSnapshot(actor.user)

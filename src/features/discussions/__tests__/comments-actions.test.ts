@@ -74,8 +74,35 @@ import {
 import { signEditSessionToken } from '@/shared/lib/edit-session-token'
 
 const bodyDoc = {
-  type: 'doc',
-  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'comentario' }] }],
+  root: {
+    type: 'root' as const,
+    version: 1 as const,
+    format: '' as const,
+    indent: 0,
+    direction: 'ltr' as const,
+    children: [
+      {
+        type: 'paragraph' as const,
+        version: 1 as const,
+        format: '' as const,
+        indent: 0,
+        direction: 'ltr' as const,
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text' as const,
+            version: 1 as const,
+            text: 'comentario',
+            format: 0,
+            detail: 0,
+            mode: 'normal' as const,
+            style: '',
+          },
+        ],
+      },
+    ],
+  },
 }
 
 function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {
@@ -194,10 +221,7 @@ describe('createCommentAction', () => {
     ).rejects.toBeInstanceOf(InvalidQuoteTarget)
   })
 
-  // stub F.1: durante la migración a Lexical el schema acepta `body: unknown`
-  // (antes era richTextDocumentSchema). F.2 vuelve a apretarlo y este test
-  // deja de tirar `expected to reject`.
-  it.skip('ValidationError si body falta — re-habilitado en F.2 con Lexical schema', async () => {
+  it('ValidationError si body falta', async () => {
     await expect(createCommentAction({ postId: 'po-1' })).rejects.toBeInstanceOf(ValidationError)
   })
 

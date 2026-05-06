@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
+import type { LexicalDocument } from '@/features/rich-text/public'
 import type {
   AuthorSnapshot,
   Post,
@@ -242,8 +243,8 @@ function mapPostWithEvent(
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
     title: row.title,
     slug: row.slug,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: row.body ?? null,
+    // Prisma.JsonValue → LexicalDocument: shape enforced por Zod al persistir.
+    body: (row.body as unknown as LexicalDocument | null) ?? null,
     createdAt: row.createdAt,
     editedAt: row.editedAt,
     hiddenAt: row.hiddenAt,

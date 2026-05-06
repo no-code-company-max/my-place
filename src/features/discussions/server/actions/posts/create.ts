@@ -5,6 +5,7 @@ import { prisma } from '@/db/client'
 import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { logger } from '@/shared/lib/logger'
 import { ConflictError, ValidationError } from '@/shared/errors/domain-error'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import { createPostInputSchema } from '@/features/discussions/schemas'
 import { buildAuthorSnapshot } from '@/features/discussions/domain/invariants'
 import { resolveActorForPlace, type DiscussionActor } from '@/features/discussions/server/actor'
@@ -29,7 +30,7 @@ export async function createPostAction(
   const actor = await resolveActorForPlace({ placeId: data.placeId })
   await assertPlaceOpenOrThrow(actor.placeId)
 
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  if (data.body) assertRichTextSize(data.body)
 
   const trimmedTitle = data.title.trim()
   const bodyJson = data.body ? (data.body as Prisma.InputJsonValue) : Prisma.JsonNull

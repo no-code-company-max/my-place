@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/domain-error'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import {
   editCommentInputSchema,
   openCommentEditSessionInputSchema,
@@ -56,7 +57,7 @@ export async function editCommentAction(input: unknown): Promise<{ ok: true; ver
     authorizeEditClassic(comment, now)
   }
 
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  assertRichTextSize(data.body)
   const nextVersion = await applyEdit(comment, data, now)
   logCommentEdited(actor, comment)
   revalidateCommentPaths(actor.placeSlug, comment.post.slug)

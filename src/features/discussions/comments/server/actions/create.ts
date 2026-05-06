@@ -5,12 +5,14 @@ import { prisma } from '@/db/client'
 import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { logger } from '@/shared/lib/logger'
 import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import { createCommentInputSchema, type CreateCommentInput } from '@/features/discussions/schemas'
 import {
   assertPostOpenForActivity,
   assertQuotedCommentAlive,
   assertQuotedCommentBelongsToPost,
   buildAuthorSnapshot,
+  buildQuoteSnapshot,
 } from '@/features/discussions/domain/invariants'
 import type { QuoteSnapshot } from '@/features/discussions/domain/types'
 import { resolveActorForPlace, type DiscussionActor } from '@/features/discussions/server/actor'
@@ -45,7 +47,7 @@ export async function createCommentAction(
 
   const actor = await resolveActorForPlace({ placeId: post.placeId })
   await assertPlaceOpenOrThrow(actor.placeId)
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  assertRichTextSize(data.body)
 
   const quotedSnapshot = await resolveQuoteSnapshot(data, post.id)
   const now = new Date()
@@ -100,8 +102,7 @@ async function resolveQuoteSnapshot(
   }
   assertQuotedCommentBelongsToPost(source, postId)
   assertQuotedCommentAlive(source)
-  // stub F.1: quoteSnapshot se re-construye en F.2 sobre Lexical AST
-  return null
+  return buildQuoteSnapshot(source, null)
 }
 
 async function insertCommentTx(

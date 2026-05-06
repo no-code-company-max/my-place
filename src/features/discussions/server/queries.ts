@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
+import type { LexicalDocument } from '@/features/rich-text/public'
 import type {
   AuthorSnapshot,
   Post,
@@ -19,8 +20,7 @@ import { findOrCreateCurrentOpening } from './place-opening'
  * El tipo `Comment` del dominio mantiene `body` obligatorio — los comments persistidos
  * siempre tienen body, pero la proyección para render puede omitirlo.
  */
-// stub F.1: body retipado a unknown durante migración a Lexical (F.2).
-export type CommentView = Omit<Comment, 'body'> & { body: unknown }
+export type CommentView = Omit<Comment, 'body'> & { body: LexicalDocument | null }
 
 /**
  * Queries del slice `discussions`. Sólo este archivo + `actions/*` tocan Prisma.
@@ -402,8 +402,7 @@ export type QuoteSource = {
   id: string
   postId: string
   authorSnapshot: AuthorSnapshot
-  // stub F.1, retipado en F.2 a LexicalDocument
-  body: unknown
+  body: LexicalDocument
   createdAt: Date
   deletedAt: Date | null
 }
@@ -425,8 +424,7 @@ export async function findQuoteSource(commentId: string): Promise<QuoteSource | 
     id: row.id,
     postId: row.postId,
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: row.body,
+    body: row.body as unknown as LexicalDocument,
     createdAt: row.createdAt,
     deletedAt: row.deletedAt,
   }
@@ -508,8 +506,9 @@ function mapPostWithEvent(
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
     title: row.title,
     slug: row.slug,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: row.body ?? null,
+    // Prisma.JsonValue → LexicalDocument: el shape lo enforce el schema Zod
+    // al persistir; acá confiamos en el runtime (mismo patrón que authorSnapshot).
+    body: (row.body as unknown as LexicalDocument | null) ?? null,
     createdAt: row.createdAt,
     editedAt: row.editedAt,
     hiddenAt: row.hiddenAt,
@@ -534,8 +533,8 @@ function mapComment(row: CommentRow, includeDeletedBody = false): CommentView {
     placeId: row.placeId,
     authorUserId: row.authorUserId,
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: isDeleted && !includeDeletedBody ? null : row.body,
+    // Prisma.JsonValue → LexicalDocument: shape enforced por Zod al persistir.
+    body: isDeleted && !includeDeletedBody ? null : (row.body as unknown as LexicalDocument),
     quotedCommentId: row.quotedCommentId,
     quotedSnapshot: (row.quotedSnapshot as unknown as QuoteSnapshot | null) ?? null,
     createdAt: row.createdAt,

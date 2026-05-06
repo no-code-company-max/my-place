@@ -154,8 +154,35 @@ const POST_SLUG = 'pan-de-campo'
 const ITEM_ID = 'item-1'
 
 const validBody = {
-  type: 'doc',
-  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'receta' }] }],
+  root: {
+    type: 'root' as const,
+    version: 1 as const,
+    format: '' as const,
+    indent: 0,
+    direction: 'ltr' as const,
+    children: [
+      {
+        type: 'paragraph' as const,
+        version: 1 as const,
+        format: '' as const,
+        indent: 0,
+        direction: 'ltr' as const,
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text' as const,
+            version: 1 as const,
+            text: 'receta',
+            format: 0,
+            detail: 0,
+            mode: 'normal' as const,
+            style: '',
+          },
+        ],
+      },
+    ],
+  },
 }
 
 type ActorOpts = {

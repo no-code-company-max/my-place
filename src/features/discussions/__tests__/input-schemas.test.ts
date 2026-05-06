@@ -7,8 +7,35 @@ import {
 } from '../schemas'
 
 const validBody = {
-  type: 'doc',
-  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hola' }] }],
+  root: {
+    type: 'root',
+    version: 1,
+    format: '',
+    indent: 0,
+    direction: 'ltr',
+    children: [
+      {
+        type: 'paragraph',
+        version: 1,
+        format: '',
+        indent: 0,
+        direction: 'ltr',
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text',
+            version: 1,
+            text: 'hola',
+            format: 0,
+            detail: 0,
+            mode: 'normal',
+            style: '',
+          },
+        ],
+      },
+    ],
+  },
 }
 
 describe('createPostInputSchema', () => {
@@ -51,9 +78,7 @@ describe('createCommentInputSchema', () => {
     ).toBe(true)
   })
 
-  // stub F.1: el schema usa `z.unknown()` durante la migración a Lexical.
-  // F.2 vuelve a `richTextDocumentSchema` y este test rechaza body undefined.
-  it.skip('rechaza sin body — re-habilitado en F.2 con Lexical schema', () => {
+  it('rechaza sin body', () => {
     expect(createCommentInputSchema.safeParse({ postId: 'po-1' }).success).toBe(false)
   })
 })

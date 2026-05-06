@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { ConflictError } from '@/shared/errors/domain-error'
+import { assertRichTextSize, type LexicalDocument } from '@/features/rich-text/public'
 import { logger } from '@/shared/lib/logger'
 import { resolveUniqueSlug } from './shared'
 
@@ -31,7 +32,7 @@ import { resolveUniqueSlug } from './shared'
 export type CreatePostFromSystemInput = {
   placeId: string
   title: string
-  body: Prisma.InputJsonValue
+  body: LexicalDocument
   authorUserId: string
   authorSnapshot: Prisma.InputJsonValue
   /** Discriminador para logging.
@@ -46,7 +47,7 @@ export async function createPostFromSystemHelper(
   tx: Prisma.TransactionClient,
   input: CreatePostFromSystemInput,
 ): Promise<{ id: string; slug: string }> {
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  assertRichTextSize(input.body)
 
   const trimmedTitle = input.title.trim()
   const now = new Date()
@@ -101,7 +102,7 @@ async function attemptCreateUnderTx(
       authorSnapshot: input.authorSnapshot,
       title: trimmedTitle,
       slug,
-      body: input.body,
+      body: input.body as Prisma.InputJsonValue,
       lastActivityAt: now,
     },
     select: { id: true, slug: true },

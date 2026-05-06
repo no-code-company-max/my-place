@@ -76,8 +76,35 @@ import {
 import { signEditSessionToken } from '@/shared/lib/edit-session-token'
 
 const bodyDoc = {
-  type: 'doc',
-  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hola' }] }],
+  root: {
+    type: 'root' as const,
+    version: 1 as const,
+    format: '' as const,
+    indent: 0,
+    direction: 'ltr' as const,
+    children: [
+      {
+        type: 'paragraph' as const,
+        version: 1 as const,
+        format: '' as const,
+        indent: 0,
+        direction: 'ltr' as const,
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text' as const,
+            version: 1 as const,
+            text: 'hola',
+            format: 0,
+            detail: 0,
+            mode: 'normal' as const,
+            style: '',
+          },
+        ],
+      },
+    ],
+  },
 }
 
 function mockActiveMember(opts: { asAdmin?: boolean } = {}): void {

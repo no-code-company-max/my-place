@@ -26,7 +26,27 @@ function makeComment(id: string, overrides: Partial<CommentView> = {}): CommentV
     placeId: 'place-1',
     authorUserId: 'user-' + id,
     authorSnapshot: { displayName: 'Max', avatarUrl: null },
-    body: { type: 'doc', content: [{ type: 'paragraph' }] },
+    body: {
+      root: {
+        type: 'root',
+        version: 1,
+        format: '',
+        indent: 0,
+        direction: null,
+        children: [
+          {
+            type: 'paragraph',
+            version: 1,
+            format: '',
+            indent: 0,
+            direction: 'ltr',
+            textFormat: 0,
+            textStyle: '',
+            children: [],
+          },
+        ],
+      },
+    },
     quotedCommentId: null,
     quotedSnapshot: null,
     createdAt: new Date('2026-04-22T12:00:00Z'),

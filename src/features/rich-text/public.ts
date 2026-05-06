@@ -1,0 +1,72 @@
+/**
+ * Superficie pública del slice `rich-text`.
+ *
+ * Sólo exports client-safe + tipos. Server-only (queries, resolvers de mention)
+ * viven en `public.server.ts`. Ver gotcha sobre split público en CLAUDE.md.
+ */
+
+export type {
+  ApplePodcastEmbed,
+  BlockNode,
+  CommentDocument,
+  ElementDirection,
+  ElementFormat,
+  EmbedNode,
+  EventDocument,
+  HeadingNode,
+  InlineNode,
+  IvooxEmbed,
+  LexicalDocument,
+  LibraryItemDocument,
+  LineBreakNode,
+  LinkNode,
+  ListItemNode,
+  ListNode,
+  MentionNode,
+  ParagraphNode,
+  PostDocument,
+  QuoteSnapshot,
+  RootNode,
+  SpotifyEmbed,
+  TextNode,
+  YoutubeEmbed,
+} from './domain/types'
+
+export {
+  applePodcastEmbedSchema,
+  commentDocumentSchema,
+  embedNodeSchema,
+  eventDocumentSchema,
+  headingNodeSchema,
+  ivooxEmbedSchema,
+  libraryItemDocumentSchema,
+  lineBreakNodeSchema,
+  linkNodeSchema,
+  listItemNodeSchema,
+  listNodeSchema,
+  mentionNodeSchema,
+  paragraphNodeSchema,
+  postDocumentSchema,
+  richTextDocumentSchema,
+  rootNodeSchema,
+  spotifyEmbedSchema,
+  textNodeSchema,
+  youtubeEmbedSchema,
+} from './domain/schemas'
+
+export {
+  RICH_TEXT_MAX_BYTES,
+  RICH_TEXT_MAX_LIST_DEPTH,
+  assertRichTextSize,
+  richTextByteSize,
+  richTextMaxListDepth,
+} from './domain/size'
+
+export type { AssertRichTextSizeOpts } from './domain/size'
+
+export { RichTextTooDeepError, RichTextTooLargeError } from './domain/errors'
+
+export { richTextExcerpt } from './domain/excerpt'
+
+export { buildQuoteSnapshot } from './domain/snapshot'
+export type { BuildQuoteSnapshotInput } from './domain/snapshot'

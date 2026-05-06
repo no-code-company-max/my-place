@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod'
+import { eventDocumentSchema } from '@/features/rich-text/public'
 import { isAllowedTimezone } from '@/features/hours/public'
 import {
   EVENT_LOCATION_MAX_LENGTH,
@@ -50,8 +51,7 @@ export const createEventInputSchema = z
   .object({
     placeId: z.string().min(1),
     title: titleSchema,
-    // stub F.1, re-apretar a richTextDocumentSchema en F.2
-    description: z.unknown().nullable().optional(),
+    description: eventDocumentSchema.nullable().optional(),
     startsAt: datetimeSchema,
     endsAt: datetimeSchema.nullable().optional(),
     timezone: timezoneSchema,
@@ -69,8 +69,7 @@ export const updateEventInputSchema = z
   .object({
     eventId: z.string().min(1),
     title: titleSchema,
-    // stub F.1, re-apretar a richTextDocumentSchema en F.2
-    description: z.unknown().nullable().optional(),
+    description: eventDocumentSchema.nullable().optional(),
     startsAt: datetimeSchema,
     endsAt: datetimeSchema.nullable().optional(),
     timezone: timezoneSchema,

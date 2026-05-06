@@ -10,6 +10,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '@/shared/errors/domain-error'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import {
   editCommentInputSchema,
   openCommentEditSessionInputSchema,
@@ -80,7 +81,7 @@ export async function editCommentAction(input: unknown): Promise<{ ok: true; ver
     })
   }
 
-  // stub F.1: validación de tamaño rich-text se reintroduce en F.2 con Lexical AST.
+  assertRichTextSize(data.body)
 
   const nextVersion = data.expectedVersion + 1
   const updated = await prisma.comment.updateMany({

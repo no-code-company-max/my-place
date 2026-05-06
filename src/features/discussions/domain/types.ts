@@ -13,6 +13,7 @@ import type {
   PlaceOpeningSource as PrismaPlaceOpeningSource,
   ReactionEmoji as PrismaReactionEmoji,
 } from '@prisma/client'
+import type { LexicalDocument } from '@/features/rich-text/public'
 
 export type ContentTargetKind = PrismaContentTargetKind
 export type ReactionEmoji = PrismaReactionEmoji
@@ -25,11 +26,11 @@ export {
 } from '@prisma/client'
 
 // ---------------------------------------------------------------
-// Rich text (stub F.1: tipos eliminados durante migración a Lexical)
+// Rich text (F.2 2026-05-06: migrado a Lexical AST via slice rich-text)
 // ---------------------------------------------------------------
-// Los tipos `RichText*` (TipTap AST) se eliminaron en F.1. Las columnas
-// que persisten rich-text quedan tipadas como `unknown` hasta F.2,
-// que reintroduce `LexicalDocument` desde el slice `rich-text/`.
+// Los tipos canónicos del AST viven en `@/features/rich-text/public`.
+// Acá usamos `LexicalDocument` para `Post.body` (nullable), `Comment.body`
+// (NOT NULL) y `QuoteSnapshot.body` (snapshot del comment citado).
 
 // ---------------------------------------------------------------
 // Snapshots (congelados al momento de crear)
@@ -107,8 +108,7 @@ export type Post = {
   authorSnapshot: AuthorSnapshot
   title: string
   slug: string
-  // stub F.1, retipado en F.2 a LexicalDocument
-  body: unknown
+  body: LexicalDocument | null
   createdAt: Date
   editedAt: Date | null
   hiddenAt: Date | null
@@ -174,8 +174,10 @@ export type Comment = {
   placeId: string
   authorUserId: string | null
   authorSnapshot: AuthorSnapshot
-  // stub F.1, retipado en F.2 a LexicalDocument
-  body: unknown
+  /** NOT NULL en la tabla. Las views (`CommentView`) replazan a null cuando
+   *  el comment está deletado y el actor no es admin — esa proyección vive en
+   *  `server/queries.ts`, no en este tipo. */
+  body: LexicalDocument
   quotedCommentId: CommentId | null
   quotedSnapshot: QuoteSnapshot | null
   createdAt: Date
@@ -212,12 +214,13 @@ export type PostRead = {
   dwellMs: number
 }
 
-/** Input mínimo para resolver un snapshot de cita. */
+/** Input mínimo para resolver un snapshot de cita. `body` siempre presente
+ *  (NOT NULL en DB) — sólo Comments deletados pueden no tener body proyectado,
+ *  y deletados no se pueden citar (`assertQuotedCommentAlive`). */
 export type QuoteSourceComment = {
   id: CommentId
   authorSnapshot: AuthorSnapshot
-  // stub F.1, retipado en F.2 a LexicalDocument
-  body: unknown
+  body: LexicalDocument
   createdAt: Date
   deletedAt: Date | null
 }

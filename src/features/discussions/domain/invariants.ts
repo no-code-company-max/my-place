@@ -8,7 +8,8 @@
  * Ver `docs/features/discussions/spec.md` § 8 (invariantes).
  */
 
-import type { AuthorSnapshot, Post, QuoteSourceComment } from './types'
+import { richTextExcerpt } from '@/features/rich-text/public'
+import type { AuthorSnapshot, Post, QuoteSnapshot, QuoteSourceComment } from './types'
 import {
   CommentDeletedError,
   EditWindowExpired,
@@ -171,7 +172,31 @@ export function buildAuthorSnapshot(input: {
   }
 }
 
-// stub F.1: `buildQuoteSnapshot` se reconstruye en F.2 sobre el AST de Lexical.
+/**
+ * Snapshot congelado de un Comment al momento de citarlo. El shape vive en
+ * `Comment.quotedSnapshot` (JSONB) y NO se actualiza si el target se edita,
+ * oculta o borra — es una foto histórica.
+ *
+ * Construido sobre la primitiva de rich-text (`richTextExcerpt`) — el slice
+ * discussions modela su propio `QuoteSnapshot` (con `commentId + createdAt`)
+ * porque la cita necesita link al target y timestamp del original. La
+ * primitiva genérica de `rich-text/snapshot` se puede usar en otras
+ * superficies (library notes, etc.) que tengan un shape de cita distinto.
+ */
+export function buildQuoteSnapshot(
+  quotedComment: QuoteSourceComment,
+  newCommentId: string | null,
+): QuoteSnapshot {
+  if (newCommentId !== null && quotedComment.id === newCommentId) {
+    throw new InvalidQuoteTarget('self', { commentId: quotedComment.id })
+  }
+  return {
+    commentId: quotedComment.id,
+    authorLabel: quotedComment.authorSnapshot.displayName,
+    bodyExcerpt: richTextExcerpt(quotedComment.body, QUOTE_EXCERPT_MAX_CHARS),
+    createdAt: quotedComment.createdAt,
+  }
+}
 
 /**
  * Valida que el comment target pertenece al mismo Post. El trigger

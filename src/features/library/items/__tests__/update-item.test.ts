@@ -111,13 +111,35 @@ const CATEGORY_SLUG = 'recetas'
 const POST_SLUG = 'pan-de-campo'
 
 const VALID_BODY = {
-  type: 'doc' as const,
-  content: [
-    {
-      type: 'paragraph' as const,
-      content: [{ type: 'text' as const, text: 'cuerpo actualizado' }],
-    },
-  ],
+  root: {
+    type: 'root' as const,
+    version: 1 as const,
+    format: '' as const,
+    indent: 0,
+    direction: 'ltr' as const,
+    children: [
+      {
+        type: 'paragraph' as const,
+        version: 1 as const,
+        format: '' as const,
+        indent: 0,
+        direction: 'ltr' as const,
+        textFormat: 0,
+        textStyle: '',
+        children: [
+          {
+            type: 'text' as const,
+            version: 1 as const,
+            text: 'cuerpo actualizado',
+            format: 0,
+            detail: 0,
+            mode: 'normal' as const,
+            style: '',
+          },
+        ],
+      },
+    ],
+  },
 }
 
 const VALID_TITLE = 'Pan de campo (v2)'
@@ -354,17 +376,20 @@ describe('updateLibraryItemAction — validación', () => {
     expect(libraryItemUpdate).not.toHaveBeenCalled()
   })
 
-  // stub F.1: el schema acepta `body: unknown` durante la migración a Lexical
-  // (antes era richTextDocumentSchema con allowlist de nodos). F.2 vuelve a
-  // apretarlo y este test rechaza nodos fuera del allowlist.
-  it.skip('body con nodo fuera del allowlist: ValidationError de Zod — re-habilitado en F.2', async () => {
+  it('body con nodo fuera del allowlist (Lexical): ValidationError de Zod', async () => {
     await expect(
       updateLibraryItemAction({
         itemId: ITEM_ID,
         title: VALID_TITLE,
         body: {
-          type: 'doc',
-          content: [{ type: 'iframe', attrs: { src: 'https://evil.example' } }],
+          root: {
+            type: 'root',
+            version: 1,
+            format: '',
+            indent: 0,
+            direction: null,
+            children: [{ type: 'iframe', src: 'https://evil.example' }],
+          },
         },
         coverUrl: VALID_COVER,
         expectedVersion: 0,

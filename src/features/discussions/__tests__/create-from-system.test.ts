@@ -37,7 +37,16 @@ function makeMockTx(opts: {
 const baseInput = {
   placeId: 'place-1',
   title: 'Asado del viernes',
-  body: { type: 'doc', content: [] } as Prisma.InputJsonValue,
+  body: {
+    root: {
+      type: 'root' as const,
+      version: 1 as const,
+      format: '' as const,
+      indent: 0,
+      direction: null,
+      children: [],
+    },
+  },
   authorUserId: 'user-1',
   authorSnapshot: { displayName: 'Max', avatarUrl: null } as Prisma.InputJsonValue,
   originSystem: 'event' as const,

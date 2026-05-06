@@ -10,6 +10,7 @@ import {
 } from '@/shared/errors/domain-error'
 import { logger } from '@/shared/lib/logger'
 import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
+import { assertRichTextSize } from '@/features/rich-text/public'
 import { buildAuthorSnapshot } from '@/features/discussions/public'
 import { createPostFromSystemHelper } from '@/features/discussions/public.server'
 import { canCreateInCategory, validateItemCoverUrl } from '@/features/library/public'
@@ -111,6 +112,7 @@ export async function createLibraryItemAction(
 
   await assertPlaceOpenOrThrow(actor.placeId)
   validateItemCoverUrl(data.coverUrl ?? null)
+  assertRichTextSize(data.body)
 
   const trimmedTitle = data.title.trim()
   const authorSnapshot = buildAuthorSnapshot(actor.user)
@@ -121,7 +123,7 @@ export async function createLibraryItemAction(
       const post = await createPostFromSystemHelper(tx, {
         placeId: actor.placeId,
         title: trimmedTitle,
-        body: data.body as Prisma.InputJsonValue,
+        body: data.body,
         authorUserId: actor.actorId,
         authorSnapshot: authorSnapshot as Prisma.InputJsonValue,
         originSystem: 'library_item',

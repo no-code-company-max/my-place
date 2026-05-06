@@ -1,6 +1,7 @@
 import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
+import type { LexicalDocument } from '@/features/rich-text/public'
 import type {
   AuthorSnapshot,
   Comment,
@@ -16,9 +17,8 @@ export const COMMENT_PAGE_SIZE = 50
 /** `body=null` cuando el comment está deletado y el actor no es admin →
  *  UI renderiza `[mensaje eliminado]`. `quoteState` derivado server-side
  *  via JOIN con `quotedComment` (1 RTT). */
-// stub F.1: body retipado a unknown durante migración a Lexical (F.2).
 export type CommentView = Omit<Comment, 'body'> & {
-  body: unknown
+  body: LexicalDocument | null
   quoteState: QuoteTargetState | null
 }
 
@@ -42,8 +42,7 @@ export type QuoteSource = {
   id: string
   postId: string
   authorSnapshot: AuthorSnapshot
-  // stub F.1, retipado en F.2 a LexicalDocument
-  body: unknown
+  body: LexicalDocument
   createdAt: Date
   deletedAt: Date | null
 }
@@ -65,8 +64,7 @@ export async function findQuoteSource(commentId: string): Promise<QuoteSource | 
     id: row.id,
     postId: row.postId,
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: row.body,
+    body: row.body as unknown as LexicalDocument,
     createdAt: row.createdAt,
     deletedAt: row.deletedAt,
   }
@@ -124,8 +122,7 @@ function mapComment(row: CommentRow, includeDeletedBody = false): CommentView {
     placeId: row.placeId,
     authorUserId: row.authorUserId,
     authorSnapshot: row.authorSnapshot as unknown as AuthorSnapshot,
-    // stub F.1, retipado en F.2 a LexicalDocument
-    body: isDeleted && !includeDeletedBody ? null : row.body,
+    body: isDeleted && !includeDeletedBody ? null : (row.body as unknown as LexicalDocument),
     quotedCommentId: row.quotedCommentId,
     quotedSnapshot: (row.quotedSnapshot as unknown as QuoteSnapshot | null) ?? null,
     quoteState,

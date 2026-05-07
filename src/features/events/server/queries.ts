@@ -222,3 +222,27 @@ export async function listEventRsvps(params: { eventId: string; viewerUserId: st
     attendingCount: publicAttendees.length,
   }
 }
+
+// ---------------------------------------------------------------
+// findEventForRedirect — lookup mínimo para `/events/[eventId]` → 308
+// ---------------------------------------------------------------
+
+/**
+ * Lookup mínimo para el redirect 308 de `/events/[eventId]` a la URL
+ * canónica del thread `/conversations/<postSlug>`. Sólo `post.slug`
+ * — `getEvent` carga RSVPs además, innecesario para el redirect.
+ *
+ * Retorna `null` si el evento no existe en el place, o si `post` no
+ * está poblado (caso edge donde el auto-thread se borró del DB).
+ */
+export async function findEventForRedirect(
+  eventId: string,
+  placeId: string,
+): Promise<{ postSlug: string } | null> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, placeId },
+    select: { post: { select: { slug: true } } },
+  })
+  if (!event || !event.post) return null
+  return { postSlug: event.post.slug }
+}

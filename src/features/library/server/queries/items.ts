@@ -110,14 +110,9 @@ export async function findItemBySlug(
   postSlug: string,
   opts: { includeArchived?: boolean } = {},
 ): Promise<LibraryItemDetailView | null> {
-  const category = await prisma.libraryCategory.findUnique({
-    where: { placeId_slug: { placeId, slug: categorySlug } },
-    select: { id: true, slug: true, emoji: true, title: true, archivedAt: true },
-  })
-  if (!category) return null
-  if (!opts.includeArchived && category.archivedAt) return null
-
-  // Author snapshot vive en LibraryItem.authorSnapshot (no en Post.authorSnapshot).
+  // 1 query: post por (placeId, slug) + libraryItem + category anidados.
+  // Validamos pertenencia a la categoría en memoria sobre el slug de la
+  // category nested — evita el round-trip extra a libraryCategory.
   const post = await prisma.post.findUnique({
     where: { placeId_slug: { placeId, slug: postSlug } },
     select: {
@@ -140,22 +135,26 @@ export async function findItemBySlug(
           archivedAt: true,
           createdAt: true,
           updatedAt: true,
+          category: {
+            select: { id: true, slug: true, emoji: true, title: true, archivedAt: true },
+          },
         },
       },
     },
   })
   if (!post || !post.libraryItem) return null
   const item = post.libraryItem
-  if (item.categoryId !== category.id) return null
+  if (item.category.slug !== categorySlug) return null
+  if (!opts.includeArchived && item.category.archivedAt) return null
   if (!opts.includeArchived && item.archivedAt) return null
 
   return {
     id: item.id,
     placeId: item.placeId,
     categoryId: item.categoryId,
-    categorySlug: category.slug,
-    categoryEmoji: category.emoji,
-    categoryTitle: category.title,
+    categorySlug: item.category.slug,
+    categoryEmoji: item.category.emoji,
+    categoryTitle: item.category.title,
     postId: post.id,
     postSlug: post.slug,
     title: post.title,

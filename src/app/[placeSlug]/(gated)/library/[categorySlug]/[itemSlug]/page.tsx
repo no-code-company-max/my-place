@@ -2,13 +2,8 @@ import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { logger } from '@/shared/lib/logger'
-import { DwellTracker, ReactionBar, ThreadPresence } from '@/features/discussions/public'
-import {
-  aggregateReactions,
-  findOrCreateCurrentOpening,
-  reactionMapKey,
-  type ReactionAggregationMap,
-} from '@/features/discussions/public.server'
+import { DwellTracker, ThreadPresence } from '@/features/discussions/public'
+import { findOrCreateCurrentOpening } from '@/features/discussions/public.server'
 import {
   ItemAdminMenu,
   LibraryItemHeader,
@@ -76,17 +71,6 @@ export default async function LibraryItemDetailPage({ params }: Props) {
   const canEdit = canEditItem(itemCtx, libraryViewer)
   const canArchive = canArchiveItem(itemCtx, libraryViewer)
 
-  // Reactions del POST: solo necesitamos las reactions del propio post
-  // para pintar la `<ReactionBar>` del shell. Las de los comments se
-  // agregan dentro de `<CommentsSection>` junto con las del POST en una
-  // sola call combinada — chiquita duplicación (1 fetch del POST acá +
-  // 1 batch combinado en el suspense) a cambio de que la bar pinte sin
-  // esperar el listado de comments.
-  const postReactions = (await aggregateReactions({
-    targets: [{ type: 'POST', id: item.postId }],
-    viewerUserId: viewer.actorId,
-  })) as ReactionAggregationMap
-
   return (
     <div className="pb-32">
       <LibraryItemHeaderBar
@@ -126,14 +110,6 @@ export default async function LibraryItemDetailPage({ params }: Props) {
       </article>
 
       <div className="mx-3 mt-6 border-t-[0.5px] border-border" />
-
-      <div className="px-3 pt-4">
-        <ReactionBar
-          targetType="POST"
-          targetId={item.postId}
-          initial={postReactions.get(reactionMapKey('POST', item.postId)) ?? []}
-        />
-      </div>
 
       <Suspense fallback={<CommentsSkeleton />}>
         <CommentsSection

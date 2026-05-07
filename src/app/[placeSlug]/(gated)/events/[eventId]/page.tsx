@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { resolveViewerForPlace } from '@/features/discussions/public.server'
-import { getEvent } from '@/features/events/public.server'
+import { findEventForRedirect } from '@/features/events/public.server'
 
 type Props = { params: Promise<{ placeSlug: string; eventId: string }> }
 
@@ -14,9 +14,14 @@ type Props = { params: Promise<{ placeSlug: string; eventId: string }> }
  *  - bookmarks.
  *  - links autogenerados por consumidores anteriores al refactor.
  *
- * Si el evento no existe o el viewer no tiene visibilidad → 404 normal.
- * Si el evento existe pero no tiene Post asociado (caso defensivo: race
- * o discussions deshabilitado) → redirect al listado `/events`.
+ * Sesión 4 (perf): la query `getEvent(...)` original cargaba RSVPs y
+ * counts que se descartaban inmediatamente; reemplazada por
+ * `findEventForRedirect(...)` minimal que devuelve sólo `{ postSlug }`.
+ * Ahorra ~70ms del path crítico del redirect.
+ *
+ * Si el evento no existe (o existió pero el `post` asociado se borró —
+ * caso defensivo: race con discussions hard-delete) → 404. Si el viewer
+ * no es miembro activo del place → `AuthorizationError`.
  *
  * Ver `docs/decisions/2026-04-26-events-as-thread-unified-url.md`.
  */
@@ -25,19 +30,13 @@ export default async function EventLegacyDetailPage({ params }: Props) {
   const place = await loadPlaceBySlug(placeSlug)
   if (!place || place.archivedAt) notFound()
 
-  const viewer = await resolveViewerForPlace({ placeSlug })
-  const event = await getEvent({
-    eventId,
-    placeId: place.id,
-    viewerUserId: viewer.actorId,
-  })
+  // Preservamos el gate explícito de membership (además del que aplica
+  // `(gated)/layout.tsx`): si el viewer no es miembro activo, este resolver
+  // tira `AuthorizationError` antes de cualquier query al evento.
+  await resolveViewerForPlace({ placeSlug })
+
+  const event = await findEventForRedirect(eventId, place.id)
   if (!event) notFound()
 
-  if (event.postSlug) {
-    redirect(`/conversations/${event.postSlug}`)
-  }
-
-  // Defensivo: evento sin Post asociado (no debería pasar en F1, pero el
-  // schema lo permite). Mandamos al listado para evitar quedar varado.
-  redirect('/events')
+  redirect(`/conversations/${event.postSlug}`)
 }

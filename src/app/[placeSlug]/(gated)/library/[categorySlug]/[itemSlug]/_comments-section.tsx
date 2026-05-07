@@ -1,12 +1,13 @@
 import 'server-only'
 import { prisma } from '@/db/client'
-import { type QuoteTargetState } from '@/features/discussions/public'
+import { ReactionBar, type QuoteTargetState } from '@/features/discussions/public'
 import {
   CommentThread,
   PostReadersBlock,
   aggregateReactions,
   listCommentsByPost,
   listReadersByPost,
+  reactionMapKey,
   type PostReader,
   type ReactionAggregationMap,
 } from '@/features/discussions/public.server'
@@ -23,18 +24,15 @@ type CommentsSectionProps = {
 }
 
 /**
- * Streamed section para la item-detail page de biblioteca: comments +
- * reactions (POST + comments en una sola call) + readers + quote state.
- * Vive bajo `<Suspense>` en el page para que el shell del item (header
- * sticky + body + ReactionBar del POST) pinte primero.
+ * Streamed section para la item-detail page de biblioteca:
+ * ReactionBar(POST) + readers + comments + reactions (POST + comments
+ * en una sola call) + quote state. Vive bajo `<Suspense>` en el page
+ * para que el shell del item (header sticky + body) pinte primero.
  *
- * Combinamos `aggregateReactions` POST+comments en una sola call (mismo
- * patrón que `/conversations/[postSlug]`). Antes había 2 calls separadas
- * (1 para el POST, otra para los comments después de la lista) — ahora
- * es una sola, ahorrando 1 round-trip. El page sigue haciendo una
- * agregación acotada al POST para pintar la bar del shell antes de que
- * estremee la lista — es 1 query duplicada del POST a cambio de tiempo
- * percibido más bajo.
+ * Sesión 4 (perf): la `ReactionBar(POST)` se renderiza al tope de esta
+ * sección usando la entrada `POST` del mismo `reactionsByKey` que ya
+ * agrega POST + comments — antes vivía en el shell del page con su
+ * propia `aggregateReactions` (2 queries duplicadas en el critical path).
  *
  * El sufijo `_` excluye al archivo del file-system routing de Next.
  */
@@ -81,6 +79,14 @@ export async function CommentsSection({
 
   return (
     <>
+      <div className="px-3 pt-4">
+        <ReactionBar
+          targetType="POST"
+          targetId={postId}
+          initial={reactionsByKey.get(reactionMapKey('POST', postId)) ?? []}
+        />
+      </div>
+
       <div className="mt-3">
         <PostReadersBlock readers={readers} />
       </div>

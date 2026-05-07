@@ -5,18 +5,14 @@ import { logger } from '@/shared/lib/logger'
 import {
   DwellTracker,
   PostAdminMenu,
-  ReactionBar,
   ThreadHeaderBar,
   ThreadPresence,
 } from '@/features/discussions/public'
 import {
   PostDetail,
-  aggregateReactions,
   findOrCreateCurrentOpening,
   findPostBySlug,
-  reactionMapKey,
   resolveViewerForPlace,
-  type ReactionAggregationMap,
 } from '@/features/discussions/public.server'
 import { EventActionsMenu, EventMetadataHeader } from '@/features/events/public'
 import { getEvent } from '@/features/events/public.server'
@@ -38,10 +34,12 @@ type Props = { params: Promise<{ placeSlug: string; postSlug: string }> }
  * `pb-32` reserva espacio para el `<CommentComposer>` que vive `fixed
  * bottom-0` — sin este padding el último comment quedaría tapado.
  *
- * Streaming: el shell (header + PostDetail / EventMetadataHeader +
- * ReactionBar del POST) pinta primero. Comments + readers + quoteState
- * viven bajo `<Suspense>` en `<CommentsSection>` (sibling
- * `_comments-section.tsx`) — esas queries son las más pesadas.
+ * Streaming: el shell (header + PostDetail / EventMetadataHeader) pinta
+ * primero. Comments + readers + quoteState + ReactionBar(POST) viven
+ * bajo `<Suspense>` en `<CommentsSection>` (sibling
+ * `_comments-section.tsx`) — esas queries son las más pesadas. Sesión 4
+ * movió la `aggregateReactions(POST)` al Suspense child para combinarla
+ * en una sola query batched con la de los comments.
  */
 export default async function PostDetailPage({ params }: Props) {
   const { placeSlug, postSlug } = await params
@@ -83,25 +81,18 @@ export default async function PostDetailPage({ params }: Props) {
   // standalone). El detail del evento es shell-crítico (header del thread
   // muestra título/fecha/lugar), así que NO va dentro del Suspense.
   //
-  // Reactions del POST: solo necesitamos las del propio post para pintar
-  // la `<ReactionBar>` del shell (PostDetail o EventMetadataHeader). Las
-  // de los comments se agregan dentro de `<CommentsSection>` junto con
-  // las del POST en una sola call combinada — esto causa una pequeña
-  // duplicación (1 fetch del POST acá + 1 batch combinado en el suspense)
-  // a cambio de que la bar del POST pinte sin esperar el listado.
-  const [eventDetail, postReactions] = await Promise.all([
-    post.event
-      ? getEvent({
-          eventId: post.event.id,
-          placeId: place.id,
-          viewerUserId: viewer.actorId,
-        })
-      : Promise.resolve(null),
-    aggregateReactions({
-      targets: [{ type: 'POST', id: post.id }],
-      viewerUserId: viewer.actorId,
-    }) as Promise<ReactionAggregationMap>,
-  ])
+  // Sesión 4 (perf): la `aggregateReactions(POST)` solitaria del shell se
+  // sacó del path crítico — vive ahora dentro de `<CommentsSection>`
+  // combinada con la de los comments en una sola query batched. Ahorra
+  // 2 RTTs serializados. La `<ReactionBar>` del POST se pinta cuando el
+  // Suspense child stream complete (~70-100ms después del shell).
+  const eventDetail = post.event
+    ? await getEvent({
+        eventId: post.event.id,
+        placeId: place.id,
+        viewerUserId: viewer.actorId,
+      })
+    : null
 
   // Resolver el rightSlot del ThreadHeaderBar:
   //  - Event-thread (post.event poblado) + author/admin del evento →
@@ -133,28 +124,21 @@ export default async function PostDetailPage({ params }: Props) {
       />
 
       {eventDetail ? (
-        // F.H.1 (2026-04-27): event-thread renderiza
-        // EventMetadataHeader (con OrganizerRow al final) + separator
-        // + ReactionBar standalone + readers + thread. SIN PostDetail
-        // (su título auto "Conversación: X" y body genérico eran
-        // redundantes con el evento).
+        // F.H.1 (2026-04-27): event-thread renderiza EventMetadataHeader
+        // (con OrganizerRow al final) + separator + readers + thread. SIN
+        // PostDetail (su título auto "Conversación: X" y body genérico eran
+        // redundantes con el evento). Sesión 4 (perf): la ReactionBar(POST)
+        // se movió al `<CommentsSection>` para combinarse con la
+        // aggregación de los comments — ver page.tsx comment arriba.
         <>
           <EventMetadataHeader event={eventDetail} placeSlug={viewer.placeSlug} />
           <div className="mx-3 mt-6 border-t-[0.5px] border-border" />
-          <div className="px-3 pt-4">
-            <ReactionBar
-              targetType="POST"
-              targetId={post.id}
-              initial={postReactions.get(reactionMapKey('POST', post.id)) ?? []}
-            />
-          </div>
         </>
       ) : (
         <PostDetail
           post={post}
           viewerUserId={viewer.actorId}
           placeSlug={viewer.placeSlug}
-          reactions={postReactions.get(reactionMapKey('POST', post.id)) ?? []}
           mentionResolvers={buildMentionResolvers({ placeId: place.id })}
         />
       )}

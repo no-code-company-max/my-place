@@ -9,7 +9,7 @@ import 'server-only'
  * § "Boundary client vs server".
  */
 
-export { listEvents, getEvent, listEventRsvps } from './server/queries'
+export { listEvents, getEvent, listEventRsvps, findEventForRedirect } from './server/queries'
 export { cancelEventInTx } from './server/actions/cancel-in-tx'
 
 // F.4 (rich-text): autocomplete `/event` en composers + lookup

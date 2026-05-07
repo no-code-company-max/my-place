@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import { MemberAvatar } from '@/features/members/public'
 import type { Post } from '../domain/types'
-import type { AggregatedReaction } from '../server/reactions-aggregation'
-import { ReactionBar } from './reaction-bar'
 import { TimeAgo } from '@/shared/ui/time-ago'
 import { FlagButton } from '@/features/flags/public'
 import { EditWindowActions } from './edit-window-actions'
@@ -18,8 +16,13 @@ import { RichTextRenderer, type MentionResolvers } from '@/features/rich-text/pu
  *    movido desde arriba del título por feedback visual. Mismo
  *    patrón que `<OrganizerRow>` en event-threads: identidad
  *    contextual al final del contenido, no titular.
- *  - ReactionBar + FlagButton.
+ *  - FlagButton (a la derecha, sólo si no es el author).
  *  - EditWindowActions inline (autor + ventana 60s abierta).
+ *
+ * Sesión 4 (perf): la `ReactionBar(POST)` salió de este componente y
+ * vive ahora dentro de `<CommentsSection>` (Suspense child) — la
+ * agregación de reactions del POST se combina con la de los comments
+ * en una sola query batched, ahorrando 2 RTTs del shell critical path.
  *
  * El kebab admin (`<PostAdminMenu>`) vive en el `<ThreadHeaderBar>`
  * (slot derecho) compuesto por la page; PostDetail intencionalmente
@@ -29,13 +32,11 @@ export function PostDetail({
   post,
   viewerUserId,
   placeSlug,
-  reactions,
   mentionResolvers,
 }: {
   post: Post
   viewerUserId: string
   placeSlug: string
-  reactions: AggregatedReaction[]
   /**
    * Resolvers inyectados por la page consumer — el slice `rich-text` no
    * importa de `members/`, `events/` ni `library/`; la page que sí
@@ -64,10 +65,11 @@ export function PostDetail({
 
       <AuthorRow post={post} />
 
-      <div className="flex items-center justify-between gap-2">
-        <ReactionBar targetType="POST" targetId={post.id} initial={reactions} />
-        {!isAuthor ? <FlagButton targetType="POST" targetId={post.id} /> : null}
-      </div>
+      {!isAuthor ? (
+        <div className="flex justify-end">
+          <FlagButton targetType="POST" targetId={post.id} />
+        </div>
+      ) : null}
 
       {isAuthor ? (
         <EditWindowActions

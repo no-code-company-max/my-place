@@ -21,7 +21,7 @@ import {
 import { EventActionsMenu, EventMetadataHeader } from '@/features/events/public'
 import { getEvent } from '@/features/events/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
-import { buildMentionResolvers } from './_mention-resolvers'
+import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
 
 type Props = { params: Promise<{ placeSlug: string; postSlug: string }> }
 

@@ -40,10 +40,11 @@ export { revalidateLibraryCategoryPaths, revalidateLibraryItemPaths } from './se
 export { resolveLibraryViewer, type LibraryViewerContext } from './server/viewer'
 
 // F.4 (rich-text): autocomplete `/library/<cat>/<item>` two-step para
-// composers (Post / Library / Event). Cacheado.
+// composers (Post / Library / Event) + lookup defensivo de mention al render.
 export {
   listCategoriesForMention,
   searchLibraryItems,
+  findLibraryItemForMention,
   type MentionLibraryCategory,
   type MentionLibraryItem,
 } from './server/mention-search'

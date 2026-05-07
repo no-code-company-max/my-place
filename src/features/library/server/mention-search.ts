@@ -93,3 +93,27 @@ async function searchItemsInternal(
     .filter((i): i is typeof i & { post: { slug: string; title: string } } => i.post !== null)
     .map((i) => ({ itemId: i.id, slug: i.post.slug, title: i.post.title }))
 }
+
+/**
+ * Lookup defensivo de un library item mencionado en un documento rich-text.
+ * Devuelve `null` si el itemId no existe en el placeId, está archivado, o
+ * la categoría está archivada — el renderer pinta `[RECURSO NO DISPONIBLE]`.
+ */
+export async function findLibraryItemForMention(
+  itemId: string,
+  placeId: string,
+): Promise<{ title: string; postSlug: string; categorySlug: string } | null> {
+  const item = await prisma.libraryItem.findFirst({
+    where: { id: itemId, placeId, archivedAt: null, category: { archivedAt: null } },
+    select: {
+      post: { select: { slug: true, title: true } },
+      category: { select: { slug: true } },
+    },
+  })
+  if (!item || !item.post) return null
+  return {
+    title: item.post.title,
+    postSlug: item.post.slug,
+    categorySlug: item.category.slug,
+  }
+}

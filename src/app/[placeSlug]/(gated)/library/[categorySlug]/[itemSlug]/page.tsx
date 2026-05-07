@@ -17,10 +17,10 @@ import {
   canEditItem,
 } from '@/features/library/public'
 import { findItemBySlug, resolveLibraryViewer } from '@/features/library/public.server'
-import { findMemberProfile } from '@/features/members/public.server'
 import type { LexicalDocument } from '@/features/rich-text/public'
-import { RichTextRenderer, type MentionResolvers } from '@/features/rich-text/public.server'
+import { RichTextRenderer } from '@/features/rich-text/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
+import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string; itemSlug: string }>
@@ -117,15 +117,10 @@ export default async function LibraryItemDetailPage({ params }: Props) {
       <LibraryItemHeader item={item} />
 
       <article className="prose-place mx-3 mt-3 max-w-none text-text">
-        {/*
-          F.3 monta el renderer SSR para library items con resolvers stub
-          (`event`/`libraryItem` retornan null hasta F.4). El `user` ya se
-          resuelve via `findMemberProfile`.
-        */}
         {item.body ? (
           <RichTextRenderer
             document={item.body as LexicalDocument}
-            resolvers={buildLibraryItemResolvers(place.id)}
+            resolvers={buildMentionResolvers({ placeId: place.id })}
           />
         ) : null}
       </article>
@@ -152,21 +147,4 @@ export default async function LibraryItemDetailPage({ params }: Props) {
       </Suspense>
     </div>
   )
-}
-
-/**
- * Resolvers de mention para el body del library item. Mismo patrón que el
- * `_comments-section.tsx` — F.3 cubre `user`; `event`/`libraryItem` quedan
- * stub hasta F.4.
- */
-function buildLibraryItemResolvers(placeId: string): MentionResolvers {
-  return {
-    user: async (userId) => {
-      const profile = await findMemberProfile(placeId, userId)
-      if (!profile) return null
-      return { label: profile.user.displayName, href: `/m/${userId}` }
-    },
-    event: async () => null,
-    libraryItem: async () => null,
-  }
 }

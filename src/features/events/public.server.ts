@@ -12,5 +12,10 @@ import 'server-only'
 export { listEvents, getEvent, listEventRsvps } from './server/queries'
 export { cancelEventInTx } from './server/actions/cancel-in-tx'
 
-// F.4 (rich-text): autocomplete `/event` en composers. Cacheado.
-export { searchEventsByPlace, type MentionEvent } from './server/mention-search'
+// F.4 (rich-text): autocomplete `/event` en composers + lookup
+// defensivo de mention al render.
+export {
+  searchEventsByPlace,
+  findEventForMention,
+  type MentionEvent,
+} from './server/mention-search'

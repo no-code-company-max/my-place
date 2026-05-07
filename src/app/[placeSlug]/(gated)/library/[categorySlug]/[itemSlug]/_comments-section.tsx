@@ -10,8 +10,7 @@ import {
   type PostReader,
   type ReactionAggregationMap,
 } from '@/features/discussions/public.server'
-import { findMemberProfile } from '@/features/members/public.server'
-import type { MentionResolvers } from '@/features/rich-text/public.server'
+import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
 
 type CommentsSectionProps = {
   postId: string
@@ -102,23 +101,6 @@ export async function CommentsSection({
       />
     </>
   )
-}
-
-/**
- * Resolvers de mention para el `RichTextRenderer` SSR. F.3 cubre `user`;
- * `event` / `libraryItem` retornan `null` (el renderer pinta los placeholders
- * `[EVENTO NO DISPONIBLE]` / `[RECURSO NO DISPONIBLE]`) hasta F.4.
- */
-function buildMentionResolvers({ placeId }: { placeId: string }): MentionResolvers {
-  return {
-    user: async (userId) => {
-      const profile = await findMemberProfile(placeId, userId)
-      if (!profile) return null
-      return { label: profile.user.displayName, href: `/m/${userId}` }
-    },
-    event: async () => null,
-    libraryItem: async () => null,
-  }
 }
 
 /**

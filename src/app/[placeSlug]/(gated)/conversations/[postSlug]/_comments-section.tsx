@@ -10,7 +10,7 @@ import {
   type PostReader,
   type ReactionAggregationMap,
 } from '@/features/discussions/public.server'
-import { buildMentionResolvers } from './_mention-resolvers'
+import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
 
 type CommentsSectionProps = {
   postId: string

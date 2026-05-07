@@ -55,3 +55,24 @@ async function searchEventsInternal(placeId: string, q: string): Promise<Mention
     .filter((e): e is typeof e & { post: { slug: string } } => e.post !== null)
     .map((e) => ({ eventId: e.id, slug: e.post.slug, title: e.title }))
 }
+
+/**
+ * Lookup defensivo de un evento mencionado en un documento rich-text. Devuelve
+ * `null` si el eventId no existe en el placeId indicado, o si el evento está
+ * cancelado — el renderer pinta `[EVENTO NO DISPONIBLE]` ante null.
+ *
+ * Sin cache: las mentions se resuelven al render del post; el volumen total
+ * por page es bajo (cap por size del rich-text). Si crece, se cachea con tag
+ * por `(placeId, eventId)`.
+ */
+export async function findEventForMention(
+  eventId: string,
+  placeId: string,
+): Promise<{ title: string; postSlug: string } | null> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, placeId, cancelledAt: null },
+    select: { title: true, post: { select: { slug: true } } },
+  })
+  if (!event || !event.post) return null
+  return { title: event.title, postSlug: event.post.slug }
+}

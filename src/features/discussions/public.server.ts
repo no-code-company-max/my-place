@@ -65,3 +65,12 @@ export { CommentThread } from './ui/comment-thread'
 export { PostDetail } from './ui/post-detail'
 export { PostList } from './ui/post-list'
 export { PostReadersBlock } from './ui/post-readers-block'
+
+// Sesión 5.3: helpers de invalidación tag-based para el cache de
+// `aggregateReactions`. Llamados desde `reactAction`/`unreactAction`.
+export {
+  postReactionsTag,
+  commentReactionsTag,
+  revalidateReactionsForPost,
+  revalidateReactionsForComment,
+} from './server/reactions-cache'

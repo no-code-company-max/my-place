@@ -12,6 +12,7 @@ import {
   assertPostOpenForActivity,
 } from '@/features/discussions/domain/invariants'
 import { resolveActorForPlace } from '../actor'
+import { revalidateReactionsForComment, revalidateReactionsForPost } from '../reactions-cache'
 
 /**
  * Agrega una reacción a un Post o Comment. UNIQUE `(target, user, emoji)` hace
@@ -62,6 +63,13 @@ export async function reactAction(input: unknown): Promise<{ ok: true; alreadyRe
   )
 
   revalidatePath(`/${actor.placeSlug}/conversations/${target.postSlug}`)
+  // Sesión 5.3: invalidar el cache cross-request de aggregateReactions
+  // para este target. Se SUMA al revalidatePath (HTML/RSC) — no lo reemplaza.
+  if (data.targetType === 'POST') {
+    revalidateReactionsForPost(data.targetId)
+  } else {
+    revalidateReactionsForComment(data.targetId)
+  }
   return { ok: true, alreadyReacted }
 }
 
@@ -101,6 +109,13 @@ export async function unreactAction(input: unknown): Promise<{ ok: true; removed
   )
 
   revalidatePath(`/${actor.placeSlug}/conversations/${target.postSlug}`)
+  // Sesión 5.3: invalidar el cache cross-request de aggregateReactions
+  // para este target. Se SUMA al revalidatePath (HTML/RSC) — no lo reemplaza.
+  if (data.targetType === 'POST') {
+    revalidateReactionsForPost(data.targetId)
+  } else {
+    revalidateReactionsForComment(data.targetId)
+  }
   return { ok: true, removed: deleted.count > 0 }
 }
 

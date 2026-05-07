@@ -1,6 +1,9 @@
 import 'server-only'
+import { cache } from 'react'
+import { unstable_cache } from 'next/cache'
 import { prisma } from '@/db/client'
 import type { ContentTargetKind, ReactionEmoji } from '../domain/types'
+import { commentReactionsTag, postReactionsTag } from './reactions-cache'
 
 /**
  * Agregación de reacciones para un batch de targets polimórficos (POST + COMMENT).
@@ -33,7 +36,7 @@ export function reactionMapKey(type: ContentTargetKind, id: string): string {
   return `${type}:${id}`
 }
 
-export async function aggregateReactions(params: {
+async function aggregateReactionsRaw(params: {
   targets: ReactionTarget[]
   viewerUserId: string
 }): Promise<ReactionAggregationMap> {
@@ -76,3 +79,34 @@ export async function aggregateReactions(params: {
 
   return result
 }
+
+/**
+ * Cache de dos capas: `React.cache` per-request (dedup dentro del render
+ * tree) sobre `unstable_cache` cross-request (TTL 60s + tag-based
+ * invalidation). Key parts: `viewerUserId` + serialización estable de
+ * targets — el flag `viewerReacted` depende del viewer, así que cada
+ * (viewer, set-de-targets) tiene su propia entry. Tags por target permiten
+ * invalidar todas las entries de un POST/COMMENT independiente del viewer
+ * cuando muta una `Reaction`. Patrón: `findInviterPermissions` en
+ * `members/server/queries.ts:62`.
+ */
+export const aggregateReactions = cache(
+  async (params: {
+    targets: ReactionTarget[]
+    viewerUserId: string
+  }): Promise<ReactionAggregationMap> => {
+    if (params.targets.length === 0) return new Map()
+    const tags = params.targets.map((t) =>
+      t.type === 'POST' ? postReactionsTag(t.id) : commentReactionsTag(t.id),
+    )
+    const targetKey = params.targets
+      .map((t) => `${t.type}:${t.id}`)
+      .sort()
+      .join(',')
+    return unstable_cache(
+      () => aggregateReactionsRaw(params),
+      ['reactions', params.viewerUserId, targetKey],
+      { tags, revalidate: 60 },
+    )()
+  },
+)

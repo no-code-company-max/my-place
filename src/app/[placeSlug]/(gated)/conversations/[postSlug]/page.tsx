@@ -1,157 +1,65 @@
 import { Suspense } from 'react'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { logger } from '@/shared/lib/logger'
-import {
-  DwellTracker,
-  PostAdminMenu,
-  ThreadHeaderBar,
-  ThreadPresence,
-} from '@/features/discussions/public'
-import {
-  PostDetail,
-  findOrCreateCurrentOpening,
-  findPostBySlug,
-  resolveViewerForPlace,
-} from '@/features/discussions/public.server'
-import { EventActionsMenu, EventMetadataHeader } from '@/features/events/public'
-import { getEvent } from '@/features/events/public.server'
+import { ThreadHeaderBar } from '@/features/discussions/public'
+import { findPostBySlug } from '@/features/discussions/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
-import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
+import { ThreadContent } from './_thread-content'
+import { ThreadHeaderActions } from './_thread-header-actions'
+import { ThreadContentSkeleton } from './_skeletons'
 
 type Props = { params: Promise<{ placeSlug: string; postSlug: string }> }
 
 /**
- * Detalle de un post (R.6.4 layout): ThreadHeaderBar sticky + PostDetail
- * + readers + thread + composer fixed bottom. Admin ve posts `hiddenAt`
- * con badge; miembros comunes reciben 404 para que la ausencia sea
- * silenciosa (consistente con la lista).
+ * Detalle del thread (R.6.4 layout). **Patrón canónico de streaming
+ * agresivo del shell** — top-level await SÓLO para el check de
+ * existencia (loadPlace + findPost cacheados). Todo el resto streama:
  *
- * Layout chrome top: AppShell TopBar (52px, no sticky) + dots (28px, no
- * sticky) + ThreadHeaderBar (56px, sticky). Cuando el user scrollea, los
- * dos primeros se van con el body, el ThreadHeaderBar queda pinned arriba.
+ *  - `<ThreadHeaderBar>` pinta inmediato con back button.
+ *  - `<ThreadContent>` (Suspense) → fetch viewer + event detail. Resuelve
+ *    en ~700ms cold; mientras tanto el skeleton del body matched-dimension.
+ *  - `<CommentsSection>` (Suspense) → fetch comments + reactions + readers.
+ *    Resuelve en ~1s cold; skeleton aparte.
+ *  - `<ThreadHeaderActions>` (Suspense, fallback null) → admin kebab,
+ *    aparece in-place cuando viewer + event resuelven.
  *
- * `pb-32` reserva espacio para el `<CommentComposer>` que vive `fixed
- * bottom-0` — sin este padding el último comment quedaría tapado.
+ * Cada Suspense child fetchea sus dependencies independientemente.
+ * `React.cache` per-request dedupea queries compartidas (viewer, event)
+ * entre los 3 children — 1 query física por request aunque la pidan
+ * todos.
  *
- * Streaming: el shell (header + PostDetail / EventMetadataHeader) pinta
- * primero. Comments + readers + quoteState + ReactionBar(POST) viven
- * bajo `<Suspense>` en `<CommentsSection>` (sibling
- * `_comments-section.tsx`) — esas queries son las más pesadas. Sesión 4
- * movió la `aggregateReactions(POST)` al Suspense child para combinarla
- * en una sola query batched con la de los comments.
+ * Cross-zona redirect (R.7.9): Posts que son items de biblioteca
+ * redirigen a la URL canónica `/library/[cat]/[slug]`. Se resuelve en
+ * el top-level (sync `permanentRedirect`) para que el browser no vea
+ * skeletons antes del 308.
+ *
+ * Ver `docs/architecture.md` § "Streaming agresivo del shell".
  */
 export default async function PostDetailPage({ params }: Props) {
   const { placeSlug, postSlug } = await params
   const place = await loadPlaceBySlug(placeSlug)
   if (!place) notFound()
 
-  // Paralelizamos lo que no tiene dependencia entre sí. `resolveViewerForPlace`
-  // internamente comparte el cache de `loadPlaceBySlug` (React.cache) — no
-  // duplica queries (ver discussions/server/actor.ts:48-93).
-  // `findOrCreateCurrentOpening` también va acá porque solo depende de
-  // place.id; está cached por request, así que no se duplica con el
-  // fire-and-forget del (gated)/layout. El catch convierte el error a null
-  // para preservar el comportamiento "sin opening → sin readers" como hoy.
-  const [post, viewer, opening] = await Promise.all([
-    findPostBySlug(place.id, postSlug),
-    resolveViewerForPlace({ placeSlug }),
-    findOrCreateCurrentOpening(place.id).catch((err: unknown) => {
-      logger.error({ err, placeId: place.id }, 'failed to materialize opening')
-      return null
-    }),
-  ])
+  const post = await findPostBySlug(place.id, postSlug)
   if (!post) notFound()
-  if (post.hiddenAt && !viewer.isAdmin) notFound()
-
-  // R.7.9: cross-zona redirect. Si el Post es un thread documento de
-  // biblioteca, la URL canónica vive bajo /library/[cat]/[slug]. Esto
-  // preserva enlaces externos a /conversations/[slug] (autocompleto del
-  // search overlay R.4 podría apuntar acá) — `permanentRedirect` (308)
-  // refleja que la canónica es estable. Asimétrico con eventos por
-  // diseño (spec § 13.1: items pertenecen a una sub-zona, eventos no).
   if (post.libraryItem) {
     permanentRedirect(`/library/${post.libraryItem.categorySlug}/${post.slug}`)
   }
 
-  // F.F: el evento ES el thread. Si el Post fue auto-creado por un evento
-  // (`post.event` poblado en `findPostBySlug`), levantamos el detalle
-  // completo del evento y renderizamos `EventMetadataHeader` arriba del
-  // PostDetail. Sin event poblado, la page se comporta como antes (Post
-  // standalone). El detail del evento es shell-crítico (header del thread
-  // muestra título/fecha/lugar), así que NO va dentro del Suspense.
-  //
-  // Sesión 4 (perf): la `aggregateReactions(POST)` solitaria del shell se
-  // sacó del path crítico — vive ahora dentro de `<CommentsSection>`
-  // combinada con la de los comments en una sola query batched. Ahorra
-  // 2 RTTs serializados. La `<ReactionBar>` del POST se pinta cuando el
-  // Suspense child stream complete (~70-100ms después del shell).
-  const eventDetail = post.event
-    ? await getEvent({
-        eventId: post.event.id,
-        placeId: place.id,
-        viewerUserId: viewer.actorId,
-      })
-    : null
-
-  // Resolver el rightSlot del ThreadHeaderBar:
-  //  - Event-thread (post.event poblado) + author/admin del evento →
-  //    <EventActionsMenu> (Editar evento + Cancelar evento). Reemplaza
-  //    el footer de <EventMetadataHeader> que tenía estos 2 buttons.
-  //  - Post normal + admin → <PostAdminMenu> (Editar/Ocultar/Eliminar).
-  //  - Otros casos → null (sin kebab).
-  const isEventAuthor =
-    eventDetail?.authorUserId !== null && eventDetail?.authorUserId === viewer.actorId
-  const showEventMenu = eventDetail !== null && (isEventAuthor || viewer.isAdmin)
-  const headerRightSlot = showEventMenu ? (
-    <EventActionsMenu eventId={eventDetail.id} cancelled={eventDetail.state === 'cancelled'} />
-  ) : viewer.isAdmin ? (
-    <PostAdminMenu postId={post.id} hiddenAt={post.hiddenAt} expectedVersion={post.version} />
-  ) : null
-
   return (
     <div className="pb-32">
-      <ThreadHeaderBar rightSlot={headerRightSlot} />
-
-      <DwellTracker postId={post.id} />
-      <ThreadPresence
-        postId={post.id}
-        viewer={{
-          userId: viewer.actorId,
-          displayName: viewer.user.displayName,
-          avatarUrl: viewer.user.avatarUrl,
-        }}
+      <ThreadHeaderBar
+        rightSlot={
+          <Suspense fallback={null}>
+            <ThreadHeaderActions placeId={place.id} placeSlug={placeSlug} post={post} />
+          </Suspense>
+        }
       />
-
-      {eventDetail ? (
-        // F.H.1 (2026-04-27): event-thread renderiza EventMetadataHeader
-        // (con OrganizerRow al final) + separator + readers + thread. SIN
-        // PostDetail (su título auto "Conversación: X" y body genérico eran
-        // redundantes con el evento). Sesión 4 (perf): la ReactionBar(POST)
-        // se movió al `<CommentsSection>` para combinarse con la
-        // aggregación de los comments — ver page.tsx comment arriba.
-        <>
-          <EventMetadataHeader event={eventDetail} placeSlug={viewer.placeSlug} />
-          <div className="mx-3 mt-6 border-t-[0.5px] border-border" />
-        </>
-      ) : (
-        <PostDetail
-          post={post}
-          viewerUserId={viewer.actorId}
-          placeSlug={viewer.placeSlug}
-          mentionResolvers={buildMentionResolvers({ placeId: place.id })}
-        />
-      )}
-
+      <Suspense fallback={<ThreadContentSkeleton />}>
+        <ThreadContent placeSlug={placeSlug} placeId={place.id} post={post} />
+      </Suspense>
       <Suspense fallback={<CommentsSkeleton />}>
-        <CommentsSection
-          postId={post.id}
-          placeId={place.id}
-          placeSlug={viewer.placeSlug}
-          viewerUserId={viewer.actorId}
-          viewerIsAdmin={viewer.isAdmin}
-          placeOpeningId={opening?.id ?? null}
-        />
+        <CommentsSection placeId={place.id} placeSlug={placeSlug} postId={post.id} />
       </Suspense>
     </div>
   )

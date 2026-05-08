@@ -49,6 +49,12 @@ export {
   type PostReader,
 } from './server/queries'
 
+// Tipo `Post` re-exportado para Server Components consumidores
+// (pages que pre-fetchean post via `findPostBySlug` y lo pasan a
+// componentes streamed bajo `<Suspense>`). Ver patrón canónico en
+// `docs/architecture.md` § "Streaming agresivo del shell".
+export type { Post } from './domain/types'
+
 export {
   aggregateReactions,
   reactionMapKey,

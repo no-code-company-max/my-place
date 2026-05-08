@@ -1,50 +1,55 @@
 import 'server-only'
 import { prisma } from '@/db/client'
+import { logger } from '@/shared/lib/logger'
 import { ReactionBar, type QuoteTargetState } from '@/features/discussions/public'
 import {
   CommentThread,
   PostReadersBlock,
   aggregateReactions,
+  findOrCreateCurrentOpening,
   listCommentsByPost,
   listReadersByPost,
   reactionMapKey,
+  resolveViewerForPlace,
   type PostReader,
   type ReactionAggregationMap,
 } from '@/features/discussions/public.server'
 import { buildMentionResolvers } from '@/app/[placeSlug]/(gated)/_mention-resolvers'
 
 type CommentsSectionProps = {
-  postId: string
   placeId: string
   placeSlug: string
-  viewerUserId: string
-  viewerIsAdmin: boolean
-  /** ID del placeOpening actual; null si no hay opening (place cerrado). */
-  placeOpeningId: string | null
+  postId: string
 }
 
 /**
  * Streamed section: ReactionBar(POST) + readers + comments + reactions
  * (POST + comments en una sola call) + quote state. Vive bajo `<Suspense>`
- * en el page para que el shell del thread (header sticky + body) pinte
- * primero. Las queries acá son las más pesadas: lista de comments +
- * agregación batch + readers query + quote state JOIN.
+ * en el page para que el shell + ThreadHeaderBar pinten primero
+ * (~150ms post-TTFB). Las queries acá son las más pesadas: lista de
+ * comments + agregación batch + readers query + quote state JOIN.
  *
- * Sesión 4 (perf): la `ReactionBar` del POST se renderiza al tope de esta
- * sección usando la entrada `POST` del mismo `reactionsByKey` que ya
- * agrega POST + comments — antes vivía en el shell del page con su propia
- * `aggregateReactions` (2 queries duplicadas en el critical path).
+ * Streaming agresivo (post-Sesión perf): el page YA NO pre-fetcha viewer
+ * y opening — esta sección los resuelve internamente. `React.cache`
+ * dedupea con `<ThreadContent>` que también pide viewer para el header.
  *
- * El sufijo `_` excluye al archivo del file-system routing de Next.
+ * Ver `docs/architecture.md` § "Streaming agresivo del shell".
  */
-export async function CommentsSection({
-  postId,
-  placeId,
-  placeSlug,
-  viewerUserId,
-  viewerIsAdmin,
-  placeOpeningId,
-}: CommentsSectionProps) {
+export async function CommentsSection({ placeId, placeSlug, postId }: CommentsSectionProps) {
+  // Group 0: viewer + opening en paralelo. Ambos cacheados via React.cache
+  // dentro del mismo request, así que `<ThreadContent>` arriba ya disparó
+  // la viewer query — esta no incurre round-trip extra.
+  const [viewer, opening] = await Promise.all([
+    resolveViewerForPlace({ placeSlug }),
+    findOrCreateCurrentOpening(placeId).catch((err: unknown) => {
+      logger.error({ err, placeId }, 'failed to materialize opening')
+      return null
+    }),
+  ])
+  const viewerUserId = viewer.actorId
+  const viewerIsAdmin = viewer.isAdmin
+  const placeOpeningId = opening?.id ?? null
+
   // Group 1: lista de comments (gating reactions/quoteState que dependen de los
   // ids) + readers (independiente de los comments — sólo necesita postId). Antes
   // readers viajaba en el group 2 esperando innecesariamente al fetch de comments.

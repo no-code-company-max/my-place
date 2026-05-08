@@ -73,6 +73,7 @@ Cómo trabajamos con Claude Code en este proyecto.
 - **Diagnosticar antes de implementar.** Leer archivos relevantes, reportar estado actual, identificar patrones existentes. Nunca asumir paths, tipos, o convenciones — verificar.
 - **Leer la ontología antes de tocar una feature del core.** Discusiones, eventos y miembros tienen documentos canónicos. La implementación los respeta, no los reinterpreta.
 - **Spec antes de código.** Features nuevas requieren especificación en `docs/features/` antes de implementarse. La spec describe comportamiento esperado, no implementación.
+- **Pages de detalle siguen el patrón "streaming agresivo del shell".** Top-level await SÓLO para validación de existencia + redirect; todo lo demás vive bajo `<Suspense>`. Ver `docs/architecture.md` § "Streaming agresivo del shell" para la regla canónica + implementaciones de referencia. **Aplica a pages nuevas y refactor de pages existentes que tengan `await Promise.all` en el shell**.
 - **Triple review antes de ejecutar.** Todo prompt se revisa tres veces contra `docs/architecture.md` y `CLAUDE.md` antes de ejecutar.
 
 ### Durante la implementación

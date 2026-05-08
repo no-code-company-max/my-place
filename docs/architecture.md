@@ -41,6 +41,86 @@ src/
 
 Superar un límite es señal de que hay que dividir.
 
+## Streaming agresivo del shell
+
+Patrón **obligatorio** para pages de detalle (thread, library item, member detail, etc.). El objetivo es que el browser pinte skeletons inmediato (~150-300ms FCP) en vez de esperar a que todas las queries del page resuelvan antes de ver algo.
+
+### La regla
+
+Las pages de detalle tienen **un único `await` top-level**: la validación de existencia (typically `loadPlaceBySlug` + `findXBySlug`). Todo el resto vive en componentes async bajo `<Suspense fallback={<Skeleton />}>`.
+
+```tsx
+// ✅ correcto — patrón canónico
+export default async function DetailPage({ params }: Props) {
+  const { placeSlug, slug } = await params
+  const place = await loadPlaceBySlug(placeSlug) // cached cross-request
+  if (!place) notFound()
+
+  const entity = await findEntityBySlug(place.id, slug) // cached
+  if (!entity) notFound()
+  if (entity.shouldRedirect) permanentRedirect(entity.canonicalUrl)
+
+  return (
+    <Layout>
+      <HeaderBar
+        rightSlot={
+          <Suspense fallback={null}>
+            <EntityHeaderActions entity={entity} placeSlug={placeSlug} />
+          </Suspense>
+        }
+      />
+      <Suspense fallback={<EntityContentSkeleton />}>
+        <EntityContent entity={entity} place={place} placeSlug={placeSlug} />
+      </Suspense>
+      <Suspense fallback={<CommentsSkeleton />}>
+        <CommentsSection placeId={place.id} placeSlug={placeSlug} entityId={entity.id} />
+      </Suspense>
+    </Layout>
+  )
+}
+```
+
+```tsx
+// ❌ anti-patrón — todo el shell bloquea
+export default async function DetailPage({ params }: Props) {
+  const { placeSlug, slug } = await params
+  const place = await loadPlaceBySlug(placeSlug)
+  const [entity, viewer, opening, related] = await Promise.all([   // ← bloquea
+    findEntityBySlug(place.id, slug),
+    resolveViewerForPlace({ placeSlug }),
+    findOrCreateCurrentOpening(place.id),
+    fetchRelatedData(...),
+  ])
+  // 700-1500ms aquí antes de pintar nada
+  return <Layout>...</Layout>
+}
+```
+
+### Convenciones de archivos
+
+- `page.tsx` — sólo composición. Top-level await mínimo (validación + redirect). Idealmente ≤80 LOC.
+- `_<entity>-content.tsx` — Server Component async con el body principal. Resuelve viewer + data específica. Throws `notFound()` si la lógica adicional rechaza (ej: post oculto + non-admin).
+- `_<entity>-header-actions.tsx` — Server Component async para el `rightSlot` del header bar (kebab admin, action menus). Suspense fallback es `null` (slot vacío durante loading).
+- `_skeletons.tsx` — exporta skeletons matched-dimension. Un export por sección streamed. Sin shimmer agresivo (cozytech: nada parpadea).
+- `_comments-section.tsx` (cuando aplica) — Suspense child con la sección de comments + reactions + readers. Firma de props mínima `{ placeId, placeSlug, entityId }`; resuelve internamente viewer + opening (deduped via `React.cache`).
+- `loading.tsx` — **eliminar**. Los skeletons de Suspense lo reemplazan limpio. Mantener `loading.tsx` causa doble transición visual.
+
+### Cómo dedupean queries entre Suspense children
+
+Los 3 Suspense children del page suelen compartir queries (ej: `resolveViewerForPlace`). `React.cache` per-request dedupea: aunque cada child llame `resolveViewerForPlace({ placeSlug })`, **una sola query física** ocurre por request. Dejar que cada child fetchee lo que necesita; no obsesionarse con pasar todo desde el page.
+
+### Manejo de `notFound` y `permanentRedirect`
+
+- **Top-level (síncrono después del await)**: 99% de los casos van acá (entity no existe, redirect cross-zona). UX limpio: el browser nunca ve skeletons antes del 404/308.
+- **Desde Suspense child**: aceptable para casos raros (post oculto + viewer non-admin, item archivado + viewer non-author). Hay flicker (skeleton → 404) pero el caso es marginal.
+
+### Implementaciones de referencia
+
+- `src/app/[placeSlug]/(gated)/conversations/[postSlug]/` — patrón canónico. Phase 1 del refactor.
+- `src/app/[placeSlug]/(gated)/library/[categorySlug]/[itemSlug]/` — replica del patrón.
+
+Para nuevas pages de detalle, copiar la estructura de cualquiera de los dos antes de improvisar.
+
 ## Regla de sesiones
 
 - Una sesión = una cosa. Nunca mezclar capas (UI + lógica, DB + API, migración + feature).

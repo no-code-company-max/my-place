@@ -1,18 +1,38 @@
+import { Pool } from 'pg'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@prisma/client'
 import { logger } from '@/shared/lib/logger'
 
 /**
- * Singleton de PrismaClient.
- * El pattern `globalThis` evita múltiples instancias durante hot-reload en dev
- * (cada recarga crearía una conexión nueva y agotaría el pool).
+ * Singleton de PrismaClient + pg.Pool.
+ *
+ * Estrategia: usamos `@prisma/adapter-pg` (driver adapter in-process) en
+ * vez del binary engine de Prisma. El binary engine spawneaba un
+ * subproceso Rust por cliente y comunicaba via HTTP localhost — overhead
+ * inadecuado para Vercel serverless con cold starts frecuentes (medido:
+ * ~640ms por query agregados sólo por el subprocess + JSON HTTP). El
+ * adapter elimina el subprocess; queries van directo node-postgres → DB.
+ *
+ * Pool config:
+ *  - `max=1` reproduce el comportamiento de `?connection_limit=1` que
+ *    teníamos antes: cada lambda hold 1 conexión al pooler de Supabase,
+ *    evita saturar PgBouncer (~15 conexiones free tier).
+ *  - Override vía `PG_POOL_MAX` env var: `PG_POOL_MAX=10` en dev local
+ *    para paralelismo real.
+ *
+ * El pattern `globalThis` evita múltiples instancias durante hot-reload
+ * en dev (cada recarga crearía una conexión nueva y agotaría el pool).
  *
  * En dev sumamos un middleware `$use` que loguea cada query via pino con
- * `requestId` — imprescindible para correlacionar bursts entre navegación real
- * y prefetch de Next. Prisma 5 deja `$use` deprecado pero funcional; usarlo
- * acá evita el inflado de tipos que sí provoca `$extends({ query })` en los
- * `prisma.$transaction(async (tx) => …)` del resto del código.
+ * `requestId` — imprescindible para correlacionar bursts entre navegación
+ * real y prefetch de Next. Prisma 5 deja `$use` deprecado pero funcional;
+ * usarlo acá evita el inflado de tipos que sí provoca `$extends({ query })`
+ * en los `prisma.$transaction(async (tx) => …)` del resto del código.
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient
+  pgPool?: Pool
+}
 
 const isDev = process.env.NODE_ENV === 'development'
 // Opt-in para activar el query log en builds de producción local
@@ -22,8 +42,17 @@ const isDev = process.env.NODE_ENV === 'development'
 const isPerfRun = process.env.PERF_LOG === '1'
 const enableQueryLog = isDev || isPerfRun
 
-function createPrisma(): PrismaClient {
+function createPool(): Pool {
+  return new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: Number(process.env.PG_POOL_MAX ?? 1),
+  })
+}
+
+function createPrisma(pool: Pool): PrismaClient {
+  const adapter = new PrismaPg(pool)
   const client = new PrismaClient({
+    adapter,
     log: enableQueryLog ? ['error', 'warn'] : ['error'],
   })
 
@@ -51,9 +80,11 @@ function createPrisma(): PrismaClient {
   return client
 }
 
-export const prisma: PrismaClient = globalForPrisma.prisma ?? createPrisma()
+const pgPool: Pool = globalForPrisma.pgPool ?? createPool()
+export const prisma: PrismaClient = globalForPrisma.prisma ?? createPrisma(pgPool)
 
 if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.pgPool = pgPool
   globalForPrisma.prisma = prisma
 }
 

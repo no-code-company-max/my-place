@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 
-const CommentComposerForm = dynamic(
-  () => import('./comment-composer-form').then((m) => ({ default: m.CommentComposerForm })),
-  {
-    ssr: false,
-    loading: () => <ComposerLoading />,
-  },
+/**
+ * `React.lazy` (no `next/dynamic`) — la diferencia clave es que `next/dynamic`
+ * agrega el chunk dynamic-imported al `react-loadable-manifest.json`, que Next
+ * usa para emitir `<link rel="preload">` en el HTML inicial. Resultado: el
+ * browser descarga Lexical (~126 kB gzip) durante FCP aunque sea "lazy".
+ * `React.lazy` no toca el manifest — el chunk sólo viaja cuando el componente
+ * se intenta renderizar (`active === true` post-tap).
+ */
+const CommentComposerForm = lazy(() =>
+  import('./comment-composer-form').then((m) => ({ default: m.CommentComposerForm })),
 )
 
 type Props = {
@@ -18,13 +21,12 @@ type Props = {
 
 /**
  * Patrón Reddit mobile. Idle: button con look de input ("Sumate a la
- * conversación"). Al tap, dynamic-importa el `<CommentComposerForm>`
- * real (que arrastra Lexical + extensiones, ~126 kB gzip) y le pasa el
- * foco al contenteditable interno.
+ * conversación"). Al tap, dispara `React.lazy` para cargar el composer
+ * Lexical real (~126 kB gzip) y le pasa el foco al contenteditable interno.
  *
- * En el primer paint del thread no hay editor — hay un placeholder
- * estático. El bundle Lexical sólo viaja al cliente cuando el viewer
- * activa el composer. Mismo patrón que Reddit, Hacker News mobile, etc.
+ * En el primer paint del thread NO hay preload del editor — el bundle
+ * Lexical sólo viaja al cliente cuando el viewer activa el composer.
+ * Mismo patrón que Reddit, Hacker News mobile, etc.
  *
  * Trade-off UX: el primer comment de la sesión tiene un breve loading
  * (~150ms a 4G) entre tap y editor visible. Aceptable a cambio de un
@@ -36,9 +38,9 @@ export function CommentComposerLazy({ placeId, postId }: Props): React.JSX.Eleme
 
   useEffect(() => {
     if (!active) return
-    // Doble RAF: tras el primer frame `next/dynamic` aún muestra el
-    // fallback. El segundo garantiza que `<CommentComposerForm>` ya
-    // montó y el contenteditable de Lexical existe en el DOM.
+    // Doble RAF: tras el primer frame `Suspense` aún muestra el fallback.
+    // El segundo garantiza que `<CommentComposerForm>` ya montó y el
+    // contenteditable de Lexical existe en el DOM.
     let cancelled = false
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -68,7 +70,9 @@ export function CommentComposerLazy({ placeId, postId }: Props): React.JSX.Eleme
 
   return (
     <div ref={containerRef}>
-      <CommentComposerForm placeId={placeId} postId={postId} />
+      <Suspense fallback={<ComposerLoading />}>
+        <CommentComposerForm placeId={placeId} postId={postId} />
+      </Suspense>
     </div>
   )
 }

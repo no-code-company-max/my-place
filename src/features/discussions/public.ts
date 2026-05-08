@@ -122,7 +122,12 @@ export { PostUnreadDot } from './ui/post-unread-dot'
 export { PostAdminMenu } from './ui/post-admin-menu'
 export { ReactionBar } from './ui/reaction-bar'
 export { ThreadHeaderBar } from './ui/thread-header-bar'
-export { ThreadPresence } from './ui/thread-presence'
+// Re-export del wrapper lazy (mismo shape de props que el real). El real
+// vive en `./ui/thread-presence.tsx` y se carga en un chunk separado vía
+// `React.lazy` + `requestIdleCallback` desde el wrapper. El bundle de
+// Supabase Realtime + GoTrue (~12-15 kB gzip) sólo viaja al cliente
+// post-FCP. Ver `./ui/thread-presence-lazy.tsx`.
+export { ThreadPresenceLazy as ThreadPresence } from './ui/thread-presence-lazy'
 
 export {
   createCommentInputSchema,

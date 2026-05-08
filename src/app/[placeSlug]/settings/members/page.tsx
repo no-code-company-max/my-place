@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { clientEnv } from '@/shared/config/env'
-import { InviteMemberForm, LeaveButton } from '@/features/members/public'
+import { InviteMemberForm } from '@/features/members/invitations/public'
+import { LeaveButton } from '@/features/members/profile/public'
 import {
   PendingInvitationsList,
   findMemberPermissions,

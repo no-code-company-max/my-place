@@ -1,7 +1,26 @@
 /**
- * API pública client-safe del slice `members`. Tipos, schemas Zod,
- * Server Actions (callables desde Client Components vía RSC boundary)
- * y componentes UI client-safe.
+ * API pública client-safe del slice `members` — barrel **lite**.
+ *
+ * Sólo lo que SE USA EN MÚLTIPLES pages: `MemberAvatar` (todas las
+ * pages que muestran members), tipos del dominio, schemas Zod globales,
+ * y `searchMembersByPlaceAction` (typeahead de mentions).
+ *
+ * Los Client Components admin/forms (heavy: dialogs, sheets, forms con
+ * react-hook-form + Zod) viven en sub-slice publics dedicados:
+ *
+ *  - `members/invitations/public` → InviteForm, AcceptInvitationView,
+ *    InviteOwnerSheet, ResendInvitationButton, accept/invite/resend actions.
+ *  - `members/moderation/public` → BlockMemberDialog, ExpelMemberDialog,
+ *    UserBlockedView, block/expel/unblock actions.
+ *  - `members/profile/public` → LeaveButton, LeavePlaceDialog, leave action.
+ *  - `members/access/public` → OwnersAccessPanel (orchestrator de
+ *    `/settings/access` con multiple dialogs).
+ *
+ * Re-exportar todo desde el barrel raíz (como antes) arrastra ~17 kB gzip
+ * de forms a CUALQUIER page que sólo necesite `MemberAvatar` (member detail,
+ * threads, comments, group detail, etc.). Por eso se splitea — sólo las
+ * pages que usan los heavy importan del sub-slice. Ver ADR
+ * `docs/decisions/2026-05-08-sub-slice-cross-public.md`.
  *
  * **No** incluye queries server-only ni componentes que las usen
  * (ver `public.server.ts`). Mismo patrón split que `flags/public.ts`
@@ -9,11 +28,6 @@
  * Next traza re-exports al bundle cliente cuando un Server Component
  * que viaja a un Client Component importa este archivo. Mezclar
  * `import 'server-only'` acá rompería el build.
- *
- * Caso real R.6.3: `<LoadMorePosts>` ('use client') usa `<ThreadRow>`
- * (server) que importa `MemberAvatar` via este barrel. Sin split, el
- * bundle cliente trazaba hasta `<PendingInvitationsList>` (server-only)
- * y rompía con "You're importing a component that needs 'server-only'".
  */
 
 // ---------------------------------------------------------------
@@ -52,30 +66,20 @@ export {
 } from './schemas'
 
 // ---------------------------------------------------------------
-// Server Actions (callables desde Client Components via RSC)
+// Server Actions livianas (lite). Las heavy (accept/invite/leave/resend/
+// block/expel/unblock) viven en los sub-slice publics correspondientes.
 // ---------------------------------------------------------------
-export {
-  acceptInvitationAction,
-  inviteMemberAction,
-  leaveMembershipAction,
-  resendInvitationAction,
-} from './server/actions'
 
 // F.4 (rich-text): autocomplete `@user` para composers — Server Action
-// wrapper de la query cacheada `searchMembersByPlace`.
+// wrapper de la query cacheada `searchMembersByPlace`. Lite (no toca UI
+// de admin/forms; se usa en cada composer surface).
 export { searchMembersByPlaceAction } from './server/actions/mention-search'
 
 // ---------------------------------------------------------------
-// UI client-safe (no consumen server-only)
+// UI client-safe lite. Heavy components viven en sub-slice publics
+// (ver docstring del archivo).
 // ---------------------------------------------------------------
 export { MemberAvatar } from './ui/member-avatar'
-export { InviteMemberForm } from './ui/invite-form'
-export { AcceptInvitationView } from './ui/accept-invitation-view'
-export { LeaveButton } from './ui/leave-button'
-export { ResendInvitationButton } from './ui/resend-invitation-button'
-export { OwnersAccessPanel } from './ui/owners-access-panel'
-export { BlockMemberDialog } from './moderation/ui/block-member-dialog'
-export { ExpelMemberDialog } from './moderation/ui/expel-member-dialog'
 
 // ---------------------------------------------------------------
 // Helpers puros (sin imports server-only)

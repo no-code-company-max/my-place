@@ -4,7 +4,7 @@ import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { clientEnv } from '@/shared/config/env'
 import { PageHeader } from '@/shared/ui/page-header'
-import { OwnersAccessPanel } from '@/features/members/public'
+import { OwnersAccessPanel } from '@/features/members/access/public'
 import {
   findMemberPermissions,
   listActiveMembers,

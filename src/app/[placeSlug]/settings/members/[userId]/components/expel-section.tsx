@@ -1,4 +1,4 @@
-import { ExpelMemberDialog } from '@/features/members/public'
+import { ExpelMemberDialog } from '@/features/members/moderation/public'
 
 type Props = {
   placeId: string

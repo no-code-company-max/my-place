@@ -1,5 +1,5 @@
 import type { MemberBlockInfo } from '@/features/members/public.server'
-import { BlockMemberDialog } from '@/features/members/public'
+import { BlockMemberDialog } from '@/features/members/moderation/public'
 import { formatAbsoluteTimeLong } from '@/shared/lib/format-date'
 
 type Props = {

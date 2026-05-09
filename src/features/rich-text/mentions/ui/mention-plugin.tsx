@@ -6,74 +6,38 @@ import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
   LexicalTypeaheadMenuPlugin,
-  MenuOption,
   useBasicTypeaheadTriggerMatch,
 } from '@lexical/react/LexicalTypeaheadMenuPlugin'
 import { $createTextNode, $insertNodes, type TextNode } from 'lexical'
-import { $createMentionNode } from './mention-node'
 import { useMentionPrefetchSource } from './mention-prefetch-context'
+import { GenericMenuOption, MAX_RESULTS } from './menu-option'
+import { buildMentionFromPayload, fetchOptionsForTrigger, trySyncFromCache } from './mention-cache'
+import { matchSlashCommand } from './trigger-detection'
+import type {
+  ComposerMentionResolvers,
+  MentionEventResult,
+  MentionLibraryCategoryResult,
+  MentionResolversForEditor,
+  MentionUserResult,
+  MenuPayload,
+  Trigger,
+} from './mention-types'
 
-// ---------------------------------------------------------------
-// Resolver shapes
-// ---------------------------------------------------------------
-
-export type MentionUserResult = {
-  userId: string
-  displayName: string
-  handle?: string | null
-}
-
-export type MentionEventResult = {
-  eventId: string
-  slug: string
-  title: string
-}
-
-export type MentionLibraryCategoryResult = {
-  categoryId: string
-  slug: string
-  name: string
-}
-
-export type MentionLibraryItemResult = {
-  itemId: string
-  slug: string
-  title: string
-}
-
-/**
- * Forma legacy (F.3): un único resolver para users. El plugin lo acepta para
- * no romper consumers que ya están en producción (CommentComposer y la
- * superficie comment).
- */
-export type MentionResolversForEditor = {
-  placeId: string
-  searchUsers: (q: string) => Promise<MentionUserResult[]>
-}
-
-/**
- * Forma extendida (F.4): 4 resolvers + `placeId`. Cubre `@user`,
- * `/event ` y `/library/<cat>[/<q>]`. La forma legacy es un subset.
- */
-export type ComposerMentionResolvers = {
-  placeId: string
-  searchUsers: (q: string) => Promise<MentionUserResult[]>
-  searchEvents?: (q: string) => Promise<MentionEventResult[]>
-  listCategories?: () => Promise<MentionLibraryCategoryResult[]>
-  searchLibraryItems?: (categorySlug: string, q: string) => Promise<MentionLibraryItemResult[]>
-}
-
-// ---------------------------------------------------------------
-// Trigger union
-// ---------------------------------------------------------------
-
-type Trigger =
-  | { kind: 'user'; query: string }
-  | { kind: 'event'; query: string }
-  | { kind: 'library-category'; query: string }
-  | { kind: 'library-item'; categorySlug: string; query: string }
-
-const MAX_RESULTS = 8
+// Re-exports de compat: durante el split, public.ts y mention-prefetch-context
+// importan tipos desde este archivo. Mantenemos los re-exports para no
+// romper en pasos intermedios. El Step 4 del plan retira lo que ya no
+// agregue valor (cuando consumers actualicen sus paths).
+export type {
+  MentionUserResult,
+  MentionEventResult,
+  MentionLibraryCategoryResult,
+  MentionLibraryItemResult,
+  MentionResolversForEditor,
+  ComposerMentionResolvers,
+} from './mention-types'
+// Re-exports SÓLO para tests del slice (mention-feedback-menu.test.tsx +
+// match-slash-command.test.ts importan desde acá hasta el Step 4).
+export { matchSlashCommand, type SlashMatch } from './trigger-detection'
 
 /**
  * Umbral después del cual un fetch live "se siente lento". El spinner
@@ -81,29 +45,6 @@ const MAX_RESULTS = 8
  * cliente sigue trabajando — sin esto, fetches >5s parecen un cuelgue.
  */
 const SLOW_THRESHOLD_MS = 5000
-
-class GenericMenuOption extends MenuOption {
-  payload: MenuPayload
-  constructor(payload: MenuPayload) {
-    super(payload.id)
-    this.payload = payload
-  }
-}
-
-type MenuPayload =
-  | { id: string; type: 'user'; user: MentionUserResult }
-  | { id: string; type: 'event'; event: MentionEventResult }
-  | {
-      id: string
-      type: 'library-category'
-      category: MentionLibraryCategoryResult
-    }
-  | {
-      id: string
-      type: 'library-item'
-      item: MentionLibraryItemResult
-      categorySlug: string
-    }
 
 // ---------------------------------------------------------------
 // Plugin
@@ -582,244 +523,7 @@ function MentionRow({ payload }: { payload: MenuPayload }): React.JSX.Element {
   )
 }
 
-// ---------------------------------------------------------------
-// Helpers — match patterns por trigger
-// ---------------------------------------------------------------
-
-/** Exportado SÓLO para tests del slice — no consumir desde fuera. */
-export type SlashMatch = {
-  trigger:
-    | { kind: 'event'; query: string }
-    | { kind: 'library-category'; query: string }
-    | { kind: 'library-item'; categorySlug: string; query: string }
-  match: { leadOffset: number; matchingString: string; replaceableString: string }
-}
-
-/**
- * Regex unificada para slash commands. Capturas:
- *   m[3] = comando (ej: "event", "library", "lib", "eve")
- *   m[4] = sub-segmento opcional después de "/" (ej: "/library/recursos" → "recursos")
- *   m[5] = query opcional después de espacio (ej: "/event hola" → "hola")
- *
- * Triggers en prefix: typear `/eve` muestra eventos, `/lib` muestra
- * categorías. Apenas el prefix es único hacia algún comando, el menú
- * aparece (no hace falta escribir el comando completo).
- *
- * `\/?` después del sub-segment: el plugin reemplaza la categoría
- * seleccionada por `/library/<slug>/` (con slash trailing como UX hint
- * de "ahora typeá para filtrar"). Sin el `\/?` la regex se rompía con
- * el slash trailing → typeahead se cerraba al instante post-selección
- * y no mostraba los items de la categoría. El `\/?` lo absorbe.
- */
-const SLASH_RE = /(^|[\s\n])(\/([a-z]+)(?:\/([\w-]+))?\/?(?:[ ]([\w-]*))?)$/
-
-/**
- * Audit #10: registry de slash commands. Antes los nombres ("event",
- * "library") + su comportamiento estaban hardcoded en 4 branches del matcher.
- * Sumar `/poll`, `/file` o cualquier comando nuevo requería tocar 4 lugares
- * + capability flags. Con el registry: 1 entrada nueva en `SLASH_COMMANDS`
- * + 1 capability flag en `MentionPlugin`. El matcher itera y ya.
- *
- * Cada entrada describe:
- *   - `name`: nombre completo (`'event'`, `'library'`).
- *   - `acceptsSubSegment`: si `/<name>/<sub>` tiene semántica (library sí; event no).
- *   - `buildTrigger(sub, after)`: arma el `Trigger` correcto del comando.
- *
- * El behavior runtime es **idéntico** al matcher previo — los 18 tests
- * baseline en `match-slash-command.test.ts` lo garantizan.
- */
-type SlashCommand = {
-  name: string
-  acceptsSubSegment: boolean
-  buildTrigger: (sub: string, after: string) => SlashMatch['trigger']
-}
-
-const SLASH_COMMANDS: ReadonlyArray<SlashCommand> = [
-  {
-    name: 'event',
-    acceptsSubSegment: false,
-    buildTrigger: (_sub, after) => ({ kind: 'event', query: after }),
-  },
-  {
-    name: 'library',
-    acceptsSubSegment: true,
-    buildTrigger: (sub, after) =>
-      sub.length > 0
-        ? { kind: 'library-item', categorySlug: sub, query: after }
-        : { kind: 'library-category', query: '' },
-  },
-]
-
-/** Exportado SÓLO para tests del slice — no consumir desde fuera. */
-export function matchSlashCommand(text: string): SlashMatch | null {
-  const m = SLASH_RE.exec(text)
-  if (!m) return null
-  const cmd = m[3] ?? ''
-  const sub = m[4] ?? ''
-  const after = m[5] ?? ''
-  const replaceable = m[2] ?? ''
-  const leadOffset = (m.index ?? 0) + (m[1]?.length ?? 0)
-  const baseMatch = { leadOffset, matchingString: '', replaceableString: replaceable }
-
-  // 1. Match exacto: cmd === nombre del comando registrado.
-  for (const command of SLASH_COMMANDS) {
-    if (cmd !== command.name) continue
-    if (sub.length > 0 && !command.acceptsSubSegment) continue
-    const trigger = command.buildTrigger(sub, after)
-    // matchingString = la query que el typeahead usa para filtrar; relevante
-    // sólo cuando el trigger tiene query (event/library-item). Para
-    // library-category sin query, queda ''.
-    const matchingString = 'query' in trigger ? trigger.query : ''
-    return { trigger, match: { ...baseMatch, matchingString } }
-  }
-
-  // 2. Prefix match: el user está typeando el comando (ej: '/eve' → 'event').
-  // Sólo aplica si NO hay sub ni after — typeando todavía el nombre.
-  if (cmd.length > 0 && sub === '' && after === '') {
-    for (const command of SLASH_COMMANDS) {
-      if (!command.name.startsWith(cmd)) continue
-      return { trigger: command.buildTrigger('', ''), match: baseMatch }
-    }
-  }
-
-  return null
-}
-
-// ---------------------------------------------------------------
-// Fetch helpers + payload builders
-// ---------------------------------------------------------------
-
-type Caches = {
-  users: MentionUserResult[] | null
-  events: MentionEventResult[] | null
-  categories: MentionLibraryCategoryResult[] | null
-}
-
-/**
- * Devuelve opciones desde el cache local cuando es seguro (cache hit
- * inmediato, sin round-trip). Casos cubiertos:
- *  - `@`, `/event`, `/library` con query vacía → lista cacheada al mount.
- *  - `@<q>`, `/event <q>` → filter case-insensitive sobre el cache (top-N).
- *
- * `library-item` siempre fetch live: items dependen de la categoría
- * seleccionada, no se prefetchean para no inflar el payload de mount.
- *
- * Retorna `null` si el cache no está poblado o no aplica — el caller
- * cae al fetch live como fallback.
- */
-function trySyncFromCache(trigger: Trigger, caches: Caches): GenericMenuOption[] | null {
-  if (trigger.kind === 'user' && caches.users !== null) {
-    const filtered = filterByQuery(caches.users, trigger.query, (u) => u.displayName)
-    return filtered.map(
-      (u) => new GenericMenuOption({ id: u.userId, type: 'user', user: u } satisfies MenuPayload),
-    )
-  }
-  if (trigger.kind === 'event' && caches.events !== null) {
-    const filtered = filterByQuery(caches.events, trigger.query, (e) => e.title)
-    return filtered.map(
-      (e) =>
-        new GenericMenuOption({ id: e.eventId, type: 'event', event: e } satisfies MenuPayload),
-    )
-  }
-  if (trigger.kind === 'library-category' && caches.categories !== null) {
-    return caches.categories.map(
-      (c) =>
-        new GenericMenuOption({
-          id: c.categoryId,
-          type: 'library-category',
-          category: c,
-        } satisfies MenuPayload),
-    )
-  }
-  return null
-}
-
-function filterByQuery<T>(items: ReadonlyArray<T>, query: string, label: (t: T) => string): T[] {
-  const q = query.trim().toLowerCase()
-  if (q.length === 0) return [...items]
-  return items.filter((i) => label(i).toLowerCase().includes(q))
-}
-
-async function fetchOptionsForTrigger(
-  trigger: Trigger,
-  resolvers: ComposerMentionResolvers,
-): Promise<GenericMenuOption[]> {
-  if (trigger.kind === 'user') {
-    const users = await resolvers.searchUsers(trigger.query)
-    return users.map(
-      (u) => new GenericMenuOption({ id: u.userId, type: 'user', user: u } satisfies MenuPayload),
-    )
-  }
-  if (trigger.kind === 'event' && resolvers.searchEvents) {
-    const events = await resolvers.searchEvents(trigger.query)
-    return events.map(
-      (e) =>
-        new GenericMenuOption({ id: e.eventId, type: 'event', event: e } satisfies MenuPayload),
-    )
-  }
-  if (trigger.kind === 'library-category' && resolvers.listCategories) {
-    const cats = await resolvers.listCategories()
-    return cats.map(
-      (c) =>
-        new GenericMenuOption({
-          id: c.categoryId,
-          type: 'library-category',
-          category: c,
-        } satisfies MenuPayload),
-    )
-  }
-  if (trigger.kind === 'library-item' && resolvers.searchLibraryItems) {
-    const items = await resolvers.searchLibraryItems(trigger.categorySlug, trigger.query)
-    return items.map(
-      (i) =>
-        new GenericMenuOption({
-          id: i.itemId,
-          type: 'library-item',
-          item: i,
-          categorySlug: trigger.categorySlug,
-        } satisfies MenuPayload),
-    )
-  }
-  return []
-}
-
-function buildMentionFromPayload(payload: MenuPayload, placeId: string) {
-  if (payload.type === 'user') {
-    return $createMentionNode({
-      kind: 'user',
-      targetId: payload.user.userId,
-      targetSlug: payload.user.handle ?? payload.user.userId,
-      label: payload.user.displayName,
-      placeId,
-    })
-  }
-  if (payload.type === 'event') {
-    return $createMentionNode({
-      kind: 'event',
-      targetId: payload.event.eventId,
-      targetSlug: payload.event.slug,
-      label: payload.event.title,
-      placeId,
-    })
-  }
-  if (payload.type === 'library-category') {
-    // Category mentions: re-link al landing de la categoría usando
-    // `kind: library-item` con `targetId === categoryId` y label = nombre.
-    // El renderer no distingue (categoría se muestra como recurso); F.5+
-    // puede agregar un kind dedicado si UX lo pide.
-    return $createMentionNode({
-      kind: 'library-item',
-      targetId: payload.category.categoryId,
-      targetSlug: payload.category.slug,
-      label: payload.category.name,
-      placeId,
-    })
-  }
-  return $createMentionNode({
-    kind: 'library-item',
-    targetId: payload.item.itemId,
-    targetSlug: `${payload.categorySlug}/${payload.item.slug}`,
-    label: payload.item.title,
-    placeId,
-  })
-}
+// Helpers extraídos al split (Step 1):
+//   - matchSlashCommand + SlashMatch + SLASH_RE + SLASH_COMMANDS → trigger-detection.ts
+//   - trySyncFromCache + filterByQuery + fetchOptionsForTrigger + buildMentionFromPayload + Caches → mention-cache.ts
+// Re-exports al tope del archivo para no romper consumers durante el split.

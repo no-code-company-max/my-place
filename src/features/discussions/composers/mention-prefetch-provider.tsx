@@ -30,6 +30,20 @@ import { listLibraryCategoriesForMentionAction } from '@/features/library/public
  *
  * Re-fetch cada 5min: `Visibility API` + soft `setInterval(60s)` que
  * comprueba si toca refrescar. Cero consumo en tabs hidden. Ver § D5.
+ *
+ * **Tradeoff TTL stale (Audit #9, no-bloqueante)**: si se crea un evento o
+ * recurso de biblioteca **después** del prefetch, NO aparece en el typeahead
+ * hasta el próximo tick (≤5min, o más rápido si la tab pierde+recupera
+ * visibilidad). En places ≤150 miembros la frecuencia de creación es baja
+ * (un evento por semana, un recurso por día), así que la ventana de
+ * staleness es tolerable. Si en el futuro queremos eventual-consistency
+ * fuerte, las opciones son: (a) Realtime broadcast `events:created` /
+ * `library:created` que el Provider escuche y refresque on-demand;
+ * (b) reducir TTL a 60s (4× más queries, peor para connection pool);
+ * (c) invalidar cache del Provider desde la Server Action que crea el
+ * evento/recurso (require import cross-slice del client cache,
+ * boundary-noisy). Ninguna se aplica hoy — documentado para no perder el
+ * contexto.
  */
 const TTL_MS = 5 * 60 * 1000
 const VISIBILITY_CHECK_MS = 60 * 1000

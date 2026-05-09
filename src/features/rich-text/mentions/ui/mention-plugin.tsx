@@ -13,13 +13,14 @@ import { useMentionPrefetchSource } from './mention-prefetch-context'
 import { GenericMenuOption, MAX_RESULTS } from './menu-option'
 import { buildMentionFromPayload, fetchOptionsForTrigger, trySyncFromCache } from './mention-cache'
 import { matchSlashCommand } from './trigger-detection'
+import { MentionFeedbackMenu } from './mention-feedback-menu'
+import { MentionMenu } from './mention-menu'
 import type {
   ComposerMentionResolvers,
   MentionEventResult,
   MentionLibraryCategoryResult,
   MentionResolversForEditor,
   MentionUserResult,
-  MenuPayload,
   Trigger,
 } from './mention-types'
 
@@ -38,6 +39,7 @@ export type {
 // Re-exports SÓLO para tests del slice (mention-feedback-menu.test.tsx +
 // match-slash-command.test.ts importan desde acá hasta el Step 4).
 export { matchSlashCommand, type SlashMatch } from './trigger-detection'
+export { MentionFeedbackMenu } from './mention-feedback-menu'
 
 /**
  * Umbral después del cual un fetch live "se siente lento". El spinner
@@ -372,156 +374,9 @@ export function MentionPlugin({
   )
 }
 
-// ---------------------------------------------------------------
-// Menu component (split por LOC + reuso testing)
-// ---------------------------------------------------------------
-
-function MentionMenu({
-  options,
-  selectedIndex,
-  onMouseEnter,
-  onClick,
-}: {
-  options: ReadonlyArray<GenericMenuOption>
-  selectedIndex: number | null
-  onMouseEnter: (idx: number) => void
-  onClick: (option: GenericMenuOption) => void
-}): React.JSX.Element {
-  return (
-    <div className="rich-text-mention-menu min-w-[280px] max-w-md overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg">
-      <ul role="listbox" className="m-0 max-h-72 list-none overflow-y-auto p-0">
-        {options.map((option, idx) => (
-          <li
-            key={option.payload.id}
-            ref={option.setRefElement}
-            role="option"
-            tabIndex={-1}
-            aria-selected={selectedIndex === idx}
-            onMouseEnter={() => onMouseEnter(idx)}
-            onClick={() => {
-              onMouseEnter(idx)
-              onClick(option)
-            }}
-            className={[
-              'flex cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-2 text-sm leading-tight',
-              selectedIndex === idx ? 'bg-neutral-100' : 'bg-white hover:bg-neutral-50',
-            ].join(' ')}
-          >
-            <MentionRow payload={option.payload} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-/**
- * Placeholder visual mientras el `fetchOptionsForTrigger` resuelve, o
- * mensaje claro si el fetch falló (kind="error"). Aparece sólo en cache
- * miss; cache hit muestra los items directo. Texto contextual al trigger
- * para que el viewer sepa qué está pasando. Spinner / icon CSS puro
- * (sin dep externa).
- */
-/** Exportado sólo para tests del slice — no consumir desde fuera. */
-export function MentionFeedbackMenu({
-  kind,
-  trigger,
-  slow = false,
-}: {
-  kind: 'loading' | 'error'
-  trigger: Trigger
-  /**
-   * Sólo aplica a `kind === 'loading'`. Cuando `true`, el label cambia
-   * a "Sigue cargando…" para confirmar al viewer que el cliente NO
-   * se colgó — la red está lenta. Default `false` mantiene el label
-   * normal del primer momento del fetch.
-   */
-  slow?: boolean
-}): React.JSX.Element {
-  const target =
-    trigger.kind === 'user'
-      ? 'miembros'
-      : trigger.kind === 'event'
-        ? 'eventos'
-        : trigger.kind === 'library-category'
-          ? 'categorías'
-          : 'recursos'
-  const label =
-    kind === 'error'
-      ? `No pudimos cargar ${target}. Probá de nuevo.`
-      : slow
-        ? `Sigue cargando ${target}…`
-        : trigger.kind === 'user' || trigger.kind === 'event'
-          ? `Buscando ${target}…`
-          : `Cargando ${target}…`
-  // Cromática diferenciada por kind: el error usa border + bg + texto ámbar
-  // (cozytech: tono cálido, no rojo gritón) para que se distinga del loading
-  // a primera vista — sin contraste, ambos estados se confundían en un mismo
-  // tono neutral. Loading mantiene el tono neutral propio del placeholder.
-  const containerClass =
-    kind === 'error'
-      ? 'rich-text-mention-menu min-w-[260px] overflow-hidden rounded-md border border-amber-300 bg-amber-50 shadow-lg'
-      : 'rich-text-mention-menu min-w-[260px] overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg'
-  const innerClass =
-    kind === 'error'
-      ? 'flex items-center gap-2 px-3 py-2 text-sm text-amber-700'
-      : 'flex items-center gap-2 px-3 py-2 text-sm text-neutral-500'
-  return (
-    <div data-mention-feedback={kind} className={containerClass}>
-      <div role={kind === 'error' ? 'alert' : 'status'} aria-live="polite" className={innerClass}>
-        {kind === 'loading' ? (
-          <span
-            aria-hidden
-            className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600"
-          />
-        ) : (
-          <span aria-hidden className="text-amber-600">
-            ⚠
-          </span>
-        )}
-        <span className="truncate">{label}</span>
-      </div>
-    </div>
-  )
-}
-
-function MentionRow({ payload }: { payload: MenuPayload }): React.JSX.Element {
-  if (payload.type === 'user') {
-    return (
-      <>
-        <span aria-hidden className="text-neutral-400">
-          @
-        </span>
-        <span className="truncate font-medium text-neutral-900">{payload.user.displayName}</span>
-        {payload.user.handle ? (
-          <span className="ml-auto truncate text-xs text-neutral-500">@{payload.user.handle}</span>
-        ) : null}
-      </>
-    )
-  }
-  if (payload.type === 'event') {
-    return (
-      <>
-        <span aria-hidden>🎉</span>
-        <span className="truncate text-neutral-900">{payload.event.title}</span>
-      </>
-    )
-  }
-  if (payload.type === 'library-category') {
-    return (
-      <>
-        <span aria-hidden>📚</span>
-        <span className="truncate text-neutral-900">{payload.category.name}</span>
-      </>
-    )
-  }
-  return (
-    <>
-      <span aria-hidden>📄</span>
-      <span className="truncate text-neutral-900">{payload.item.title}</span>
-    </>
-  )
-}
+// MentionMenu, MentionFeedbackMenu y MentionRow extraídos en Step 3.
+// Re-export al tope del archivo mantiene el path de import compat para
+// tests del slice durante este step.
 
 // Helpers extraídos al split (Step 1):
 //   - matchSlashCommand + SlashMatch + SLASH_RE + SLASH_COMMANDS → trigger-detection.ts

@@ -37,6 +37,20 @@ export function friendlyErrorMessage(err: unknown): string {
   if (isDomainError(err) && (err as { name?: string }).name === 'SlugCollisionExhausted') {
     return 'No pudimos generar una URL única. Probá con otro título.'
   }
+  // Audit #1: EditSessionInvalid (token HMAC del edit-session) viene de
+  // `shared/lib/edit-session-token.ts` que es server-only — no podemos
+  // importar la clase acá sin romper el bundle cliente. Discriminamos por
+  // `name` + `reason` (mismo patrón que SlugCollisionExhausted arriba). Sin
+  // este case, el error caía al fallback "Algo no salió bien" — el viewer
+  // veía un mensaje genérico que no le sugería reabrir el editor, y volvía
+  // a intentar guardar con el mismo token expirado en loop.
+  if (isDomainError(err) && (err as { name?: string }).name === 'EditSessionInvalid') {
+    const reason = (err.context as { reason?: string } | undefined)?.reason
+    if (reason === 'expired') {
+      return 'La sesión de edición venció. Cerrá y volvé a abrir el editor para continuar.'
+    }
+    return 'La sesión de edición no es válida. Cerrá y volvé a abrir el editor.'
+  }
   if (err instanceof OutOfHoursError) return 'El place está cerrado ahora.'
   if (err instanceof AuthorizationError) return 'No tenés permiso para hacer esto.'
   if (err instanceof ValidationError) return 'Revisá los datos del formulario.'

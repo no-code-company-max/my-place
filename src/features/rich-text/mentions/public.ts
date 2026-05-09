@@ -21,3 +21,9 @@ export type {
   MentionResolversForEditor,
   MentionUserResult,
 } from './ui/mention-plugin'
+
+// Prefetch background del typeahead. El Context vive acá (sub-slice del
+// consumer); el Provider vive en `discussions/composers/`. Ver
+// `docs/plans/2026-05-09-mention-prefetch-background.md` § D7-bis.
+export { MentionPrefetchContext, useMentionPrefetchSource } from './ui/mention-prefetch-context'
+export type { MentionPrefetchValue } from './ui/mention-prefetch-context'

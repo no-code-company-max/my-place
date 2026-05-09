@@ -410,8 +410,14 @@ type SlashMatch = {
  * Triggers en prefix: typear `/eve` muestra eventos, `/lib` muestra
  * categorías. Apenas el prefix es único hacia algún comando, el menú
  * aparece (no hace falta escribir el comando completo).
+ *
+ * `\/?` después del sub-segment: el plugin reemplaza la categoría
+ * seleccionada por `/library/<slug>/` (con slash trailing como UX hint
+ * de "ahora typeá para filtrar"). Sin el `\/?` la regex se rompía con
+ * el slash trailing → typeahead se cerraba al instante post-selección
+ * y no mostraba los items de la categoría. El `\/?` lo absorbe.
  */
-const SLASH_RE = /(^|[\s\n])(\/([a-z]+)(?:\/([\w-]+))?(?:[ ]([\w-]*))?)$/
+const SLASH_RE = /(^|[\s\n])(\/([a-z]+)(?:\/([\w-]+))?\/?(?:[ ]([\w-]*))?)$/
 
 function matchSlashCommand(text: string): SlashMatch | null {
   const m = SLASH_RE.exec(text)

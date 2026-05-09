@@ -19,16 +19,7 @@ import { resolveUniqueSlug, revalidatePostPaths } from './shared'
 export async function createPostAction(
   input: unknown,
 ): Promise<{ ok: true; postId: string; slug: string }> {
-  // PERF DIAGNOSIS — TEMP. Remover una vez identificada la causa del 25s
-  // reportado por user en prod. Mide cada step para localizar el cuello.
-  const t0 = performance.now()
-  const ts: Record<string, number> = {}
-  const mark = (label: string) => {
-    ts[label] = Math.round(performance.now() - t0)
-  }
-
   const parsed = createPostInputSchema.safeParse(input)
-  mark('zodParse')
   if (!parsed.success) {
     throw new ValidationError('Datos inválidos para crear post.', {
       issues: parsed.error.issues,
@@ -37,19 +28,14 @@ export async function createPostAction(
   const data = parsed.data
 
   const actor = await resolveActorForPlace({ placeId: data.placeId })
-  mark('resolveActor')
-
   await assertPlaceOpenOrThrow(actor.placeId)
-  mark('assertPlaceOpen')
 
   if (data.body) assertRichTextSize(data.body)
-  mark('assertRichTextSize')
 
   const trimmedTitle = data.title.trim()
   const bodyJson = data.body ? (data.body as Prisma.InputJsonValue) : Prisma.JsonNull
   const now = new Date()
   const created = await createWithRetry(actor, trimmedTitle, bodyJson, now)
-  mark('insertPost')
 
   logger.info(
     {
@@ -63,13 +49,6 @@ export async function createPostAction(
   )
 
   revalidatePostPaths(actor.placeSlug, created.slug)
-  mark('revalidate')
-
-  logger.info(
-    { event: 'createPostPerf', timings: ts, totalMs: Math.round(performance.now() - t0) },
-    'createPostAction perf timings',
-  )
-
   return { ok: true, postId: created.id, slug: created.slug }
 }
 

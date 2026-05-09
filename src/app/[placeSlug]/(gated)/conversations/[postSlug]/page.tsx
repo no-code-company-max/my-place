@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { ORIGIN_ZONE_HREF, parseBackHref, parseOriginZone } from '@/shared/lib/back-origin'
+import { logger } from '@/shared/lib/logger'
 import { ThreadHeaderBar } from '@/features/discussions/public'
 import { findPostBySlug } from '@/features/discussions/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
@@ -41,10 +42,24 @@ type Props = {
  */
 export default async function PostDetailPage({ params, searchParams }: Props) {
   const { placeSlug, postSlug } = await params
-  const place = await loadPlaceBySlug(placeSlug)
+  // DEBUG TEMPORAL — wrappear los awaits top-level con logging para ver
+  // si el throw está acá (vs los Suspense children que ya están wrappeados).
+  const place = await loadPlaceBySlug(placeSlug).catch((err: unknown) => {
+    logger.error(
+      { err, scope: 'conversations.detail.loadPlaceBySlug', placeSlug, postSlug },
+      'loadPlaceBySlug threw',
+    )
+    throw err
+  })
   if (!place) notFound()
 
-  const post = await findPostBySlug(place.id, postSlug)
+  const post = await findPostBySlug(place.id, postSlug).catch((err: unknown) => {
+    logger.error(
+      { err, scope: 'conversations.detail.findPostBySlug', placeSlug, placeId: place.id, postSlug },
+      'findPostBySlug threw',
+    )
+    throw err
+  })
   if (!post) notFound()
   if (post.libraryItem) {
     permanentRedirect(`/library/${post.libraryItem.categorySlug}/${post.slug}`)

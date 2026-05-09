@@ -29,6 +29,29 @@ type Props = {
  * Patrón "streaming agresivo del shell" — ver `docs/architecture.md`.
  */
 export async function ThreadContent({ placeSlug, placeId, post }: Props): Promise<React.ReactNode> {
+  // DEBUG TEMPORAL — wrapper de diagnóstico para que cualquier throw
+  // dentro de este Suspense child quede registrado en Vercel runtime logs
+  // ANTES de bubblear al error.tsx (que sólo recibe digest enmascarado en
+  // prod). El throw se re-lanza intacto.
+  try {
+    return await renderThreadContent({ placeSlug, placeId, post })
+  } catch (err: unknown) {
+    logger.error(
+      {
+        err,
+        scope: 'conversations.thread-content',
+        placeSlug,
+        placeId,
+        postId: post.id,
+        postSlug: post.slug,
+      },
+      'ThreadContent threw',
+    )
+    throw err
+  }
+}
+
+async function renderThreadContent({ placeSlug, placeId, post }: Props): Promise<React.ReactNode> {
   const viewer = await resolveViewerForPlace({ placeSlug })
   if (post.hiddenAt && !viewer.isAdmin) notFound()
 

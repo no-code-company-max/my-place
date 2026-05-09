@@ -33,6 +33,7 @@ Problemas operativos sutiles descubiertos durante el desarrollo. Cada entry desc
 ## Email
 
 - [Resend: dominio del `From` debe estar verificado](resend-domain-verification.md) — DNS (SPF + DKIM + DMARC) por ambiente; dev local cae a `FakeMailer`.
+- [Supabase Auth manda magic links via SMTP de Resend](supabase-smtp-resend.md) — config separada del `EMAIL_FROM` del app; al cambiar dominio hay que actualizar dos lugares.
 
 ## Arquitectura del repo
 

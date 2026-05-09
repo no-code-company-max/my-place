@@ -7,27 +7,49 @@ import { useEffect } from 'react'
  * action rota) muestra un copy calmo sin tumbar la navegación del place — los
  * otros route groups (`/settings`, `/m`) siguen funcionando.
  *
- * **Logging al browser console (DEBUG temp)**: en Next 15, cuando el error.tsx
- * local captura un throw server-side, el throw NO se loggea al stderr server
- * (Next lo considera "manejado"). Para diagnóstico, replicamos el error.message
- * + digest al console del cliente — desde ahí se puede correlacionar con la
- * request real. Si el message viene oculto en prod por minificación, el `digest`
- * es la pista para buscar en server logs (Vercel asigna digest único por throw).
+ * **Logging DEBUG TEMPORAL al browser console**: en Next 15 prod, cuando un
+ * Server Component throwea bajo Suspense, el `error.message` que llega al
+ * cliente está **enmascarado** por seguridad ("An error occurred in the Server
+ * Components render. The specific message is omitted..."). El único hilo
+ * útil cliente-side es `error.digest`, que correlaciona 1:1 con un log del
+ * stack completo en Vercel runtime logs. Por eso este log dispara `console.group`
+ * con el digest bien visible + contexto de la URL/UA/timestamp para reportar.
  */
 export default function ConversationsError({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
+  error: Error & { digest?: string; cause?: unknown }
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('[conversations:error]', {
+    const url = typeof window !== 'undefined' ? window.location.href : '(no window)'
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '(no navigator)'
+
+    console.group(
+      `%c[conversations:error] digest=${error.digest ?? '(none)'}`,
+      'color:#c00;font-weight:bold',
+    )
+
+    console.error('error object:', error)
+
+    console.error('properties:', {
+      name: error.name,
       message: error.message,
       digest: error.digest,
+      cause: error.cause,
       stack: error.stack,
-      name: error.name,
     })
+
+    console.error('context:', {
+      url,
+      timestamp: new Date().toISOString(),
+      userAgent: ua,
+    })
+
+    console.error('all enumerable props:', Object.fromEntries(Object.entries(error)))
+
+    console.groupEnd()
   }, [error])
 
   return (
@@ -38,6 +60,9 @@ export default function ConversationsError({
       </p>
       {error.digest ? (
         <p className="font-mono text-xs text-muted opacity-60">digest: {error.digest}</p>
+      ) : null}
+      {error.message ? (
+        <p className="font-mono text-xs text-muted opacity-60">message: {error.message}</p>
       ) : null}
       <button
         type="button"

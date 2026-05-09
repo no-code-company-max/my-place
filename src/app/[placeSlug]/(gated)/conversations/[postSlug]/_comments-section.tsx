@@ -41,7 +41,27 @@ type CommentsSectionProps = {
  *
  * Ver `docs/architecture.md` § "Streaming agresivo del shell".
  */
-export async function CommentsSection({
+export async function CommentsSection(props: CommentsSectionProps) {
+  // DEBUG TEMPORAL — ver comentario en `_thread-content.tsx`.
+  try {
+    return await renderCommentsSection(props)
+  } catch (err: unknown) {
+    logger.error(
+      {
+        err,
+        scope: 'conversations.comments-section',
+        placeSlug: props.placeSlug,
+        placeId: props.placeId,
+        postId: props.postId,
+        postSlug: props.postSlug,
+      },
+      'CommentsSection threw',
+    )
+    throw err
+  }
+}
+
+async function renderCommentsSection({
   placeId,
   placeSlug,
   postId,

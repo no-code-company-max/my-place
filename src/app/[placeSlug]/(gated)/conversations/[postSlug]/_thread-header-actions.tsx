@@ -26,7 +26,27 @@ type Props = {
  * per-request, así que si `<ThreadContent>` ya los disparó, esta llamada
  * es 0 round-trips.
  */
-export async function ThreadHeaderActions({
+export async function ThreadHeaderActions(props: Props): Promise<React.ReactNode> {
+  // DEBUG TEMPORAL — ver comentario en `_thread-content.tsx`.
+  try {
+    return await renderThreadHeaderActions(props)
+  } catch (err: unknown) {
+    logger.error(
+      {
+        err,
+        scope: 'conversations.thread-header-actions',
+        placeSlug: props.placeSlug,
+        placeId: props.placeId,
+        postId: props.post.id,
+        postSlug: props.post.slug,
+      },
+      'ThreadHeaderActions threw',
+    )
+    throw err
+  }
+}
+
+async function renderThreadHeaderActions({
   placeId,
   placeSlug,
   post,

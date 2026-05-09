@@ -513,16 +513,21 @@ export function MentionFeedbackMenu({
         : trigger.kind === 'user' || trigger.kind === 'event'
           ? `Buscando ${target}…`
           : `Cargando ${target}…`
+  // Cromática diferenciada por kind: el error usa border + bg + texto ámbar
+  // (cozytech: tono cálido, no rojo gritón) para que se distinga del loading
+  // a primera vista — sin contraste, ambos estados se confundían en un mismo
+  // tono neutral. Loading mantiene el tono neutral propio del placeholder.
+  const containerClass =
+    kind === 'error'
+      ? 'rich-text-mention-menu min-w-[260px] overflow-hidden rounded-md border border-amber-300 bg-amber-50 shadow-lg'
+      : 'rich-text-mention-menu min-w-[260px] overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg'
+  const innerClass =
+    kind === 'error'
+      ? 'flex items-center gap-2 px-3 py-2 text-sm text-amber-700'
+      : 'flex items-center gap-2 px-3 py-2 text-sm text-neutral-500'
   return (
-    <div
-      data-mention-feedback={kind}
-      className="rich-text-mention-menu min-w-[260px] overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg"
-    >
-      <div
-        role={kind === 'error' ? 'alert' : 'status'}
-        aria-live="polite"
-        className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-500"
-      >
+    <div data-mention-feedback={kind} className={containerClass}>
+      <div role={kind === 'error' ? 'alert' : 'status'} aria-live="polite" className={innerClass}>
         {kind === 'loading' ? (
           <span
             aria-hidden

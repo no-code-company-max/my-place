@@ -97,4 +97,29 @@ describe('MentionFeedbackMenu', () => {
     expect(feedbackText(container, 'error')).toContain('No pudimos cargar miembros')
     expect(feedbackText(container, 'error')).not.toContain('Sigue cargando')
   })
+
+  // Audit #7: el error debe diferenciarse del loading por color (border +
+  // bg + texto ámbar). Sin esto, los dos estados se confundían en un mismo
+  // tono neutral y el viewer podía no notar el fallo.
+  it('error → contenedor con border + bg ámbar y texto ámbar', () => {
+    const { container } = render(
+      <MentionFeedbackMenu kind="error" trigger={asTrigger({ kind: 'user', query: '' })} />,
+    )
+    const root = container.querySelector('[data-mention-feedback="error"]')
+    expect(root).not.toBeNull()
+    expect(root?.className).toContain('border-amber-300')
+    expect(root?.className).toContain('bg-amber-50')
+    const inner = root?.querySelector('[role="alert"]')
+    expect(inner?.className).toContain('text-amber-700')
+  })
+
+  it('loading → mantiene tono neutral (sin clases ámbar en contenedor)', () => {
+    const { container } = render(
+      <MentionFeedbackMenu kind="loading" trigger={asTrigger({ kind: 'user', query: '' })} />,
+    )
+    const root = container.querySelector('[data-mention-feedback="loading"]')
+    expect(root?.className).not.toContain('border-amber')
+    expect(root?.className).not.toContain('bg-amber')
+    expect(root?.className).toContain('border-neutral-200')
+  })
 })

@@ -5,7 +5,7 @@ import type {
   MentionEventResult,
   MentionLibraryCategoryResult,
   MentionUserResult,
-} from './mention-plugin'
+} from './mention-types'
 
 /**
  * Cache prefetcheado de los 3 listados base que el `MentionPlugin` muestra

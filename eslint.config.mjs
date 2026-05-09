@@ -30,7 +30,20 @@ export default tseslint.config(
       'playwright-report/**',
       'test-results/**',
       'next-env.d.ts',
-      '**/*.config.{js,cjs,mjs,ts}',
+      // NO ignorar `eslint.config.mjs` — Next 15 hace
+      // `eslint.calculateConfigForFile(eslint.config.mjs)` para detectar el
+      // plugin `@next/next`; si el config se ignora a sí mismo retorna
+      // undefined → warning "The Next.js plugin was not detected" persistente
+      // aunque el plugin esté correctamente registrado para los src/. Por eso
+      // listamos los OTROS configs uno por uno en vez del glob `**/*.config.*`.
+      'commitlint.config.cjs',
+      'lint-staged.config.cjs',
+      'next.config.ts',
+      'playwright.config.ts',
+      'postcss.config.mjs',
+      'tailwind.config.ts',
+      'vitest.config.ts',
+      'vitest.rls.config.ts',
       'handoff/**',
     ],
   },

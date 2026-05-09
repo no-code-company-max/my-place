@@ -4,7 +4,7 @@
   "private": true,
   "description": "Un lugar digital pequeño e íntimo para hasta 150 personas.",
   "engines": {
-    "node": ">=20.0.0",
+    "node": "22.x",
     "pnpm": ">=9.0.0"
   },
   "packageManager": "pnpm@10.8.0",

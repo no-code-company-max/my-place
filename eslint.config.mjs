@@ -2,11 +2,22 @@
 // Ver `architecture.md` § "Reglas de aislamiento entre módulos".
 import { FlatCompat } from '@eslint/eslintrc'
 import tseslint from 'typescript-eslint'
+import { createRequire } from 'node:module'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const compat = new FlatCompat({ baseDirectory: __dirname })
+
+// `@next/eslint-plugin-next` se resuelve vía `eslint-config-next` (que lo
+// declara como dep directa). Resolver así evita exigir una devDep duplicada
+// en `package.json` y permite registrar el plugin con la key `@next/next`
+// en flat config — necesario para que `next build` lo detecte (warning
+// "The Next.js plugin was not detected in your ESLint configuration").
+// Ver: https://nextjs.org/docs/app/api-reference/config/eslint#migrating-existing-config
+const require_ = createRequire(import.meta.url)
+const requireFromConfigNext = createRequire(require_.resolve('eslint-config-next/package.json'))
+const nextPlugin = requireFromConfigNext('@next/eslint-plugin-next')
 
 export default tseslint.config(
   {
@@ -22,6 +33,15 @@ export default tseslint.config(
       '**/*.config.{js,cjs,mjs,ts}',
       'handoff/**',
     ],
+  },
+  // Registro explícito del plugin de Next bajo la clave `@next/next` para que
+  // `next build` lo detecte en flat config (warning "Next.js plugin was not
+  // detected in your ESLint configuration"). `compat.extends('next/...')`
+  // carga las rules pero no expone el plugin como objeto en `plugins:`.
+  {
+    plugins: {
+      '@next/next': nextPlugin,
+    },
   },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
   {

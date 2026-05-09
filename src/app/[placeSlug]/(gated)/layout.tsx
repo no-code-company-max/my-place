@@ -5,6 +5,7 @@ import { findMemberPermissions } from '@/features/members/public.server'
 import { isPlaceOpen, parseOpeningHours, PlaceClosedView } from '@/features/hours/public'
 import { logger } from '@/shared/lib/logger'
 import { ZoneFab, ZoneSwiper } from '@/features/shell/public'
+import { MentionPrefetchProvider } from '@/features/discussions/composers/public'
 import { loadPlace } from '../layout'
 
 type Props = {
@@ -59,11 +60,16 @@ export default async function GatedLayout({ children, params }: Props) {
     // las 10+ pages bajo (gated). Ver `zone-fab.tsx` para el rationale.
     // Ver `docs/features/shell/spec.md` § 16 + § 17.
     const isAdmin = perms.isAdmin
+    // El `<MentionPrefetchProvider>` prefetcha en background los 3 listados
+    // del typeahead (`@`, `/event`, `/library`) en `requestIdleCallback`
+    // post-FCP. Cuando el viewer abre un composer en cualquier zona del
+    // place, el typeahead aparece instant. Provider Client liviano
+    // (sin Lexical). Ver `docs/plans/2026-05-09-mention-prefetch-background.md`.
     return (
-      <>
+      <MentionPrefetchProvider placeId={place.id}>
         <ZoneSwiper>{children}</ZoneSwiper>
         <ZoneFab placeId={place.id} userId={auth.id} isAdmin={isAdmin} />
-      </>
+      </MentionPrefetchProvider>
     )
   }
 

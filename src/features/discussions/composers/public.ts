@@ -24,3 +24,9 @@ export { PostComposerWrapper } from '../ui/post-composer-form'
 export { EventComposerWrapper } from '../ui/event-composer-form'
 export { LibraryItemComposerForm } from '../ui/library-item-composer-form'
 export type { LibraryItemComposerFormProps } from '../ui/library-item-composer-form'
+
+// Provider Client liviano que prefetcha el typeahead de mentions en background.
+// SIN Lexical — sólo invoca Server Actions de members/events/library cross-slice.
+// Lo monta el shell `(gated)/layout.tsx`. Ver
+// `docs/plans/2026-05-09-mention-prefetch-background.md` § D11.
+export { MentionPrefetchProvider } from './mention-prefetch-provider'

@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { ORIGIN_ZONE_HREF, parseOriginZone } from '@/shared/lib/back-origin'
+import { ORIGIN_ZONE_HREF, parseBackHref, parseOriginZone } from '@/shared/lib/back-origin'
 import { LibraryItemHeaderBar } from '@/features/library/public'
 import { findItemBySlug } from '@/features/library/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
@@ -11,7 +11,7 @@ import { LibraryItemContentSkeleton } from './_skeletons'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string; itemSlug: string }>
-  searchParams: Promise<{ from?: string }>
+  searchParams: Promise<{ from?: string; back?: string }>
 }
 
 /**
@@ -51,13 +51,18 @@ export default async function LibraryItemDetailPage({ params, searchParams }: Pr
   const item = await findItemBySlug(place.id, categorySlug, itemSlug, { includeArchived: true })
   if (!item) notFound()
 
-  // `?from=conversations` (mention desde un thread, library item linkeado
-  // desde discusiones) → back vuelve a `/conversations`. Cualquier otro
-  // origen / sin origen → categoría como destino canónico.
+  // Resolución del back href con prioridad explícita:
+  //  1. `?back=<URL>` — cross-thread (mention en otro thread/item).
+  //     Vuelve al thread origen específico, no a la zona.
+  //  2. `?from=conversations` — back a `/conversations` (legacy: mention
+  //     o link desde un thread).
+  //  3. Default — undefined → header bar usa categoría como canónico.
   // Ver `docs/decisions/2026-05-09-back-navigation-origin.md`.
-  const { from } = await searchParams
+  const { from, back } = await searchParams
+  const explicitBack = parseBackHref(back)
   const origin = parseOriginZone(from)
-  const backHref = origin === 'conversations' ? ORIGIN_ZONE_HREF.conversations : undefined
+  const backHref =
+    explicitBack ?? (origin === 'conversations' ? ORIGIN_ZONE_HREF.conversations : undefined)
 
   return (
     <div className="pb-32">
@@ -74,7 +79,13 @@ export default async function LibraryItemDetailPage({ params, searchParams }: Pr
         <LibraryItemContent item={item} placeId={place.id} placeSlug={placeSlug} />
       </Suspense>
       <Suspense fallback={<CommentsSkeleton />}>
-        <CommentsSection placeId={place.id} placeSlug={placeSlug} postId={item.postId} />
+        <CommentsSection
+          placeId={place.id}
+          placeSlug={placeSlug}
+          postId={item.postId}
+          categorySlug={item.categorySlug}
+          postSlug={item.postSlug}
+        />
       </Suspense>
     </div>
   )

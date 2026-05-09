@@ -20,6 +20,8 @@ type CommentsSectionProps = {
   placeId: string
   placeSlug: string
   postId: string
+  /** Slug canónico del post (para `?back=` en mentions cross-thread). */
+  postSlug: string
 }
 
 /**
@@ -35,7 +37,12 @@ type CommentsSectionProps = {
  *
  * Ver `docs/architecture.md` § "Streaming agresivo del shell".
  */
-export async function CommentsSection({ placeId, placeSlug, postId }: CommentsSectionProps) {
+export async function CommentsSection({
+  placeId,
+  placeSlug,
+  postId,
+  postSlug,
+}: CommentsSectionProps) {
   // Group 0: viewer + opening en paralelo. Ambos cacheados via React.cache
   // dentro del mismo request, así que `<ThreadContent>` arriba ya disparó
   // la viewer query — esta no incurre round-trip extra.
@@ -82,7 +89,10 @@ export async function CommentsSection({ placeId, placeSlug, postId }: CommentsSe
     resolveQuoteTargetStates(comments),
   ])
 
-  const mentionResolvers = buildMentionResolvers({ placeId })
+  const mentionResolvers = buildMentionResolvers({
+    placeId,
+    currentBackHref: `/conversations/${postSlug}`,
+  })
 
   return (
     <>

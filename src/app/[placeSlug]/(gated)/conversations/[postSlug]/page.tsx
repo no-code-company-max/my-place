@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { ORIGIN_ZONE_HREF, parseOriginZone } from '@/shared/lib/back-origin'
+import { ORIGIN_ZONE_HREF, parseBackHref, parseOriginZone } from '@/shared/lib/back-origin'
 import { ThreadHeaderBar } from '@/features/discussions/public'
 import { findPostBySlug } from '@/features/discussions/public.server'
 import { CommentsSection, CommentsSkeleton } from './_comments-section'
@@ -11,7 +11,7 @@ import { ThreadContentSkeleton } from './_skeletons'
 
 type Props = {
   params: Promise<{ placeSlug: string; postSlug: string }>
-  searchParams: Promise<{ from?: string }>
+  searchParams: Promise<{ from?: string; back?: string }>
 }
 
 /**
@@ -50,19 +50,21 @@ export default async function PostDetailPage({ params, searchParams }: Props) {
     permanentRedirect(`/library/${post.libraryItem.categorySlug}/${post.slug}`)
   }
 
-  // Resolución del back href:
-  //  - Discussion estándar (sin event): siempre `/conversations`. El
-  //    `?from=` no aplica — `/conversations/new` también pasa por acá
-  //    pero NO debe estar en el back path (router.replace en el
-  //    composer impide que el form quede en el history stack).
-  //  - Event-thread (`post.event !== null`): `?from=events` →
-  //    `/events`, default → `/conversations` (la URL canónica del
-  //    thread vive bajo `/conversations`).
+  // Resolución del back href con prioridad explícita:
+  //  1. `?back=<URL>` — cross-thread (mention en otro thread). Prioridad
+  //     máxima: vuelve al thread origen específico, no a la zona.
+  //  2. `?from=<zone>` — origen por zona (cards de listado, redirects
+  //     post-publish). Event-thread + `?from=events` → `/events`.
+  //  3. Default — `/conversations` (URL canónica del thread).
+  // El composer de creación usa `router.replace`, así que `/conversations/new`
+  // nunca queda en el history stack.
   // Ver `docs/decisions/2026-05-09-back-navigation-origin.md`.
-  const { from } = await searchParams
+  const { from, back } = await searchParams
+  const explicitBack = parseBackHref(back)
   const origin = parseOriginZone(from)
   const backHref =
-    post.event && origin === 'events' ? ORIGIN_ZONE_HREF.events : ORIGIN_ZONE_HREF.conversations
+    explicitBack ??
+    (post.event && origin === 'events' ? ORIGIN_ZONE_HREF.events : ORIGIN_ZONE_HREF.conversations)
 
   return (
     <div className="pb-32">
@@ -78,7 +80,12 @@ export default async function PostDetailPage({ params, searchParams }: Props) {
         <ThreadContent placeSlug={placeSlug} placeId={place.id} post={post} />
       </Suspense>
       <Suspense fallback={<CommentsSkeleton />}>
-        <CommentsSection placeId={place.id} placeSlug={placeSlug} postId={post.id} />
+        <CommentsSection
+          placeId={place.id}
+          placeSlug={placeSlug}
+          postId={post.id}
+          postSlug={post.slug}
+        />
       </Suspense>
     </div>
   )

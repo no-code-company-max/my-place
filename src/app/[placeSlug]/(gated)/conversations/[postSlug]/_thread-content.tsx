@@ -65,7 +65,10 @@ export async function ThreadContent({ placeSlug, placeId, post }: Props): Promis
           post={post}
           viewerUserId={viewer.actorId}
           placeSlug={viewer.placeSlug}
-          mentionResolvers={buildMentionResolvers({ placeId })}
+          mentionResolvers={buildMentionResolvers({
+            placeId,
+            currentBackHref: `/conversations/${post.slug}`,
+          })}
         />
       )}
     </>

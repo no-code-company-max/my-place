@@ -69,7 +69,10 @@ export async function LibraryItemContent({
         {item.body ? (
           <RichTextRenderer
             document={item.body as LexicalDocument}
-            resolvers={buildMentionResolvers({ placeId })}
+            resolvers={buildMentionResolvers({
+              placeId,
+              currentBackHref: `/library/${item.categorySlug}/${item.postSlug}`,
+            })}
           />
         ) : null}
       </article>

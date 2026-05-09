@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
@@ -822,9 +822,4 @@ function buildMentionFromPayload(payload: MenuPayload, placeId: string) {
     label: payload.item.title,
     placeId,
   })
-}
-
-// Memoize stable resolvers for unit tests / consumers wiring (no-op runtime).
-export function useStableResolvers<T>(value: T): T {
-  return useMemo(() => value, [value])
 }

@@ -37,6 +37,9 @@ const supabaseHost = supabaseStorageHostname()
 const cspDirectives = [
   "default-src 'self'",
   // Next necesita 'unsafe-inline' para hydration en dev. En prod usar nonces cuando se agregue SSR de formularios.
+  // OJO con `'unsafe-eval'` en prod: NO agregarlo sin ADR previo. Zod 4 (JIT) requiere
+  // bootstrap con `z.config({ jitless: true })` en `src/shared/config/zod-runtime.ts`
+  // para no romper bajo esta CSP. Ver `docs/decisions/2026-05-09-csp-strict-and-zod-jitless.md`.
   `script-src 'self' ${isProd ? "'unsafe-inline'" : "'unsafe-inline' 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",

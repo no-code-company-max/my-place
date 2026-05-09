@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Fraunces, Inter } from 'next/font/google'
+import '@/shared/config/zod-runtime'
+import { ZodRuntime } from '@/shared/config/zod-runtime-client'
 import { buildThemeVars } from '@/shared/config/theme'
 import { Toaster } from '@/shared/ui/toaster'
 import './globals.css'
@@ -26,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={`${inter.variable} ${fraunces.variable}`} style={buildThemeVars()}>
       <body>
+        <ZodRuntime />
         {children}
         <Toaster />
       </body>

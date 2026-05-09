@@ -93,7 +93,18 @@ export function ReactionBar({ targetType, targetId, initial }: Props): React.Rea
               }`}
             >
               <span aria-hidden="true">{EMOJI_GLYPHS[emoji]}</span>
-              <span className="min-w-[1ch] tabular-nums">{count}</span>
+              {/*
+                Audit #4: ocultamos el numerito cuando count === 0 (sin
+                reacciones aún) para que comments traídos por load-more o
+                broadcast — que llegan con counts en cero hasta el primer
+                revalidatePath — no muestren un "0" ruidoso. El span queda
+                renderizado con min-w-[1ch] para reservar espacio: cuando
+                el count salta de 0 a N no hay layout shift (cozytech:
+                nada parpadea). Si el viewer reaccionó (viewerReacted),
+                mostramos siempre — el fondo accent ya da el feedback
+                visual y mostrar count===0 ahí sería estado imposible.
+              */}
+              <span className="min-w-[1ch] tabular-nums">{count > 0 ? count : ''}</span>
             </button>
           )
         })}

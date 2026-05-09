@@ -7,7 +7,12 @@ import { BaseComposer } from './base-composer'
 import { assertRichTextSize } from '@/features/rich-text/domain/size'
 import { RichTextTooDeepError, RichTextTooLargeError } from '@/features/rich-text/domain/errors'
 import type { LexicalDocument } from '@/features/rich-text/domain/types'
-import type { MentionUserResult } from '@/features/rich-text/mentions/public'
+import type {
+  MentionEventResult,
+  MentionLibraryCategoryResult,
+  MentionLibraryItemResult,
+  MentionUserResult,
+} from '@/features/rich-text/mentions/public'
 
 export type CommentComposerProps = {
   placeId: string
@@ -23,6 +28,15 @@ export type CommentComposerProps = {
    * `rich-text/` no toca otros slices directamente.
    */
   searchUsers: (q: string) => Promise<MentionUserResult[]>
+  /**
+   * Resolvers opcionales de los triggers `/event` y `/library`. Si no se
+   * pasan, el `MentionPlugin` deja inerte el respectivo trigger (línea 140
+   * de `mention-plugin.tsx`). Mantenerlos opcionales preserva back-compat
+   * con consumers que sólo necesitan `@` (tests legacy).
+   */
+  searchEvents?: (q: string) => Promise<MentionEventResult[]>
+  listCategories?: () => Promise<MentionLibraryCategoryResult[]>
+  searchLibraryItems?: (categorySlug: string, q: string) => Promise<MentionLibraryItemResult[]>
   initialDocument?: LexicalDocument
   placeholder?: string
 }
@@ -42,6 +56,9 @@ export function CommentComposer({
   placeId,
   onSubmit,
   searchUsers,
+  searchEvents,
+  listCategories,
+  searchLibraryItems,
   initialDocument,
   placeholder,
 }: CommentComposerProps): React.JSX.Element {
@@ -92,7 +109,13 @@ export function CommentComposer({
         {...(initialDocument ? { initialDocument } : {})}
         onChange={setDoc}
         placeholder={placeholder ?? 'Aportar al hilo…'}
-        resolvers={{ placeId, searchUsers }}
+        resolvers={{
+          placeId,
+          searchUsers,
+          ...(searchEvents ? { searchEvents } : {}),
+          ...(listCategories ? { listCategories } : {}),
+          ...(searchLibraryItems ? { searchLibraryItems } : {}),
+        }}
         ariaLabel="Editor de respuesta"
       />
       <button

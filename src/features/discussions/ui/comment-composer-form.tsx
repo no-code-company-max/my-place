@@ -4,13 +4,19 @@ import { useCallback } from 'react'
 import { CommentComposer } from '@/features/rich-text/composers/public'
 import type { LexicalDocument, MentionUserResult } from '@/features/rich-text/public'
 import { searchMembersByPlaceAction } from '@/features/members/public'
+import { searchEventsByPlaceAction } from '@/features/events/public'
+import {
+  listLibraryCategoriesForMentionAction,
+  searchLibraryItemsForMentionAction,
+} from '@/features/library/public'
 import { createCommentAction } from '../server/actions/comments'
 
 /**
  * Wrapper client del `<CommentComposer>` adaptado al server action de
- * `createCommentAction`. F.4: typeahead `@` real via
- * `searchMembersByPlaceAction` (Server Action wrapper de la query
- * cacheada del slice `members`).
+ * `createCommentAction`. Inyecta los 4 resolvers de mention: `@user`,
+ * `/event`, `/library` (categoría → items). Sin los 3 últimos, los
+ * triggers `/event` y `/library` quedan inertes en el composer del thread
+ * — bug histórico hasta esta sesión.
  */
 export function CommentComposerForm({
   placeId,
@@ -31,6 +37,22 @@ export function CommentComposerForm({
     [placeId],
   )
 
+  const searchEvents = useCallback(
+    async (q: string) => searchEventsByPlaceAction(placeId, q),
+    [placeId],
+  )
+
+  const listCategories = useCallback(
+    async () => listLibraryCategoriesForMentionAction(placeId),
+    [placeId],
+  )
+
+  const searchLibraryItems = useCallback(
+    async (categorySlug: string, q: string) =>
+      searchLibraryItemsForMentionAction(placeId, categorySlug, q),
+    [placeId],
+  )
+
   const onSubmit = useCallback(
     async (body: LexicalDocument) => {
       const res = await createCommentAction({ postId, body })
@@ -39,5 +61,14 @@ export function CommentComposerForm({
     [postId],
   )
 
-  return <CommentComposer placeId={placeId} onSubmit={onSubmit} searchUsers={searchUsers} />
+  return (
+    <CommentComposer
+      placeId={placeId}
+      onSubmit={onSubmit}
+      searchUsers={searchUsers}
+      searchEvents={searchEvents}
+      listCategories={listCategories}
+      searchLibraryItems={searchLibraryItems}
+    />
+  )
 }

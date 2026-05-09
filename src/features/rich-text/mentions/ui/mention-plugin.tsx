@@ -289,6 +289,12 @@ export function MentionPlugin({
       return
     }
     let active = true
+    // Reset `options` para que `menuRenderFn` entre al branch del
+    // placeholder (`options.length === 0 + loading`). Sin este reset,
+    // los options del trigger anterior (ej: categorías cuando ahora el
+    // trigger es `library-item`) tapaban el spinner — el viewer veía
+    // la lista vieja por 1-3s hasta que llegaban los items nuevos.
+    setOptions([])
     setLoading(true)
     setError(false)
     void (async () => {

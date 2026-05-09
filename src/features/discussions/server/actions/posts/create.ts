@@ -8,6 +8,10 @@ import { ConflictError, ValidationError } from '@/shared/errors/domain-error'
 import { assertRichTextSize } from '@/features/rich-text/public'
 import { createPostInputSchema } from '@/features/discussions/schemas'
 import { buildAuthorSnapshot } from '@/features/discussions/domain/invariants'
+import {
+  assertSnapshot,
+  authorSnapshotSchema,
+} from '@/features/discussions/domain/snapshot-schemas'
 import { resolveActorForPlace, type DiscussionActor } from '@/features/discussions/server/actor'
 import { resolveUniqueSlug, revalidatePostPaths } from './shared'
 
@@ -59,11 +63,14 @@ async function attemptCreate(
   now: Date,
 ): Promise<{ id: string; slug: string }> {
   const slug = await resolveUniqueSlug(actor.placeId, trimmedTitle)
+  // Audit #5: validamos el authorSnapshot pre-insert. Ver create.ts de
+  // comments para el rationale completo (helper compartido + schemas Zod).
+  const authorSnapshot = assertSnapshot(buildAuthorSnapshot(actor.user), authorSnapshotSchema)
   return prisma.post.create({
     data: {
       placeId: actor.placeId,
       authorUserId: actor.actorId,
-      authorSnapshot: buildAuthorSnapshot(actor.user) as Prisma.InputJsonValue,
+      authorSnapshot: authorSnapshot as Prisma.InputJsonValue,
       title: trimmedTitle,
       slug,
       body,

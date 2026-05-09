@@ -14,6 +14,11 @@ import {
   buildAuthorSnapshot,
   buildQuoteSnapshot,
 } from '@/features/discussions/domain/invariants'
+import {
+  assertSnapshot,
+  authorSnapshotSchema,
+  quoteSnapshotSchema,
+} from '@/features/discussions/domain/snapshot-schemas'
 import type { QuoteSnapshot } from '@/features/discussions/domain/types'
 import { resolveActorForPlace, type DiscussionActor } from '@/features/discussions/server/actor'
 import { findCommentById, findQuoteSource } from '@/features/discussions/server/queries'
@@ -109,17 +114,26 @@ async function insertCommentTx(
   quotedSnapshot: QuoteSnapshot | null,
   now: Date,
 ): Promise<string> {
+  // Audit #5: validamos los snapshots con Zod antes de insertar. Si alguien
+  // refactorea `buildAuthorSnapshot` o `buildQuoteSnapshot` y mete un campo
+  // no JSON-serializable (Map, Set, Function, ref circular), Prisma lo
+  // guardaría como `{}` o tiraría opaco — acá detectamos antes de tocar DB
+  // y devolvemos un ValidationError tipado con el path del campo inválido.
+  const authorSnapshot = assertSnapshot(buildAuthorSnapshot(actor.user), authorSnapshotSchema)
+  const validatedQuoteSnapshot = quotedSnapshot
+    ? assertSnapshot(quotedSnapshot, quoteSnapshotSchema)
+    : null
   return prisma.$transaction(async (tx) => {
     const created = await tx.comment.create({
       data: {
         postId: post.id,
         placeId: post.placeId,
         authorUserId: actor.actorId,
-        authorSnapshot: buildAuthorSnapshot(actor.user) as Prisma.InputJsonValue,
+        authorSnapshot: authorSnapshot as Prisma.InputJsonValue,
         body: data.body as Prisma.InputJsonValue,
         quotedCommentId: data.quotedCommentId ?? null,
-        quotedSnapshot: quotedSnapshot
-          ? (quotedSnapshot as unknown as Prisma.InputJsonValue)
+        quotedSnapshot: validatedQuoteSnapshot
+          ? (validatedQuoteSnapshot as unknown as Prisma.InputJsonValue)
           : Prisma.JsonNull,
       },
       select: { id: true },

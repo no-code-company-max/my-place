@@ -103,10 +103,16 @@ export const aggregateReactions = cache(
       .map((t) => `${t.type}:${t.id}`)
       .sort()
       .join(',')
-    return unstable_cache(
-      () => aggregateReactionsRaw(params),
+    // `unstable_cache` serializa el return con JSON: un `Map` deserializa
+    // como POJO sin `.get()` y rompe los consumers (`reactionsByKey.get(...)`).
+    // Cacheamos como array de tuples y re-hidratamos el `Map` fuera del cache.
+    // Repro original: cache miss → Map OK → render OK; cache hit (≤60s) →
+    // POJO → `TypeError: r.get is not a function` en thread/library detail.
+    const entries = await unstable_cache(
+      async () => Array.from((await aggregateReactionsRaw(params)).entries()),
       ['reactions', params.viewerUserId, targetKey],
       { tags, revalidate: 60 },
     )()
+    return new Map(entries)
   },
 )

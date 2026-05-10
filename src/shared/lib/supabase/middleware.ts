@@ -111,6 +111,21 @@ export async function updateSession(req: NextRequest): Promise<{
   let user: { id: string; email: string | null } | null = null
   try {
     const { data } = await supabase.auth.getSession()
+    // DEBUG TEMPORAL — JSON.stringify del data completo retornado por SDK.
+    // Trunca para no llenar logs (access_token tiene ~700 chars).
+    let rawSessionDump = ''
+    try {
+      const dump = JSON.stringify(data, (_k, v) =>
+        typeof v === 'string' && v.length > 40 ? `${v.slice(0, 20)}…(${v.length})` : v,
+      )
+      rawSessionDump = dump.length > 800 ? `${dump.slice(0, 800)}…` : dump
+    } catch (jsonErr) {
+      rawSessionDump = `dump_err=${(jsonErr as Error).message}`
+    }
+    logger.warn(
+      { debug: 'MW_getSession_raw', traceId, host, path, rawSessionDump },
+      `DBG MW[getSession-raw] tr=${traceId} host=${host} path=${path} data=${rawSessionDump}`,
+    )
     user = data.session?.user
       ? { id: data.session.user.id, email: data.session.user.email ?? null }
       : null

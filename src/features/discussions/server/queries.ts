@@ -222,24 +222,6 @@ function buildFilterWhere(
 }
 
 /**
- * Proyección de un lector del post durante una apertura específica. Shape
- * consumido por el componente UI `PostReadersBlock`. El `userId` permite
- * linkear al perfil contextual del miembro (`/m/<userId>`).
- *
- * NOTA (B.1 migración presence): el shape canónico ahora vive en
- * `presence/server/queries/post-readers.ts`. Este export se mantiene
- * temporalmente porque el legacy `ui/post-readers-block.tsx` lo consume vía
- * `'../server/queries'`. Cuando B.2 borre ese UI legacy, este type se elimina
- * también (ya no hay otros consumers).
- */
-export type PostReader = {
-  userId: string
-  displayName: string
-  avatarUrl: string | null
-  readAt: Date
-}
-
-/**
  * Agrupa `PostRead` por `postId` tomando el `max(readAt)` del viewer. Un único
  * round-trip extra; sin viewer o sin posts, short-circuit a Map vacío.
  */

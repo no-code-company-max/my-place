@@ -88,36 +88,59 @@ debe funcionar igual.
 
 ---
 
-### Sesión 3 — Master-detail layout primitive + migración de `/settings/members`
+### Sesión 3 — Master-detail con Parallel Routes (`@detail` slot) + migración de `/settings/members`
 
-**Goal:** primitive `<MasterDetailLayout>` (stack mobile, split desktop). Aplicar a members
-(la sub-page más visible para admin).
+**Goal:** layout responsive con Parallel Routes de Next 15. Misma URL `/settings/members/[userId]`
+sirve full page en mobile y split view en desktop, sin lógica conditional.
+
+**Approach (Next 15 Parallel Routes):**
+
+Estructura de carpetas:
+
+```
+app/[placeSlug]/settings/members/
+  layout.tsx              ← define el grid responsive (lista + slot @detail)
+  @detail/
+    default.tsx           ← slot por defecto (placeholder en desktop, null en mobile)
+    [userId]/
+      page.tsx            ← detail content del member (RSC)
+  page.tsx                ← lista de members (la "master" pane). Mobile: full ancho. Desktop: 360px izquierda.
+  [userId]/
+    page.tsx              ← MOBILE only: full page detail (NextJS routing match cuando slot @detail no aplica)
+```
+
+Cuando el user navega a `/settings/members/<userId>`:
+
+- **Mobile**: `[userId]/page.tsx` se renderea full ancho (slot @detail también, pero CSS `md:block hidden` esconde la lista).
+- **Desktop**: el layout muestra ambos slots. La lista (`page.tsx` de members) sigue visible a la izquierda, y el slot `@detail/[userId]/page.tsx` carga el detail a la derecha. Click en otro member actualiza solo el slot (no full route navigation), pero la URL canónica del browser SÍ refleja el change (Next handles this).
 
 **Files:**
 
-- **NEW** `src/shared/ui/master-detail-layout.tsx` — primitive responsive:
-  - Mobile: solo lista visible. Tap en item → push to detail page (route navigation).
-  - Desktop: split view 360px lista + content area detail. Selección actualiza solo el detail (URL state).
-  - Acepta `<List>` slot + children como detail.
-- `src/app/[placeSlug]/settings/members/page.tsx` — usa `<MasterDetailLayout>`. Selected member desde URL `?member=<userId>` para shareable links + back button consistency.
-- `src/app/[placeSlug]/settings/members/[userId]/page.tsx` — sigue existiendo para mobile y para directo-link, pero en desktop se renderea inline en el detail pane (RSC content del [userId] page se rehúsa, pero es lo correcto: SSO de detalle).
-- **NEW** tests del primitive.
+- **NEW** `src/shared/ui/master-detail-layout.tsx` — primitive (~80 LOC) que recibe `list` + `detail` slots y aplica el grid responsive (`md:grid md:grid-cols-[360px_1fr]` desktop, `block` mobile con CSS hide-show por presencia de detail).
+- **NEW** `src/app/[placeSlug]/settings/members/layout.tsx` — wrapper del MasterDetailLayout con `{children}` (la lista) + `{detail}` (slot).
+- **NEW** `src/app/[placeSlug]/settings/members/@detail/default.tsx` — placeholder cuando no hay detail seleccionado (desktop muestra empty state, mobile retorna `null`).
+- **NEW** `src/app/[placeSlug]/settings/members/@detail/[userId]/page.tsx` — RSC del detail (mismo content que el `[userId]/page.tsx` actual, refactored a un component shared).
+- `src/app/[placeSlug]/settings/members/[userId]/page.tsx` — refactored: importa el component shared del detail. Mobile-friendly full page (sin la lista al lado).
+- `src/app/[placeSlug]/settings/members/page.tsx` — la lista. Acepta prop `selectedUserId` desde el layout para highlight del item activo.
+- **NEW** tests del primitive + tests de routing (mobile vs desktop).
 
-**Decisión:** la URL `?member=<userId>` en lugar de `/members/<userId>` permite split view
-sin route navigation. En mobile la URL `/members/<userId>` sigue siendo full page (route
-push). El componente decide qué pattern usar según viewport (CSS-driven via media-query
-hidden/visible — el data se carga igual server-side, no hay doble fetch).
+**Decisión:** Parallel Routes da unified URL + back/forward correcto + shareable links + Next-idiomatic. NO requiere `useMediaQuery` ni branching en code — el CSS del MasterDetailLayout maneja la responsive. Para desktop, click en un member del list usa `<Link href="/settings/members/<id>">` que Next intercept y solo updatea el slot @detail (no re-fetch del list). Para mobile, mismo Link navega full page (porque el list está hidden y el detail es full ancho).
 
 **Tests:**
 
-- Master-detail mobile: solo lista, tap navega
-- Master-detail desktop: split visible, click actualiza URL query
+- Master-detail layout: classes responsive correctas (`md:grid-cols-[360px_1fr]` etc.)
+- Slot rendering: con `[userId]` URL, slot carga el detail; sin, muestra default placeholder
+- Mobile vs desktop: validar via DOM presence + classes
 
-**Verificación:** suite verde + smoke en ambos viewports.
+**Verificación:** suite verde. Smoke crítico:
 
-**LOC delta:** ~+300 net.
+- Desktop: click member A en lista → URL cambia a `/settings/members/<A>`, detail aparece a la derecha, lista permanece. Click member B → URL cambia, detail actualiza, lista permanece, back button vuelve a A.
+- Mobile: tap member A → full page detail. Back button vuelve a la lista.
+- Refresh en `/settings/members/<A>`: ambos viewports renderean correctamente.
 
-**Riesgo deploy:** medio (cambia URL pattern de members, hay que validar que routing existing no se rompe).
+**LOC delta:** ~+400 net (primitive ~80 + layout/slots ~150 + refactor [userId] ~70 + tests ~100).
+
+**Riesgo deploy:** medio-alto. Parallel Routes son un patrón Next 15 que requiere estructura de carpetas exacta. Tests + smoke en ambos viewports son críticos. Si algo del routing se rompe, el blast radius es limitado a `/settings/members/*`.
 
 ---
 
@@ -150,25 +173,27 @@ hidden/visible — el data se carga igual server-side, no hay doble fetch).
 
 ---
 
-### Sesión 5 — Migrate `/settings/library` + `/settings/groups` + `/settings/tiers`
+### Sesión 5 — Migrate `/settings/library` + `/settings/groups` + `/settings/tiers` con Parallel Routes
 
-**Goal:** aplicar foundation (Sesión 1) + master-detail (Sesión 3) + RowActions (Sesión 4)
-a las 3 sub-pages restantes que listan colecciones.
+**Goal:** replicar el approach de Sesión 3 (Parallel Routes + master-detail) en las 3
+sub-pages restantes que listan colecciones administrables.
 
 **Files:**
 
-- `src/app/[placeSlug]/settings/library/page.tsx` — usa `<MasterDetailLayout>` con categories en lista, edit en detail.
-- `src/app/[placeSlug]/settings/groups/page.tsx` — idem con groups.
-- `src/app/[placeSlug]/settings/tiers/page.tsx` — idem con tiers.
-- Refactor de rows: cada feature usa `<RowActions>`.
+- `src/app/[placeSlug]/settings/library/` — agregar `layout.tsx` + `@detail/` slots análogos a members. Refactor del detail content a component shared.
+- `src/app/[placeSlug]/settings/groups/` — idem (groups ya tiene `[groupId]/page.tsx`).
+- `src/app/[placeSlug]/settings/tiers/` — idem (verificar si tiers tiene detail page; si no, decidir si requiere o queda como single-page form).
+- Refactor de rows: cada feature usa `<RowActions>` (de Sesión 4).
 
-**Tests:** smoke de cada sub-page en ambos viewports + tests existing siguen verde.
+**Decisión sobre tiers:** si tiers no tiene detail pages hoy (es solo un form único), Sesión 5 deja tiers fuera del master-detail y solo aplica RowActions + ajustes de spacing desktop. Master-detail aplica solo a colecciones con detail navigation.
+
+**Tests:** smoke de cada sub-page en ambos viewports + tests existing siguen verde + tests del routing parallel para library/groups.
 
 **Verificación:** suite verde + smoke visual de las 3 sub-pages en desktop y mobile.
 
-**LOC delta:** ~+200 net (refactors, no creación de nuevo).
+**LOC delta:** ~+400 net (3 sub-pages × parallel routes setup + refactors).
 
-**Riesgo deploy:** medio (3 sub-pages tocadas, regression risk en cada una).
+**Riesgo deploy:** medio (3 sub-pages con Parallel Routes; cada una es independiente, deployable separadamente si querés desglosar).
 
 ---
 
@@ -197,29 +222,35 @@ a las 3 sub-pages restantes que listan colecciones.
 
 ---
 
-### Sesión 7 — Keyboard shortcuts (Cmd+K + Esc + Cmd+Enter)
+### Sesión 7 — Keyboard shortcuts (Cmd+K solo settings + Esc + Cmd+Enter)
 
-**Goal:** atajos de teclado canónicos para power users en desktop.
+**Goal:** atajos de teclado canónicos para power users **dentro de `/settings/*` exclusivamente**.
+Search de members + comandos globales fuera de scope (decisión user 2026-05-10).
 
 **Files:**
 
-- **NEW** `src/shared/ui/command-palette.tsx` — wrapper de shadcn `Command` mounted en root. Abre con Cmd+K. Items: navegación a settings + search de members del place.
-- `src/app/[placeSlug]/layout.tsx` o `[placeSlug]/(gated)/layout.tsx` — mount del CommandPalette (sólo desktop, hidden mobile).
+- **NEW** `src/features/settings-shell/ui/settings-command-palette.tsx` — wrapper de shadcn `Command` mounted en el `<SettingsShell>` (no en root layout). Abre con Cmd+K. Items: navegación a las 8 sub-pages de settings (Hours, Members, Library, Groups, Tiers, Access, Editor, Flags). Sin search de members ni otros comandos en este sesión.
+- `src/app/[placeSlug]/settings/layout.tsx` — mount del SettingsCommandPalette (sólo dentro de settings, no toda la app). Hidden en mobile (`md:block`).
 - `src/shared/ui/edit-panel.tsx` (de Sesión 2) — Esc cierra el panel; si dirty, abre confirm dialog primero.
 - Hooks RHF en hours-form etc. — Cmd+Enter triggers `handleSubmit` cuando focus está dentro del form.
 - Tests del palette + Esc behavior + Cmd+Enter.
 
 **Tests:**
 
-- Command palette: Cmd+K abre, Esc cierra, navegación funciona
+- Settings command palette: Cmd+K abre cuando estás en `/settings/*`, NO abre fuera de settings
+- Esc cierra; navegación funciona
 - Edit panel Esc: cierra si clean, prompt si dirty
 - Cmd+Enter en form: trigger submit
 
-**Verificación:** suite verde. Smoke con teclado real.
+**Verificación:** suite verde. Smoke con teclado real:
 
-**LOC delta:** ~+250 net.
+- Abrir `/settings/hours` desktop, Cmd+K → palette aparece con lista de settings
+- Type "members" → highlight filtered, Enter → navega
+- Abrir `/conversations` (gated zone), Cmd+K → no debe abrir el palette de settings (scope respetado)
 
-**Riesgo deploy:** medio (intercept de keyboard events tiene long tail de edge cases con inputs nativos).
+**LOC delta:** ~+200 net (más chico que la versión global porque sin search de members).
+
+**Riesgo deploy:** bajo-medio (intercept de keyboard events tiene long tail; al limitar a settings reducimos blast radius).
 
 ---
 
@@ -245,19 +276,19 @@ a las 3 sub-pages restantes que listan colecciones.
 
 ---
 
-## Resumen total
+## Resumen total (rev. 2026-05-10 con decisiones confirmadas)
 
-| Sesión                       | LOC delta | Riesgo | Tiempo est. |
-| ---------------------------- | --------- | ------ | ----------- |
-| 1 — SettingsShell foundation | +450      | Medio  | 2h          |
-| 2 — Hours desktop (validate) | +200      | Bajo   | 1h          |
-| 3 — Master-detail + members  | +300      | Medio  | 1.5h        |
-| 4 — RowActions adaptive      | +200      | Bajo   | 1h          |
-| 5 — Library + groups + tiers | +200      | Medio  | 1.5h        |
-| 6 — Frequently Accessed hub  | +150      | Bajo   | 1h          |
-| 7 — Keyboard shortcuts       | +250      | Medio  | 1.5h        |
-| 8 — Container queries        | +100      | Bajo   | 1h          |
-| **Total**                    | **+1850** | —      | **~10.5h**  |
+| Sesión                                                         | LOC delta | Riesgo     | Tiempo est. |
+| -------------------------------------------------------------- | --------- | ---------- | ----------- |
+| 1 — SettingsShell foundation (sidebar md:flex + FAB md:hidden) | +450      | Medio      | 2h          |
+| 2 — Hours desktop (validate via EditPanel responsive)          | +200      | Bajo       | 1h          |
+| 3 — Parallel Routes master-detail + members                    | +400      | Medio-Alto | 2h          |
+| 4 — RowActions adaptive                                        | +200      | Bajo       | 1h          |
+| 5 — Library + groups + tiers (Parallel Routes c/u)             | +400      | Medio      | 2h          |
+| 6 — Frequently Accessed hub                                    | +150      | Bajo       | 1h          |
+| 7 — Keyboard shortcuts (Cmd+K solo settings)                   | +200      | Bajo-Medio | 1h          |
+| 8 — Container queries                                          | +100      | Bajo       | 1h          |
+| **Total**                                                      | **+2100** | —          | **~11h**    |
 
 **Cumplimiento CLAUDE.md / architecture.md:**
 
@@ -277,13 +308,13 @@ a las 3 sub-pages restantes que listan colecciones.
 - No revertir cambios anteriores (las decisiones canonizadas en `ux-patterns.md` se mantienen; el plan EXTIENDE para desktop, no reescribe).
 - Si sesión X requiere modificar archivos que sesión Y planeada después también va a tocar: notificar antes y resolver conflicto.
 
-## Decisiones que pueden cambiar el plan
+## Decisiones confirmadas (2026-05-10)
 
-Antes de empezar Sesión 1, confirmar:
+1. **Sidebar desktop, FAB mobile**: coexisten POR VIEWPORT, no se reemplazan. El sidebar 240px se muestra `md:flex` (hidden mobile); el `<SettingsNavFab>` se muestra `md:hidden`. Cero conflicto visual; cada viewport ve un solo affordance de navegación.
 
-1. **Sidebar contextual swap o coexistir con FAB**: ¿en desktop el `<SettingsNavFab>` desaparece y el sidebar lo reemplaza, o coexisten? Recomiendo reemplazo (menos chrome, más claro).
-2. **Master-detail URL pattern**: `?member=<userId>` en query (split view friendly) vs `/members/<userId>` (route push). Recomiendo query en desktop, route en mobile (decide el componente).
-3. **Cmd+K alcance**: ¿solo settings? ¿toda la app? ¿skeleton ahora con solo settings y full features después? Recomiendo skeleton + settings nav primero, expandir después.
+2. **Master-detail con Parallel Routes (Next 15 `@detail` slot)**: unified URL `/settings/members/[userId]` mantenida en ambos viewports. Mobile renderea como full page (default). Desktop renderea el detail como slot paralelo al lado de la lista, sin route navigation entre items (back/forward funciona, shareable URLs intactos, RSC fetches independientes para list y detail). Sin SEO concerns (área restringida). Aplica análogamente a `/settings/library/[categoryId]`, `/settings/groups/[groupId]`. Ver Sesión 3 actualizada abajo.
+
+3. **Cmd+K solo settings**: skeleton del CommandPalette con items de navegación a sub-pages de settings y nada más. Search de members + comandos globales se evalúan en sesiones futuras (no en este plan).
 
 ## Migration order recomendado
 

@@ -44,30 +44,26 @@ export async function updateSession(req: NextRequest): Promise<{
     },
   )
 
-  // DEBUG TEMPORAL 2026-05-10 — diagnosticar cookies entrantes en mobile
-  // post-callback. Solo loggeamos en paths críticos del flow auth para no
-  // saturar runtime logs.
+  // DEBUG TEMPORAL 2026-05-10 — info crítica en msg para sortear truncate
+  // del MCP de Vercel logs.
   const path = req.nextUrl.pathname
+  const host = req.headers.get('host') ?? '?'
   const isAuthFlowPath =
     path.startsWith('/invite/accept/') ||
     path.startsWith('/auth/') ||
     path === '/login' ||
     path === '/inbox' ||
     /^\/[a-z0-9-]+\/(conversations|library|events|settings|m\/)/i.test(path)
+  let sbCookieNames = ''
   if (isAuthFlowPath) {
-    const sbCookies = req.cookies
+    sbCookieNames = req.cookies
       .getAll()
       .filter((c) => /^sb-/.test(c.name))
-      .map((c) => ({ name: c.name, valueLen: c.value?.length ?? 0 }))
+      .map((c) => `${c.name}(${c.value?.length ?? 0})`)
+      .join(',')
     logger.warn(
-      {
-        debug: 'middleware_auth_flow_cookies',
-        host: req.headers.get('host'),
-        path,
-        sbCookieCount: sbCookies.length,
-        sbCookies,
-      },
-      'DEBUG middleware auth-flow cookies',
+      { debug: 'middleware_auth_flow_cookies', host, path, sbCookieNames },
+      `DBG mw IN host=${host} path=${path} sb=[${sbCookieNames}]`,
     )
   }
 
@@ -81,17 +77,16 @@ export async function updateSession(req: NextRequest): Promise<{
     const { data } = await supabase.auth.getUser()
     user = data.user ? { id: data.user.id, email: data.user.email ?? null } : null
 
-    // DEBUG TEMPORAL 2026-05-10 — confirmar si getUser() lee user post-callback.
     if (isAuthFlowPath) {
       logger.warn(
         {
           debug: 'middleware_getUser_result',
-          host: req.headers.get('host'),
+          host,
           path,
           hasUser: !!user,
           userId: user?.id ?? null,
         },
-        'DEBUG middleware getUser result',
+        `DBG mw OUT host=${host} path=${path} user=${user?.id ?? 'null'}`,
       )
     }
   } catch (err) {

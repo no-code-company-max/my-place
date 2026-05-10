@@ -96,30 +96,35 @@ export async function GET(req: NextRequest) {
     return response
   }
 
-  // DEBUG TEMPORAL 2026-05-10 — diagnosticar cookies en mobile post-S2.
-  // Reportado: incógnito desktop OK, mobile con state previo cae a /login.
-  // Hipótesis: cookie nueva no llega al browser o se mezcla con vieja.
+  // DEBUG TEMPORAL 2026-05-10 — info crítica EN EL MSG (Vercel runtime
+  // logs MCP trunca el data field; el msg sí se muestra entero).
+  const incomingSb = req.cookies.getAll().filter((c) => /^sb-/.test(c.name)).length
+  const respCookies = response.cookies.getAll()
+  const respSbCount = respCookies.filter((c) => /^sb-/.test(c.name)).length
+  const respSbWithValue = respCookies.filter((c) => /^sb-/.test(c.name) && c.value).length
+  const respDomains = [
+    ...new Set(
+      respCookies
+        .filter((c) => /^sb-/.test(c.name))
+        .map((c) => (c as { domain?: string }).domain ?? 'host-only'),
+    ),
+  ].join(',')
+  const host = req.headers.get('host') ?? '?'
   log.warn(
     {
       debug: 'invite_callback_response_cookies',
       userId: user.id,
-      host: req.headers.get('host'),
-      incomingCookieNames: req.cookies.getAll().map((c) => c.name),
-      responseCookieNames: response.cookies.getAll().map((c) => c.name),
-      responseCookieDetails: response.cookies.getAll().map((c) => ({
+      host,
+      respCookies: respCookies.map((c) => ({
         name: c.name,
-        hasValue: !!c.value,
         valueLen: c.value?.length ?? 0,
         domain: (c as { domain?: string }).domain ?? null,
         path: (c as { path?: string }).path ?? null,
         sameSite: (c as { sameSite?: string }).sameSite ?? null,
-        secure: (c as { secure?: boolean }).secure ?? null,
-        httpOnly: (c as { httpOnly?: boolean }).httpOnly ?? null,
         maxAge: (c as { maxAge?: number }).maxAge ?? null,
       })),
-      redirectLocation: response.headers.get('location'),
     },
-    'DEBUG invite_callback final response',
+    `DBG ic_in=${incomingSb} sb_out=${respSbCount} sb_val=${respSbWithValue} doms=${respDomains} host=${host}`,
   )
 
   log.info({ userId: user.id, type }, 'invite_callback_success')

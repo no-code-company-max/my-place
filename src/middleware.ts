@@ -3,6 +3,7 @@ import { clientEnv } from '@/shared/config/env'
 import { resolveHost, type HostResolution } from '@/shared/lib/host'
 import { REQUEST_ID_HEADER, getOrCreateRequestId } from '@/shared/lib/request-id'
 import { updateSession } from '@/shared/lib/supabase/middleware'
+import { buildProactiveResidualCleanupResponse } from '@/shared/lib/supabase/proactive-residual-cleanup'
 
 /**
  * Paths que sirven como-is en cualquier subdomain (no se rewritean a /inbox/*
@@ -33,6 +34,20 @@ export async function middleware(req: NextRequest) {
   const requestId = getOrCreateRequestId(req.headers)
   const hostname = req.headers.get('host') ?? ''
   const resolution = resolveHost(hostname, clientEnv.NEXT_PUBLIC_APP_DOMAIN)
+
+  // **Cleanup proactivo de cookies residuales (Sesión 3 hardening):** si el
+  // browser manda 2 cookies con name `sb-{currentRef}-auth-token` (típicamente
+  // una con Domain=apex y otra host-only residual de un flow viejo), borramos
+  // la host-only ANTES de que el SDK lea la cookie inválida. Esto evita el
+  // redirect a /login que el cleanup reactivo del middleware Supabase emite.
+  // Helper retorna NextResponse.redirect(req.url, 307) con Set-Cookie maxAge=0
+  // si detecta duplicados; null si no hay residuales.
+  // Ver `docs/decisions/2026-05-10-cookie-residual-host-only-cleanup.md`.
+  const proactiveCleanup = buildProactiveResidualCleanupResponse(req)
+  if (proactiveCleanup) {
+    proactiveCleanup.headers.set(REQUEST_ID_HEADER, requestId)
+    return proactiveCleanup
+  }
 
   const { response: sessionResponse, user } = await updateSession(req)
 

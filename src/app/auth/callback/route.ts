@@ -1,22 +1,30 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/db/client'
 import { clientEnv } from '@/shared/config/env'
 import { createRequestLogger, REQUEST_ID_HEADER } from '@/shared/lib/request-id'
 import { InvalidMagicLinkError, UserSyncError } from '@/shared/errors/auth'
-import { cookieDomain } from '@/shared/lib/supabase/cookie-domain'
-import { buildInboxUrl, deriveDisplayName, resolveSafeNext } from './helpers'
+import { createSupabaseServer } from '@/shared/lib/supabase/server'
+import { cleanupLegacyCookies } from '@/shared/lib/supabase/cookie-cleanup'
+import { resolveNextRedirect } from '@/shared/lib/next-redirect'
+import { deriveDisplayName } from './helpers'
 
 /**
  * GET /auth/callback?code=...&next=...
  *
- * 1. Intercambia el `code` por sesión Supabase.
- * 2. Upsert `User` local (sync con `auth.users`).
- * 3. Redirige a `next` validado o al inbox por default.
+ * Callback PKCE para magic links generados por `signInWithOtp` desde el
+ * browser. Vive en APEX — ver ADR `2026-05-10-auth-callbacks-on-apex.md`.
  *
- * Las cookies de sesión se escriben DIRECTAMENTE sobre el `NextResponse`
- * devuelto, con `domain=<apex>` para cruzar subdominios. Escribirlas vía
- * `cookies().set()` en un Route Handler no garantiza que lleguen al redirect.
+ * Si el flow viene de `auth.admin.generateLink` (server-side, implicit
+ * flow), usar `/auth/invite-callback` en su lugar.
+ *
+ * Steps:
+ * 1. Validar `code` no-vacío.
+ * 2. Cleanup defensivo de cookies legacy.
+ * 3. `exchangeCodeForSession(code)` server-side via `createSupabaseServer()`
+ *    (cookies via next/headers; setea con `Domain=<apex>` para cruzar
+ *    subdomains).
+ * 4. Upsert `User` local.
+ * 5. Redirige a `next` resuelto via `resolveNextRedirect` (host-aware).
  *
  * Ver `docs/features/auth/spec.md`.
  */
@@ -28,29 +36,14 @@ export async function GET(req: NextRequest) {
 
   if (!code) {
     log.warn({ err: new InvalidMagicLinkError('missing code') }, 'callback_missing_code')
-    return redirectTo('/login?error=invalid_link')
+    return redirectToPath('/login?error=invalid_link')
   }
 
-  const redirectTarget = resolveSafeNext(rawNext, buildInboxUrl())
+  const redirectTarget = resolveNextRedirect(rawNext)
   let response = NextResponse.redirect(redirectTarget)
-  const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
+  cleanupLegacyCookies(req, response)
 
-  const supabase = createServerClient(
-    clientEnv.NEXT_PUBLIC_SUPABASE_URL,
-    clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, { ...options, ...(domain ? { domain } : {}) })
-          }
-        },
-      },
-    },
-  )
+  const supabase = await createSupabaseServer()
 
   const { data: exchange, error } = await supabase.auth.exchangeCodeForSession(code)
   if (error || !exchange.user) {
@@ -58,7 +51,7 @@ export async function GET(req: NextRequest) {
       { err: new InvalidMagicLinkError(error?.message ?? 'no user') },
       'callback_exchange_failed',
     )
-    return redirectTo('/login?error=invalid_link')
+    return redirectToPath('/login?error=invalid_link')
   }
 
   const { user } = exchange
@@ -76,7 +69,7 @@ export async function GET(req: NextRequest) {
   } catch (syncErr) {
     log.error({ err: syncErr, userId: user.id }, 'user_sync_failed')
     await supabase.auth.signOut().catch(() => {})
-    response = redirectTo('/login?error=sync', new UserSyncError('user upsert failed'))
+    response = redirectToPath('/login?error=sync', new UserSyncError('user upsert failed'))
     return response
   }
 
@@ -84,7 +77,7 @@ export async function GET(req: NextRequest) {
   return response
 }
 
-function redirectTo(path: string, _cause?: Error) {
+function redirectToPath(path: string, _cause?: Error) {
   const url = new URL(path, clientEnv.NEXT_PUBLIC_APP_URL)
   return NextResponse.redirect(url)
 }

@@ -1,16 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
 import { prisma } from '@/db/client'
 import { clientEnv } from '@/shared/config/env'
 import { createRequestLogger, REQUEST_ID_HEADER } from '@/shared/lib/request-id'
 import { InvalidMagicLinkError, UserSyncError } from '@/shared/errors/auth'
-import { cookieDomain } from '@/shared/lib/supabase/cookie-domain'
-import { buildInboxUrl, deriveDisplayName, resolveSafeNext } from '@/app/auth/callback/helpers'
+import { createSupabaseServer } from '@/shared/lib/supabase/server'
+import { cleanupLegacyCookies } from '@/shared/lib/supabase/cookie-cleanup'
+import { resolveNextRedirect } from '@/shared/lib/next-redirect'
+import { deriveDisplayName } from '@/app/auth/callback/helpers'
 
 /**
  * GET /auth/invite-callback?token_hash=...&type=invite|magiclink&next=...
  *
  * Callback dedicado para magic links generados por `auth.admin.generateLink`.
+ * Vive en APEX (no subdomain) — ver ADR `2026-05-10-auth-callbacks-on-apex.md`.
  *
  * Por qué existe (separado del `/auth/callback` PKCE flow): los `action_link`
  * que retorna `admin.generateLink` usan **implicit flow** — el verify de
@@ -21,10 +23,15 @@ import { buildInboxUrl, deriveDisplayName, resolveSafeNext } from '@/app/auth/ca
  *
  * Steps:
  * 1. Validar `token_hash` no-vacío y `type` ∈ {invite, magiclink}.
- * 2. `verifyOtp({ token_hash, type })` server-side; setea cookies sobre
- *    el `NextResponse` con `domain=<apex>` para cruzar subdominios.
- * 3. Upsert `User` local (sync con `auth.users`).
- * 4. Redirige a `next` validado contra `SAFE_NEXT_PATTERNS`.
+ * 2. Cleanup defensivo de cookies legacy (`Domain=app.<apex>`, host-only)
+ *    para users con sesiones residuales pre-2026-05-10.
+ * 3. `verifyOtp({ token_hash, type })` server-side via `createSupabaseServer()`
+ *    (usa `cookies()` de next/headers — patrón canónico Next 15 + Supabase
+ *    SSR; setea cookies con `Domain=<apex>` para cruzar subdomains).
+ * 4. Upsert `User` local (sync con `auth.users`).
+ * 5. Redirige a `next` resuelto via `resolveNextRedirect` (host-aware:
+ *    `/invite/accept/<tok>` → apex; `/<slug>/conversations` → place
+ *    subdomain; `/inbox` → inbox subdomain).
  *
  * Ver `docs/gotchas/supabase-magic-link-callback-required.md`.
  */
@@ -34,22 +41,6 @@ export async function GET(req: NextRequest) {
   const tokenHash = url.searchParams.get('token_hash')
   const rawType = url.searchParams.get('type')
   const rawNext = url.searchParams.get('next')
-
-  // DEBUG TEMPORAL 2026-05-10: instrumentación para diagnosticar por qué las
-  // cookies de sesión no llegan al browser después de verifyOtp.
-  log.warn(
-    {
-      debug: 'invite_callback_entry',
-      host: req.headers.get('host'),
-      url: req.url,
-      hasTokenHash: !!tokenHash,
-      tokenHashLen: tokenHash?.length ?? 0,
-      rawType,
-      rawNext,
-      incomingCookies: req.cookies.getAll().map((c) => c.name),
-    },
-    'DEBUG invite_callback_entry',
-  )
 
   if (!tokenHash) {
     log.warn(
@@ -68,67 +59,16 @@ export async function GET(req: NextRequest) {
     return redirectToPath('/login?error=invalid_link')
   }
 
-  const redirectTarget = resolveSafeNext(rawNext, buildInboxUrl())
+  const redirectTarget = resolveNextRedirect(rawNext)
   let response = NextResponse.redirect(redirectTarget)
-  const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
+  cleanupLegacyCookies(req, response)
 
-  // DEBUG TEMPORAL: counter para saber si setAll se invocó antes del return.
-  let setAllInvocations = 0
-  let lastSetAllCookies: { name: string; hasValue: boolean }[] = []
-
-  const supabase = createServerClient(
-    clientEnv.NEXT_PUBLIC_SUPABASE_URL,
-    clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          setAllInvocations += 1
-          lastSetAllCookies = cookiesToSet.map((c) => ({
-            name: c.name,
-            hasValue: !!c.value,
-          }))
-          log.warn(
-            {
-              debug: 'setAll_invoked',
-              invocation: setAllInvocations,
-              cookiesCount: cookiesToSet.length,
-              cookies: lastSetAllCookies,
-              domain,
-            },
-            'DEBUG setAll invoked',
-          )
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, { ...options, ...(domain ? { domain } : {}) })
-          }
-        },
-      },
-    },
-  )
-
-  log.warn({ debug: 'before_verifyOtp', type }, 'DEBUG before verifyOtp')
+  const supabase = await createSupabaseServer()
 
   const { data: verify, error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
     type,
   })
-
-  log.warn(
-    {
-      debug: 'after_verifyOtp',
-      hasUser: !!verify?.user,
-      userId: verify?.user?.id ?? null,
-      hasSession: !!verify?.session,
-      hasAccessToken: !!verify?.session?.access_token,
-      errorMessage: error?.message ?? null,
-      setAllInvocationsSoFar: setAllInvocations,
-      responseCookieCountSoFar: response.cookies.getAll().length,
-    },
-    'DEBUG after verifyOtp',
-  )
-
   if (error || !verify.user) {
     log.warn(
       { err: new InvalidMagicLinkError(error?.message ?? 'no user'), type },
@@ -155,22 +95,6 @@ export async function GET(req: NextRequest) {
     response = redirectToPath('/login?error=sync', new UserSyncError('user upsert failed'))
     return response
   }
-
-  // DEBUG TEMPORAL: estado FINAL del response justo antes de retornar.
-  // Si setAllInvocations === 0 acá, confirmamos hipótesis de race con
-  // onAuthStateChange asíncrono.
-  log.warn(
-    {
-      debug: 'before_return',
-      userId: user.id,
-      type,
-      setAllInvocationsTotal: setAllInvocations,
-      responseCookieCount: response.cookies.getAll().length,
-      responseCookieNames: response.cookies.getAll().map((c) => c.name),
-      redirectLocation: response.headers.get('location'),
-    },
-    'DEBUG before return',
-  )
 
   log.info({ userId: user.id, type }, 'invite_callback_success')
   return response

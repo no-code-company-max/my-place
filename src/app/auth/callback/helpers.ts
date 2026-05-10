@@ -19,7 +19,7 @@ import { inboxUrl } from '@/shared/lib/app-url'
  * golpear DB. Si un día queremos aceptar la home del place vía `?next=`,
  * agregamos pattern explícito + denylist de paths reservados.
  */
-const SAFE_NEXT_PATTERNS: readonly RegExp[] = [
+export const SAFE_NEXT_PATTERNS: readonly RegExp[] = [
   /^\/inbox(\/|$)/,
   /^\/[a-z0-9-]+\/(conversations|library|events|m\/[a-z0-9-]+|settings)(\/|$)/,
   /^\/login$/, // edge: re-login sin loop infinito

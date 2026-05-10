@@ -1,55 +1,55 @@
 import { describe, it, expect, vi } from 'vitest'
 
-// Mock del clientEnv para tener valor estable. El helper lee
-// `clientEnv.NEXT_PUBLIC_APP_URL`.
+// Mock del clientEnv. Los helpers ahora construyen URL via `apexUrl()`
+// (de `src/shared/lib/app-url.ts`), que lee `NEXT_PUBLIC_APP_DOMAIN` (apex
+// SIN protocol). El callback siempre vive en apex — el subdomain del
+// `NEXT_PUBLIC_APP_URL` ya no se usa para construir la URL del callback,
+// porque romper el apex hace que el redirect post-callback caiga bajo el
+// rewrite del middleware caso 'inbox' y termine en 404. Ver ADR
+// 2026-05-10-auth-callbacks-on-apex.md.
 vi.mock('@/shared/config/env', () => ({
-  clientEnv: { NEXT_PUBLIC_APP_URL: 'https://app.place.community' },
+  clientEnv: {
+    NEXT_PUBLIC_APP_URL: 'https://app.place.community',
+    NEXT_PUBLIC_APP_DOMAIN: 'place.community',
+  },
 }))
 
 import { authCallbackUrlForNext, inviteCallbackUrl } from '../auth-callback-url'
 
 describe('authCallbackUrlForNext', () => {
-  it('construye URL del callback con next URL-encoded', () => {
+  it('construye URL del callback con next URL-encoded (host APEX)', () => {
     const url = authCallbackUrlForNext('/invite/accept/tok_abc123')
-    expect(url).toBe(
-      'https://app.place.community/auth/callback?next=%2Finvite%2Faccept%2Ftok_abc123',
-    )
+    expect(url).toBe('https://place.community/auth/callback?next=%2Finvite%2Faccept%2Ftok_abc123')
   })
 
   it('normaliza nextPath sin slash inicial agregándolo', () => {
     const url = authCallbackUrlForNext('inbox')
-    expect(url).toBe('https://app.place.community/auth/callback?next=%2Finbox')
+    expect(url).toBe('https://place.community/auth/callback?next=%2Finbox')
   })
 
   it('preserva caracteres especiales del path via encodeURIComponent', () => {
-    // Caracteres safe en path normal: letters, digits, /, -, _.
-    // Pero el path va URL-encoded, así que el / queda como %2F.
     const url = authCallbackUrlForNext('/path/with-dashes_and_underscores/123')
     expect(url).toBe(
-      'https://app.place.community/auth/callback?next=%2Fpath%2Fwith-dashes_and_underscores%2F123',
+      'https://place.community/auth/callback?next=%2Fpath%2Fwith-dashes_and_underscores%2F123',
     )
   })
 
   it('encoding seguro contra injection (query string en el path)', () => {
-    // Si alguien llama con un path que ya tiene query (no debería), el encoding
-    // del helper neutraliza el riesgo de manipular query string del callback.
     const url = authCallbackUrlForNext('/foo?injected=evil')
-    // El `?` y `=` quedan encoded, por lo que el callback recibe un único
-    // `next` con el valor literal — no se "splittea" en query params.
-    expect(url).toBe('https://app.place.community/auth/callback?next=%2Ffoo%3Finjected%3Devil')
+    expect(url).toBe('https://place.community/auth/callback?next=%2Ffoo%3Finjected%3Devil')
     expect(url).not.toContain('&injected=evil')
   })
 })
 
 describe('inviteCallbackUrl', () => {
-  it('construye URL de /auth/invite-callback con token_hash, type y next encoded', () => {
+  it('construye URL de /auth/invite-callback con token_hash, type y next (host APEX)', () => {
     const url = inviteCallbackUrl({
       tokenHash: 'hash_abc123',
       type: 'invite',
       next: '/invite/accept/tok_xyz',
     })
     expect(url).toBe(
-      'https://app.place.community/auth/invite-callback?token_hash=hash_abc123&type=invite&next=%2Finvite%2Faccept%2Ftok_xyz',
+      'https://place.community/auth/invite-callback?token_hash=hash_abc123&type=invite&next=%2Finvite%2Faccept%2Ftok_xyz',
     )
   })
 
@@ -60,6 +60,7 @@ describe('inviteCallbackUrl', () => {
       next: '/invite/accept/tok_xyz',
     })
     expect(url).toContain('type=magiclink')
+    expect(url.startsWith('https://place.community/')).toBe(true)
   })
 
   it('normaliza next sin slash inicial agregándolo', () => {
@@ -77,14 +78,11 @@ describe('inviteCallbackUrl', () => {
       type: 'invite',
       next: '/foo?evil=1',
     })
-    // El `?` y `=` del next van encoded — no rompen el query string del callback.
     expect(url).toContain('next=%2Ffoo%3Fevil%3D1')
     expect(url).not.toContain('&evil=1')
   })
 
   it('encoding seguro contra token_hash con caracteres no-url-safe', () => {
-    // El hashed_token de Supabase es base64-like, pero por si llega un `+` o `/`,
-    // los encodeamos para garantizar parse correcto en el callback.
     const url = inviteCallbackUrl({
       tokenHash: 'a+b/c=d',
       type: 'invite',

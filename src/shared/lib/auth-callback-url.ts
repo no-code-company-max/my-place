@@ -1,4 +1,4 @@
-import { clientEnv } from '@/shared/config/env'
+import { apexUrl } from './app-url'
 
 /**
  * Construye URL absoluta del `/auth/callback?next=...` para flows que usan
@@ -11,16 +11,20 @@ import { clientEnv } from '@/shared/config/env'
  * van por `inviteCallbackUrl()` + `/auth/invite-callback` (verifyOtp
  * server-side). Ver `docs/gotchas/supabase-magic-link-callback-required.md`.
  *
+ * **Host del callback es siempre APEX** (no subdomain). Es un invariante:
+ * el callback corre en apex para que el redirect post-callback no caiga
+ * bajo el rewrite del middleware caso 'inbox' (`src/middleware.ts:116-120`),
+ * que reescribe `/<path>` → `/inbox/<path>` y produce 404 para paths como
+ * `/invite/accept/<token>`. Las cookies setteadas con `Domain=<apex>` cruzan
+ * a todos los subdomains. Ver ADR `2026-05-10-auth-callbacks-on-apex.md`.
+ *
  * **Side effect requerido:** el `nextPath` que pases acá tiene que estar
  * en `SAFE_NEXT_PATTERNS` de `src/app/auth/callback/helpers.ts`. Sino el
  * callback va a fallback al inbox por security guard.
- *
- * Ver también: `docs/features/auth/spec.md` y
- * `src/app/auth/callback/route.ts`.
  */
 export function authCallbackUrlForNext(nextPath: string): string {
   const next = nextPath.startsWith('/') ? nextPath : `/${nextPath}`
-  return `${clientEnv.NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`
+  return `${apexUrl('/auth/callback').toString()}?next=${encodeURIComponent(next)}`
 }
 
 /**
@@ -42,6 +46,9 @@ export function authCallbackUrlForNext(nextPath: string): string {
  * - `'magiclink'` cuando vino del fallback `generateLink({ type: 'magiclink' })`
  *   (path 2, user existente).
  *
+ * **Host del callback es siempre APEX** (mismo motivo que
+ * `authCallbackUrlForNext`).
+ *
  * **Side effect requerido:** el `next` debe estar en `SAFE_NEXT_PATTERNS`
  * de `src/app/auth/callback/helpers.ts` (compartido con `/auth/callback`).
  */
@@ -56,5 +63,5 @@ export function inviteCallbackUrl(params: {
     type: params.type,
     next,
   })
-  return `${clientEnv.NEXT_PUBLIC_APP_URL}/auth/invite-callback?${qs.toString()}`
+  return `${apexUrl('/auth/invite-callback').toString()}?${qs.toString()}`
 }

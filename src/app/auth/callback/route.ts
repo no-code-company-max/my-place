@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest } from 'next/server'
 import { prisma } from '@/db/client'
 import { clientEnv } from '@/shared/config/env'
 import { createRequestLogger, REQUEST_ID_HEADER } from '@/shared/lib/request-id'
@@ -6,6 +6,7 @@ import { InvalidMagicLinkError, UserSyncError } from '@/shared/errors/auth'
 import { createSupabaseServer } from '@/shared/lib/supabase/server'
 import { cleanupLegacyCookies } from '@/shared/lib/supabase/cookie-cleanup'
 import { resolveNextRedirect } from '@/shared/lib/next-redirect'
+import { htmlRedirect } from '@/shared/lib/auth-redirect-html'
 import { deriveDisplayName } from './helpers'
 
 /**
@@ -17,14 +18,18 @@ import { deriveDisplayName } from './helpers'
  * Si el flow viene de `auth.admin.generateLink` (server-side, implicit
  * flow), usar `/auth/invite-callback` en su lugar.
  *
+ * **Por qué `htmlRedirect` y no `NextResponse.redirect`:** Safari iOS ITP
+ * + algunos browsers descartan `Set-Cookie` headers en respuestas a
+ * redirects HTTP (307/303). Documentado en supabase/ssr#36 y vercel/next.js
+ * discussions/48434. Workaround: respuesta 200 OK con HTML meta-refresh
+ * (browser guarda cookies antes de navegar).
+ *
  * Steps:
  * 1. Validar `code` no-vacío.
  * 2. Cleanup defensivo de cookies legacy.
- * 3. `exchangeCodeForSession(code)` server-side via `createSupabaseServer()`
- *    (cookies via next/headers; setea con `Domain=<apex>` para cruzar
- *    subdomains).
+ * 3. `exchangeCodeForSession(code)` server-side via `createSupabaseServer()`.
  * 4. Upsert `User` local.
- * 5. Redirige a `next` resuelto via `resolveNextRedirect` (host-aware).
+ * 5. `htmlRedirect` al `next` resuelto via `resolveNextRedirect` (host-aware).
  *
  * Ver `docs/features/auth/spec.md`.
  */
@@ -36,11 +41,11 @@ export async function GET(req: NextRequest) {
 
   if (!code) {
     log.warn({ err: new InvalidMagicLinkError('missing code') }, 'callback_missing_code')
-    return redirectToPath('/login?error=invalid_link')
+    return htmlRedirect(buildLoginUrl('invalid_link'))
   }
 
   const redirectTarget = resolveNextRedirect(rawNext)
-  let response = NextResponse.redirect(redirectTarget)
+  const response = htmlRedirect(redirectTarget)
   cleanupLegacyCookies(req, response)
 
   const supabase = await createSupabaseServer()
@@ -51,7 +56,7 @@ export async function GET(req: NextRequest) {
       { err: new InvalidMagicLinkError(error?.message ?? 'no user') },
       'callback_exchange_failed',
     )
-    return redirectToPath('/login?error=invalid_link')
+    return htmlRedirect(buildLoginUrl('invalid_link'))
   }
 
   const { user } = exchange
@@ -69,17 +74,15 @@ export async function GET(req: NextRequest) {
   } catch (syncErr) {
     log.error({ err: syncErr, userId: user.id }, 'user_sync_failed')
     await supabase.auth.signOut().catch(() => {})
-    response = redirectToPath('/login?error=sync', new UserSyncError('user upsert failed'))
-    return response
+    return htmlRedirect(buildLoginUrl('sync', new UserSyncError('user upsert failed')))
   }
 
   log.info({ userId: user.id }, 'callback_success')
   return response
 }
 
-function redirectToPath(path: string, _cause?: Error) {
-  const url = new URL(path, clientEnv.NEXT_PUBLIC_APP_URL)
-  return NextResponse.redirect(url)
+function buildLoginUrl(error: 'invalid_link' | 'sync', _cause?: Error): URL {
+  return new URL(`/login?error=${error}`, clientEnv.NEXT_PUBLIC_APP_URL)
 }
 
 function fallbackEmail(userId: string): string {

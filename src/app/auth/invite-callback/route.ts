@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest } from 'next/server'
 import { prisma } from '@/db/client'
 import { clientEnv } from '@/shared/config/env'
 import { createRequestLogger, REQUEST_ID_HEADER } from '@/shared/lib/request-id'
@@ -6,6 +6,7 @@ import { InvalidMagicLinkError, UserSyncError } from '@/shared/errors/auth'
 import { createSupabaseServer } from '@/shared/lib/supabase/server'
 import { cleanupLegacyCookies } from '@/shared/lib/supabase/cookie-cleanup'
 import { resolveNextRedirect } from '@/shared/lib/next-redirect'
+import { htmlRedirect } from '@/shared/lib/auth-redirect-html'
 import { deriveDisplayName } from '@/app/auth/callback/helpers'
 
 /**
@@ -21,17 +22,20 @@ import { deriveDisplayName } from '@/app/auth/callback/helpers'
  * de Supabase; apunta acá con el `hashed_token` extraído del payload, y
  * nosotros llamamos `verifyOtp` server-side.
  *
+ * **Por qué `htmlRedirect` y no `NextResponse.redirect`:** Safari iOS ITP
+ * + algunos browsers descartan `Set-Cookie` headers en respuestas a redirects
+ * HTTP (307/303). Documentado en supabase/ssr#36 y vercel/next.js
+ * discussions/48434 — el síntoma es que el primer login solo deja
+ * `sb-*-auth-token-code-verifier` sin la `auth-token` real. Workaround:
+ * respuesta 200 OK con HTML meta-refresh (browser guarda cookies antes de
+ * navegar).
+ *
  * Steps:
  * 1. Validar `token_hash` no-vacío y `type` ∈ {invite, magiclink}.
- * 2. Cleanup defensivo de cookies legacy (`Domain=app.<apex>`, host-only)
- *    para users con sesiones residuales pre-2026-05-10.
- * 3. `verifyOtp({ token_hash, type })` server-side via `createSupabaseServer()`
- *    (usa `cookies()` de next/headers — patrón canónico Next 15 + Supabase
- *    SSR; setea cookies con `Domain=<apex>` para cruzar subdomains).
- * 4. Upsert `User` local (sync con `auth.users`).
- * 5. Redirige a `next` resuelto via `resolveNextRedirect` (host-aware:
- *    `/invite/accept/<tok>` → apex; `/<slug>/conversations` → place
- *    subdomain; `/inbox` → inbox subdomain).
+ * 2. Cleanup defensivo de cookies legacy + `verifyOtp({ token_hash, type })`
+ *    server-side via `createSupabaseServer()` (cookies via next/headers).
+ * 3. Upsert `User` local (sync con `auth.users`).
+ * 4. `htmlRedirect` al `next` resuelto via `resolveNextRedirect` (host-aware).
  *
  * Ver `docs/gotchas/supabase-magic-link-callback-required.md`.
  */
@@ -47,7 +51,7 @@ export async function GET(req: NextRequest) {
       { err: new InvalidMagicLinkError('missing token_hash') },
       'invite_callback_missing_token',
     )
-    return redirectToPath('/login?error=invalid_link')
+    return htmlRedirect(buildLoginUrl('invalid_link'))
   }
 
   const type = parseOtpType(rawType)
@@ -56,11 +60,11 @@ export async function GET(req: NextRequest) {
       { err: new InvalidMagicLinkError('invalid type'), rawType },
       'invite_callback_invalid_type',
     )
-    return redirectToPath('/login?error=invalid_link')
+    return htmlRedirect(buildLoginUrl('invalid_link'))
   }
 
   const redirectTarget = resolveNextRedirect(rawNext)
-  let response = NextResponse.redirect(redirectTarget)
+  const response = htmlRedirect(redirectTarget)
   cleanupLegacyCookies(req, response)
 
   const supabase = await createSupabaseServer()
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest) {
       { err: new InvalidMagicLinkError(error?.message ?? 'no user'), type },
       'invite_callback_verify_failed',
     )
-    return redirectToPath('/login?error=invalid_link')
+    return htmlRedirect(buildLoginUrl('invalid_link'))
   }
 
   const { user } = verify
@@ -92,40 +96,8 @@ export async function GET(req: NextRequest) {
   } catch (syncErr) {
     log.error({ err: syncErr, userId: user.id }, 'invite_callback_user_sync_failed')
     await supabase.auth.signOut().catch(() => {})
-    response = redirectToPath('/login?error=sync', new UserSyncError('user upsert failed'))
-    return response
+    return htmlRedirect(buildLoginUrl('sync', new UserSyncError('user upsert failed')))
   }
-
-  // DEBUG TEMPORAL 2026-05-10 — info crítica EN EL MSG (Vercel runtime
-  // logs MCP trunca el data field; el msg sí se muestra entero).
-  const incomingSb = req.cookies.getAll().filter((c) => /^sb-/.test(c.name)).length
-  const respCookies = response.cookies.getAll()
-  const respSbCount = respCookies.filter((c) => /^sb-/.test(c.name)).length
-  const respSbWithValue = respCookies.filter((c) => /^sb-/.test(c.name) && c.value).length
-  const respDomains = [
-    ...new Set(
-      respCookies
-        .filter((c) => /^sb-/.test(c.name))
-        .map((c) => (c as { domain?: string }).domain ?? 'host-only'),
-    ),
-  ].join(',')
-  const host = req.headers.get('host') ?? '?'
-  log.warn(
-    {
-      debug: 'invite_callback_response_cookies',
-      userId: user.id,
-      host,
-      respCookies: respCookies.map((c) => ({
-        name: c.name,
-        valueLen: c.value?.length ?? 0,
-        domain: (c as { domain?: string }).domain ?? null,
-        path: (c as { path?: string }).path ?? null,
-        sameSite: (c as { sameSite?: string }).sameSite ?? null,
-        maxAge: (c as { maxAge?: number }).maxAge ?? null,
-      })),
-    },
-    `DBG ic_in=${incomingSb} sb_out=${respSbCount} sb_val=${respSbWithValue} doms=${respDomains} host=${host}`,
-  )
 
   log.info({ userId: user.id, type }, 'invite_callback_success')
   return response
@@ -136,9 +108,8 @@ function parseOtpType(raw: string | null): 'invite' | 'magiclink' | null {
   return null
 }
 
-function redirectToPath(path: string, _cause?: Error) {
-  const url = new URL(path, clientEnv.NEXT_PUBLIC_APP_URL)
-  return NextResponse.redirect(url)
+function buildLoginUrl(error: 'invalid_link' | 'sync', _cause?: Error): URL {
+  return new URL(`/login?error=${error}`, clientEnv.NEXT_PUBLIC_APP_URL)
 }
 
 function fallbackEmail(userId: string): string {

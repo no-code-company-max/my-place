@@ -44,29 +44,6 @@ export async function updateSession(req: NextRequest): Promise<{
     },
   )
 
-  // DEBUG TEMPORAL 2026-05-10 — info crítica en msg para sortear truncate
-  // del MCP de Vercel logs.
-  const path = req.nextUrl.pathname
-  const host = req.headers.get('host') ?? '?'
-  const isAuthFlowPath =
-    path.startsWith('/invite/accept/') ||
-    path.startsWith('/auth/') ||
-    path === '/login' ||
-    path === '/inbox' ||
-    /^\/[a-z0-9-]+\/(conversations|library|events|settings|m\/)/i.test(path)
-  let sbCookieNames = ''
-  if (isAuthFlowPath) {
-    sbCookieNames = req.cookies
-      .getAll()
-      .filter((c) => /^sb-/.test(c.name))
-      .map((c) => `${c.name}(${c.value?.length ?? 0})`)
-      .join(',')
-    logger.warn(
-      { debug: 'middleware_auth_flow_cookies', host, path, sbCookieNames },
-      `DBG mw IN host=${host} path=${path} sb=[${sbCookieNames}]`,
-    )
-  }
-
   // `auth.getUser()` puede disparar refresh interno de Supabase. Si el refresh
   // token está stale (race con otra request paralela, revocación, expire), el
   // SDK tira AuthApiError. En vez de crashear el render, deslogueamos local
@@ -76,19 +53,6 @@ export async function updateSession(req: NextRequest): Promise<{
   try {
     const { data } = await supabase.auth.getUser()
     user = data.user ? { id: data.user.id, email: data.user.email ?? null } : null
-
-    if (isAuthFlowPath) {
-      logger.warn(
-        {
-          debug: 'middleware_getUser_result',
-          host,
-          path,
-          hasUser: !!user,
-          userId: user?.id ?? null,
-        },
-        `DBG mw OUT host=${host} path=${path} user=${user?.id ?? 'null'}`,
-      )
-    }
   } catch (err) {
     if (!isStaleSessionError(err)) throw err
     logger.warn(

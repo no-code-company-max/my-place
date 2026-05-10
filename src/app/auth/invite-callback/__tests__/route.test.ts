@@ -89,23 +89,23 @@ afterEach(() => {
 describe('GET /auth/invite-callback', () => {
   it('sin token_hash → 307 a /login?error=invalid_link sin tocar Supabase', async () => {
     const res = await GET(mkReq({ type: 'invite', next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(verifyOtpMock).not.toHaveBeenCalled()
     expect(userUpsertMock).not.toHaveBeenCalled()
   })
 
   it('type inválido → 307 a /login?error=invalid_link sin tocar Supabase', async () => {
     const res = await GET(mkReq({ token_hash: 'h', type: 'recovery', next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(verifyOtpMock).not.toHaveBeenCalled()
   })
 
   it('type ausente → invalid_link', async () => {
     const res = await GET(mkReq({ token_hash: 'h', next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(verifyOtpMock).not.toHaveBeenCalled()
   })
 
@@ -113,8 +113,8 @@ describe('GET /auth/invite-callback', () => {
     verifyOtpMock.mockReturnValue({ data: null, error: { message: 'token expired' } })
 
     const res = await GET(mkReq({ token_hash: 'h', type: 'invite', next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(verifyOtpMock).toHaveBeenCalledWith({ token_hash: 'h', type: 'invite' })
     expect(userUpsertMock).not.toHaveBeenCalled()
   })
@@ -134,9 +134,9 @@ describe('GET /auth/invite-callback', () => {
       }),
     )
 
-    expect(res.status).toBe(307)
+    expect(res.status).toBe(200)
     // resolveNextRedirect mapea /invite/accept/<tok> → APEX (no subdomain).
-    expect(res.headers.get('location')).toBe('http://localhost:3000/invite/accept/tok_abc')
+    expect(await res.text()).toContain('http://localhost:3000/invite/accept/tok_abc')
     expect(verifyOtpMock).toHaveBeenCalledWith({
       token_hash: 'hash_invite_xyz',
       type: 'invite',
@@ -162,7 +162,7 @@ describe('GET /auth/invite-callback', () => {
       }),
     )
 
-    expect(res.status).toBe(307)
+    expect(res.status).toBe(200)
     expect(verifyOtpMock).toHaveBeenCalledWith({
       token_hash: 'hash_magic_xyz',
       type: 'magiclink',
@@ -180,8 +180,8 @@ describe('GET /auth/invite-callback', () => {
       mkReq({ token_hash: 'h', type: 'invite', next: '/the-company/conversations' }),
     )
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://the-company.localhost:3000/conversations')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://the-company.localhost:3000/conversations')
   })
 
   it('next inválido (no en allowlist) → fallback al inbox subdomain root', async () => {
@@ -193,9 +193,9 @@ describe('GET /auth/invite-callback', () => {
 
     const res = await GET(mkReq({ token_hash: 'h', type: 'invite', next: '/etc/passwd' }))
 
-    expect(res.status).toBe(307)
+    expect(res.status).toBe(200)
     // resolveNextRedirect cae al fallback `inboxUrl('/')`.
-    expect(res.headers.get('location')).toBe('http://app.localhost:3000/')
+    expect(await res.text()).toContain('http://app.localhost:3000/')
   })
 
   it('upsert User falla → signOut + 307 a /login?error=sync', async () => {
@@ -207,8 +207,8 @@ describe('GET /auth/invite-callback', () => {
 
     const res = await GET(mkReq({ token_hash: 'h', type: 'invite', next: '/inbox' }))
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=sync')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=sync')
     expect(signOutMock).toHaveBeenCalledTimes(1)
   })
 

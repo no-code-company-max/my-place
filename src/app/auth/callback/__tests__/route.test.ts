@@ -81,8 +81,8 @@ afterEach(() => {
 describe('GET /auth/callback (PKCE)', () => {
   it('sin code → 307 a /login?error=invalid_link sin tocar Supabase', async () => {
     const res = await GET(mkReq({ next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
     expect(userUpsertMock).not.toHaveBeenCalled()
   })
@@ -94,8 +94,8 @@ describe('GET /auth/callback (PKCE)', () => {
     })
 
     const res = await GET(mkReq({ code: 'bad_code', next: '/inbox' }))
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=invalid_link')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=invalid_link')
     expect(exchangeCodeForSessionMock).toHaveBeenCalledWith('bad_code')
     expect(userUpsertMock).not.toHaveBeenCalled()
   })
@@ -109,9 +109,9 @@ describe('GET /auth/callback (PKCE)', () => {
 
     const res = await GET(mkReq({ code: 'ok_code', next: '/inbox' }))
 
-    expect(res.status).toBe(307)
+    expect(res.status).toBe(200)
     // resolveNextRedirect mapea /inbox → root del subdomain inbox.
-    expect(res.headers.get('location')).toBe('http://app.localhost:3000/')
+    expect(await res.text()).toContain('http://app.localhost:3000/')
     expect(exchangeCodeForSessionMock).toHaveBeenCalledWith('ok_code')
     expect(userUpsertMock).toHaveBeenCalledTimes(1)
     expect(setAllSpy).toHaveBeenCalledTimes(1)
@@ -126,8 +126,8 @@ describe('GET /auth/callback (PKCE)', () => {
 
     const res = await GET(mkReq({ code: 'ok', next: '/the-company/conversations' }))
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://the-company.localhost:3000/conversations')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://the-company.localhost:3000/conversations')
   })
 
   it('next /invite/accept/<tok> → apex (host-aware, paths globales)', async () => {
@@ -139,8 +139,8 @@ describe('GET /auth/callback (PKCE)', () => {
 
     const res = await GET(mkReq({ code: 'ok', next: '/invite/accept/tok_abc' }))
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/invite/accept/tok_abc')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/invite/accept/tok_abc')
   })
 
   it('next inválido → fallback al inbox subdomain root', async () => {
@@ -152,8 +152,8 @@ describe('GET /auth/callback (PKCE)', () => {
 
     const res = await GET(mkReq({ code: 'ok', next: '/etc/passwd' }))
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://app.localhost:3000/')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://app.localhost:3000/')
   })
 
   it('upsert User falla → signOut + 307 a /login?error=sync', async () => {
@@ -165,8 +165,8 @@ describe('GET /auth/callback (PKCE)', () => {
 
     const res = await GET(mkReq({ code: 'ok', next: '/inbox' }))
 
-    expect(res.status).toBe(307)
-    expect(res.headers.get('location')).toBe('http://localhost:3000/login?error=sync')
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('http://localhost:3000/login?error=sync')
     expect(signOutMock).toHaveBeenCalledTimes(1)
   })
 

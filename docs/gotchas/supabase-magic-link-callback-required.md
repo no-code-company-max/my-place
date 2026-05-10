@@ -55,6 +55,14 @@ Mantener separados evita branching frágil dentro de un solo handler y deja clar
 
 Ambos callbacks comparten el allowlist (`src/app/auth/callback/helpers.ts`). Cuando se introduce un nuevo path destino, sumarlo al patrón. Hoy cubre `/invite/accept/<token>` con `[A-Za-z0-9_-]+` (token base64url-safe).
 
+## Side effect requerido: agregar el callback a `AUTH_PATHS` del middleware
+
+`src/middleware.ts` aplica un `gate()` que redirige a `/login?next=...` cualquier path que no esté en `AUTH_PATHS` cuando el user llega sin sesión. Como el user que clickea el email del invite VIENE sin cookie (la cookie se setea EN el callback), si el path del callback no está en la lista, el middleware lo redirige a /login antes de que el route handler corra — y el handler nunca emite logs ni hace `verifyOtp`.
+
+**Síntoma:** en Vercel logs ves `GET /auth/<tu-callback> 307` seguido de `GET /login 200`, sin ningún log estructurado del handler. Es exactamente el mismo síntoma que tendrías si el handler no existiera.
+
+Hoy `AUTH_PATHS = ['/login', '/logout', '/auth/callback', '/auth/invite-callback']`. Cuando agregues otro callback que setee sesión, sumarlo acá también.
+
 ## Backward compat
 
 Invitations enviadas ANTES del fix tienen el `action_link` viejo de Supabase como `inviteUrl` (implicit flow). Los users que las clickean siguen cayendo en `/login`. Workarounds:

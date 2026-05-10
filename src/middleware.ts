@@ -8,8 +8,13 @@ import { updateSession } from '@/shared/lib/supabase/middleware'
  * Paths que sirven como-is en cualquier subdomain (no se rewritean a /inbox/*
  * ni a /[slug]/*, y no pasan por el gate de auth). Son las rutas de autenticación
  * compartidas: el cookie de sesión cruza subdominios vía `domain=<apex>`.
+ *
+ * **Importante:** cualquier route handler que SETEE la sesión (login, callbacks
+ * de magic link) tiene que estar acá — sino el `gate()` redirige a /login
+ * antes de que el handler corra (el user llega sin cookie todavía). Ver
+ * `docs/gotchas/supabase-magic-link-callback-required.md`.
  */
-const AUTH_PATHS = ['/login', '/logout', '/auth/callback']
+const AUTH_PATHS = ['/login', '/logout', '/auth/callback', '/auth/invite-callback']
 
 function isAuthPath(pathname: string): boolean {
   return AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))

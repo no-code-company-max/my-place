@@ -170,8 +170,9 @@ export async function updateSession(req: NextRequest): Promise<{
       user = null
       return { response, user }
     }
+    const errCode = (err as { code?: string }).code ?? 'unknown'
     logger.warn(
-      { event: 'authSessionStale', reason: (err as { code?: string }).code ?? 'unknown' },
+      { event: 'authSessionStale', reason: errCode },
       'session stale — clearing cookies and treating as anonymous',
     )
     // `signOut({ scope: 'local' })` no llama a Supabase; sólo limpia cookies
@@ -179,40 +180,60 @@ export async function updateSession(req: NextRequest): Promise<{
     // refleja en `response.cookies` (Domain=apex preservado).
     await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
 
-    // **Cleanup defensivo HOST-ONLY:** signOut limpia con `Domain=apex` (el
-    // domain configurado en el cookies adapter de arriba). Pero pueden
-    // coexistir cookies residuales con `Domain=<host actual>` (host-only)
-    // de flows previos — esas tienen precedencia sobre las apex-domain por
-    // RFC 6265 (cookies más específicas primero). Si no las limpiamos, el
-    // próximo request las re-envía y el SDK falla otra vez con stale.
+    // **Discriminación por error code (Sesión 4):** el cleanup HOST-ONLY no
+    // siempre es necesario. Distinguimos:
     //
-    // Emitimos Max-Age=0 SIN domain (host-only) para `sb-{currentRef}-auth-token`
-    // y sus chunks `.0/.1/...`. **Filtro por currentRef:** no tocamos cookies
-    // de OTROS proyectos Supabase coexistentes en el browser (un user puede
-    // tener sesiones simultáneas en varios productos basados en Supabase). Si
-    // borráramos sin filtro, romperíamos esas sesiones legítimas.
-    //
-    // Ver `docs/decisions/2026-05-10-cookie-residual-host-only-cleanup.md`.
-    const cleanupRe = new RegExp(`^sb-${currentRef}-auth-token(\\.\\d+)?$`)
+    // - `refresh_token_already_used`: race entre tabs (dos pestañas refresh
+    //   simultáneo). NO es residual host-only — es una condición transient
+    //   que se resuelve sola la próxima request. Skipear cleanup evita el
+    //   redirect extra cuando el bug NO es nuestro target.
+    // - `session_not_found` / `session_expired`: el user logueó out genuinamente
+    //   en otro device, o expire absoluto. Cleanup OK — corresponde reloguear,
+    //   y borrar la cookie del current project es exactamente lo deseable.
+    // - `refresh_token_not_found` (caso típico de cookie residual host-only):
+    //   cleanup OK — es exactamente el bug que cubrimos.
+    // - `unknown` (sin code, edge case): cleanup conservador — probable que
+    //   sea variant de los anteriores.
+    const SKIP_CLEANUP_CODES = new Set(['refresh_token_already_used'])
     const clearedNames: string[] = []
-    for (const cookie of req.cookies.getAll()) {
-      if (!cleanupRe.test(cookie.name)) continue
-      response.headers.append(
-        'Set-Cookie',
-        `${cookie.name}=; Path=/; Max-Age=0; Secure; SameSite=Lax`,
-      )
-      clearedNames.push(cookie.name)
+    if (!SKIP_CLEANUP_CODES.has(errCode)) {
+      // **Cleanup defensivo HOST-ONLY:** signOut limpia con `Domain=apex` (el
+      // domain configurado en el cookies adapter de arriba). Pero pueden
+      // coexistir cookies residuales con `Domain=<host actual>` (host-only)
+      // de flows previos — esas tienen precedencia sobre las apex-domain por
+      // RFC 6265 (cookies más específicas primero). Si no las limpiamos, el
+      // próximo request las re-envía y el SDK falla otra vez con stale.
+      //
+      // Emitimos Max-Age=0 SIN domain (host-only) para `sb-{currentRef}-auth-token`
+      // y sus chunks `.0/.1/...`. **Filtro por currentRef:** no tocamos cookies
+      // de OTROS proyectos Supabase coexistentes en el browser (un user puede
+      // tener sesiones simultáneas en varios productos basados en Supabase). Si
+      // borráramos sin filtro, romperíamos esas sesiones legítimas.
+      //
+      // Ver `docs/decisions/2026-05-10-cookie-residual-host-only-cleanup.md`.
+      const cleanupRe = new RegExp(`^sb-${currentRef}-auth-token(\\.\\d+)?$`)
+      for (const cookie of req.cookies.getAll()) {
+        if (!cleanupRe.test(cookie.name)) continue
+        response.headers.append(
+          'Set-Cookie',
+          `${cookie.name}=; Path=/; Max-Age=0; Secure; SameSite=Lax`,
+        )
+        clearedNames.push(cookie.name)
+      }
     }
     logger.warn(
       {
         debug: 'MW_stale_cleanup',
+        event: 'authSessionStaleCleanup',
         host,
         path,
         currentRef,
+        errCode,
+        skipped: SKIP_CLEANUP_CODES.has(errCode),
         clearedCount: clearedNames.length,
         clearedNames,
       },
-      `DBG MW[stale-cleanup] host=${host} path=${path} ref=${currentRef} cleared=${clearedNames.length} names=[${clearedNames.join(',')}]`,
+      `DBG MW[stale-cleanup] host=${host} path=${path} ref=${currentRef} errCode=${errCode} skipped=${SKIP_CLEANUP_CODES.has(errCode)} cleared=${clearedNames.length} names=[${clearedNames.join(',')}]`,
     )
   }
 

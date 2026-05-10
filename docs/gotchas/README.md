@@ -37,6 +37,10 @@ Problemas operativos sutiles descubiertos durante el desarrollo. Cada entry desc
 - [Supabase Auth manda magic links via SMTP de Resend](supabase-smtp-resend.md) — config separada del `EMAIL_FROM` del app; al cambiar dominio hay que actualizar dos lugares.
 - [Magic links de Supabase Admin: implicit flow → `/auth/invite-callback`](supabase-magic-link-callback-required.md) — `admin.generateLink` retorna `action_link` con tokens en `#hash` que no llegan al server. Pasar siempre por nuestro `/auth/invite-callback` (verifyOtp server-side) vía helper `inviteCallbackUrl()`.
 
+## Auth + cookies cross-subdomain
+
+- [Cookie residual host-only: cleanup self-heals individualmente por subdomain](cookie-residual-multi-subdomain.md) — users con cookies viejas (sin `Domain` attr) en N subdomains place ven el bug `refresh_token_not_found` en cada uno la primera vez. Self-healing por host. Workaround: limpiar cookies `*.place.community` manualmente.
+
 ## Arquitectura del repo
 
 - [Slice con `server-only` + bundle cliente requiere `public.server.ts`](public-server-split.md) — split obligatorio cuando un Server Component se renderiza bajo un Client Component.

@@ -238,3 +238,77 @@ describe('updateSession — cleanup defensivo HOST-ONLY (Sesión 1)', () => {
     )
   })
 })
+
+/**
+ * Sesión 4 — discriminación por error code. Diferentes causas stale ameritan
+ * tratamiento diferente:
+ *  - refresh_token_already_used → race entre tabs → SKIP cleanup (transient)
+ *  - refresh_token_not_found → cookie residual host-only → cleanup OK
+ *  - session_not_found / session_expired → logout remoto / expire absoluto → cleanup OK
+ *  - unknown → cleanup conservador
+ */
+describe('updateSession — discriminator por error code (Sesión 4)', () => {
+  it('refresh_token_already_used (race entre tabs) → NO emite cleanup, log skipped=true', async () => {
+    getSessionMock.mockRejectedValue(
+      staleErr('refresh_token_already_used', 'Refresh Token Already Used'),
+    )
+
+    const req = mkReq([{ name: `sb-${PROJECT_REF}-auth-token`, value: 'base64-x' }])
+    const { response, user } = await updateSession(req)
+
+    expect(user).toBeNull()
+    // No emit cleanup host-only para already_used (race transient)
+    const setCookies = response.headers.getSetCookie?.() ?? []
+    const cleanups = setCookies.filter(
+      (h) => h.startsWith(`sb-${PROJECT_REF}-auth-token`) && /Max-Age=0/.test(h),
+    )
+    expect(cleanups).toHaveLength(0)
+    // Log MW_stale_cleanup sí se emite, con skipped=true para observability
+    const log = loggerWarnMock.mock.calls.find(
+      (c) => (c[0] as { debug?: string })?.debug === 'MW_stale_cleanup',
+    )
+    expect(log).toBeDefined()
+    const meta = log?.[0] as {
+      errCode?: string
+      skipped?: boolean
+      clearedCount?: number
+      event?: string
+    }
+    expect(meta.errCode).toBe('refresh_token_already_used')
+    expect(meta.skipped).toBe(true)
+    expect(meta.clearedCount).toBe(0)
+    expect(meta.event).toBe('authSessionStaleCleanup')
+  })
+
+  it('session_not_found (logout remoto) → emite cleanup host-only, log skipped=false', async () => {
+    getSessionMock.mockRejectedValue(staleErr('session_not_found', 'Session Not Found'))
+
+    const req = mkReq([{ name: `sb-${PROJECT_REF}-auth-token`, value: 'base64-x' }])
+    const { response } = await updateSession(req)
+
+    const setCookies = response.headers.getSetCookie?.() ?? []
+    const cleanups = setCookies.filter(
+      (h) => h.startsWith(`sb-${PROJECT_REF}-auth-token`) && /Max-Age=0/.test(h),
+    )
+    expect(cleanups).toHaveLength(1)
+    const log = loggerWarnMock.mock.calls.find(
+      (c) => (c[0] as { debug?: string })?.debug === 'MW_stale_cleanup',
+    )
+    const meta = log?.[0] as { errCode?: string; skipped?: boolean }
+    expect(meta.errCode).toBe('session_not_found')
+    expect(meta.skipped).toBe(false)
+  })
+
+  it('session_expired (expire absoluto) → emite cleanup host-only', async () => {
+    getSessionMock.mockRejectedValue(staleErr('session_expired', 'Session Expired'))
+
+    const req = mkReq([{ name: `sb-${PROJECT_REF}-auth-token`, value: 'base64-x' }])
+    const { response } = await updateSession(req)
+
+    const setCookies = response.headers.getSetCookie?.() ?? []
+    const cleanups = setCookies.filter(
+      (h) => h.startsWith(`sb-${PROJECT_REF}-auth-token`) && /Max-Age=0/.test(h),
+    )
+    expect(cleanups).toHaveLength(1)
+  })
+})

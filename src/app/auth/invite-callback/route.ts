@@ -35,6 +35,22 @@ export async function GET(req: NextRequest) {
   const rawType = url.searchParams.get('type')
   const rawNext = url.searchParams.get('next')
 
+  // DEBUG TEMPORAL 2026-05-10: instrumentación para diagnosticar por qué las
+  // cookies de sesión no llegan al browser después de verifyOtp.
+  log.warn(
+    {
+      debug: 'invite_callback_entry',
+      host: req.headers.get('host'),
+      url: req.url,
+      hasTokenHash: !!tokenHash,
+      tokenHashLen: tokenHash?.length ?? 0,
+      rawType,
+      rawNext,
+      incomingCookies: req.cookies.getAll().map((c) => c.name),
+    },
+    'DEBUG invite_callback_entry',
+  )
+
   if (!tokenHash) {
     log.warn(
       { err: new InvalidMagicLinkError('missing token_hash') },
@@ -56,6 +72,10 @@ export async function GET(req: NextRequest) {
   let response = NextResponse.redirect(redirectTarget)
   const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
 
+  // DEBUG TEMPORAL: counter para saber si setAll se invocó antes del return.
+  let setAllInvocations = 0
+  let lastSetAllCookies: { name: string; hasValue: boolean }[] = []
+
   const supabase = createServerClient(
     clientEnv.NEXT_PUBLIC_SUPABASE_URL,
     clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -65,6 +85,21 @@ export async function GET(req: NextRequest) {
           return req.cookies.getAll()
         },
         setAll(cookiesToSet) {
+          setAllInvocations += 1
+          lastSetAllCookies = cookiesToSet.map((c) => ({
+            name: c.name,
+            hasValue: !!c.value,
+          }))
+          log.warn(
+            {
+              debug: 'setAll_invoked',
+              invocation: setAllInvocations,
+              cookiesCount: cookiesToSet.length,
+              cookies: lastSetAllCookies,
+              domain,
+            },
+            'DEBUG setAll invoked',
+          )
           for (const { name, value, options } of cookiesToSet) {
             response.cookies.set(name, value, { ...options, ...(domain ? { domain } : {}) })
           }
@@ -73,10 +108,27 @@ export async function GET(req: NextRequest) {
     },
   )
 
+  log.warn({ debug: 'before_verifyOtp', type }, 'DEBUG before verifyOtp')
+
   const { data: verify, error } = await supabase.auth.verifyOtp({
     token_hash: tokenHash,
     type,
   })
+
+  log.warn(
+    {
+      debug: 'after_verifyOtp',
+      hasUser: !!verify?.user,
+      userId: verify?.user?.id ?? null,
+      hasSession: !!verify?.session,
+      hasAccessToken: !!verify?.session?.access_token,
+      errorMessage: error?.message ?? null,
+      setAllInvocationsSoFar: setAllInvocations,
+      responseCookieCountSoFar: response.cookies.getAll().length,
+    },
+    'DEBUG after verifyOtp',
+  )
+
   if (error || !verify.user) {
     log.warn(
       { err: new InvalidMagicLinkError(error?.message ?? 'no user'), type },
@@ -103,6 +155,22 @@ export async function GET(req: NextRequest) {
     response = redirectToPath('/login?error=sync', new UserSyncError('user upsert failed'))
     return response
   }
+
+  // DEBUG TEMPORAL: estado FINAL del response justo antes de retornar.
+  // Si setAllInvocations === 0 acá, confirmamos hipótesis de race con
+  // onAuthStateChange asíncrono.
+  log.warn(
+    {
+      debug: 'before_return',
+      userId: user.id,
+      type,
+      setAllInvocationsTotal: setAllInvocations,
+      responseCookieCount: response.cookies.getAll().length,
+      responseCookieNames: response.cookies.getAll().map((c) => c.name),
+      redirectLocation: response.headers.get('location'),
+    },
+    'DEBUG before return',
+  )
 
   log.info({ userId: user.id, type }, 'invite_callback_success')
   return response

@@ -35,10 +35,38 @@ export async function requestMagicLink(input: unknown): Promise<RequestMagicLink
   if (next) redirectTo.searchParams.set('next', next)
 
   const supabase = await createSupabaseServer()
-  const { error } = await supabase.auth.signInWithOtp({
+
+  // DEBUG TEMPORAL 2026-05-10: log entry con email completo + redirectTo para
+  // confirmar request shape.
+  log.warn(
+    {
+      debug: 'request_magic_link_entry',
+      email,
+      redirectTo: redirectTo.toString(),
+    },
+    'DEBUG requestMagicLink entry',
+  )
+
+  const { data, error } = await supabase.auth.signInWithOtp({
     email,
     options: { emailRedirectTo: redirectTo.toString() },
   })
+
+  // DEBUG TEMPORAL: log raw del resultado de signInWithOtp.
+  log.warn(
+    {
+      debug: 'request_magic_link_result',
+      hasError: !!error,
+      errorStatus: error?.status ?? null,
+      errorCode: error?.code ?? null,
+      errorMessage: error?.message ?? null,
+      errorName: error?.name ?? null,
+      hasData: !!data,
+      dataUser: data?.user ?? null,
+      dataSession: data?.session ?? null,
+    },
+    'DEBUG requestMagicLink result',
+  )
 
   if (error) {
     const rateLimited =

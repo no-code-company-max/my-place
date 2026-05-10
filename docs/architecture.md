@@ -41,6 +41,16 @@ src/
 
 Superar un límite es señal de que hay que dividir.
 
+## Cookies de sesión Supabase (Domain)
+
+**Regla:** TODA `Set-Cookie` para `sb-*-auth-token` (cookies de sesión Supabase) DEBE setear `Domain=<apex>` explícito. En código se hace via el helper `cookieDomain(NEXT_PUBLIC_APP_DOMAIN)` (resuelve a `place.community` en prod, sin domain en dev local).
+
+**Por qué:** cookies host-only (sin `Domain` attribute) en subdomains place sobrescriben las del apex y rompen `getSession()` del SDK. Por **RFC 6265 § 5.3 step 6**, las host-only tienen precedencia y aparecen primero en el Cookie header → el SDK lee la cookie host-only (potencialmente invalidada) en lugar de la apex correcta. Bug reproducido y documentado en `docs/decisions/2026-05-10-cookie-residual-host-only-cleanup.md`.
+
+**Excepción única:** cleanup defensivo `Max-Age=0` en `shared/lib/supabase/middleware.ts` y `shared/lib/supabase/cookie-cleanup.ts` emite cookies host-only intencionalmente para LIMPIAR residuales históricas. Estas son las únicas dos ubicaciones whitelisted.
+
+**Test guard:** `tests/boundaries.test.ts` valida estáticamente que cualquier `.cookies.set('sb-...`, `cookieStore.set('sb-...`, o `headers.append('Set-Cookie', 'sb-...` en `src/` esté en una ventana de ±5 líneas con un `domain`/`Domain=`/`cookieDomain` referenciado. Falla el build si alguien introduce un emisor sin Domain.
+
 ## Streaming agresivo del shell
 
 Patrón **obligatorio** para pages de detalle (thread, library item, member detail, etc.). El objetivo es que el browser pinte skeletons inmediato (~150-300ms FCP) en vez de esperar a que todas las queries del page resuelvan antes de ver algo.

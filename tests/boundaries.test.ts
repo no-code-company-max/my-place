@@ -112,4 +112,67 @@ describe('boundaries entre capas (docs/architecture.md)', () => {
     }
     expect(violations, `violaciones:\n${violations.join('\n')}`).toEqual([])
   })
+
+  it('cookies sb-* siempre con Domain explícito (excepto cleanup defensivo intencional)', () => {
+    // Regla: TODA Set-Cookie de `sb-*-auth-token` (session de Supabase) DEBE
+    // setear `Domain=<apex>` explícito vía `cookieDomain()` o equivalente.
+    // Cookies host-only (sin Domain attribute) en subdomains place sobrescriben
+    // las del apex y rompen `getSession()` (RFC 6265 § 5.3 step 6 — host-only
+    // tiene precedencia). Bug reproducido y documentado en
+    // `docs/decisions/2026-05-10-cookie-residual-host-only-cleanup.md`.
+    //
+    // Excepciones intencionales (whitelisted abajo):
+    //  - cleanup defensivo del middleware con Max-Age=0 (limpieza de residuales)
+    //  - buildLegacyCookieCleanup que emite host-only Max-Age=0 explícitamente
+    //  - test endpoints DEBUG TEMPORAL (`/api/test-set-cookie`,
+    //    `/api/test-callback-sim`) que sirven para diagnóstico
+    //
+    // Algoritmo: para cada archivo .ts/.tsx en `src/` que contenga el string
+    // `sb-` cerca de un Set-Cookie/.cookies.set call, verificar que el call
+    // site (mismas ~5 líneas) incluya `domain` o esté en la whitelist.
+    const ALLOWED_HOST_ONLY_FILES = new Set([
+      // Cleanup defensivo: emite host-only intencionalmente para limpiar residuales
+      'shared/lib/supabase/middleware.ts',
+      'shared/lib/supabase/cookie-cleanup.ts',
+      // DEBUG TEMPORAL endpoints (sirven para diagnóstico, intencionalmente
+      // setean cookies con varios Domain incluyendo host-only para test)
+      'app/api/test-set-cookie/route.ts',
+      // boundaries test mismo (este archivo) menciona los strings literalmente
+      '../tests/boundaries.test.ts',
+    ])
+
+    const violations: string[] = []
+
+    for (const file of files) {
+      const rel = relative(SRC_ROOT, file)
+      if (ALLOWED_HOST_ONLY_FILES.has(rel)) continue
+      const content = readFileSync(file, 'utf8')
+      // Heuristic: si el archivo emite Set-Cookie literal con string `sb-` o
+      // hace `.cookies.set('sb-...` o `.set("sb-...`, verificar domain en
+      // ventana ±5 líneas. Capturamos call sites con literal sb-* hardcodeado.
+      const literalRe = /['"`]sb-[A-Za-z0-9_-]+/g
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i] ?? ''
+        if (!literalRe.test(line)) continue
+        literalRe.lastIndex = 0 // reset para próxima iteración
+        // Ventana de contexto: ±5 líneas alrededor de la línea con literal sb-*
+        const start = Math.max(0, i - 5)
+        const end = Math.min(lines.length, i + 6)
+        const window = lines.slice(start, end).join('\n')
+        // Si la ventana NO menciona `domain` ni `Domain=` ni `cookieDomain`,
+        // y aparenta ser un Set-Cookie/cookies.set call → violación.
+        const isCookieWrite =
+          /\.cookies\.set\(|\.cookies\.delete\(|cookieStore\.set\(|cookieStore\.delete\(|appendSetCookie|headers\.append\(['"]Set-Cookie/.test(
+            window,
+          )
+        if (!isCookieWrite) continue
+        const hasDomain = /\bdomain\b|\bDomain=|\bcookieDomain\b/.test(window)
+        if (!hasDomain) {
+          violations.push(`${rel}:${i + 1} → cookies sb-* sin Domain explícito`)
+        }
+      }
+    }
+    expect(violations, `violaciones:\n${violations.join('\n')}`).toEqual([])
+  })
 })

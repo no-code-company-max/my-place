@@ -62,3 +62,4 @@ Thumbs.db
 
 # GlaDOS Studio image context
 glados-images/
+.vercel

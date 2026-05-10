@@ -15,6 +15,7 @@ Para entender el producto y el proyecto en profundidad, leer en este orden:
 - `docs/ontologia/` — documentos canónicos de cada objeto (discusiones, eventos, miembros)
 - `docs/features/` — especificaciones detalladas por feature
 - `docs/mockups/` — referencia visual viva del producto
+- `docs/pre-launch-checklist.md` — instrumentación `DEBUG TEMPORAL` y otros items que tienen que removerse antes del lanzamiento público; sumar entry acá cuando agregues uno nuevo
 
 ## Principios no negociables del producto
 

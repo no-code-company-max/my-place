@@ -6,6 +6,8 @@ const userUpsertMock = vi.fn()
 const setAllSpy = vi.fn()
 const cleanupLegacyCookiesMock = vi.fn()
 
+const setSessionMock = vi.fn().mockResolvedValue({ data: null, error: null })
+
 vi.mock('@/shared/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({
     auth: {
@@ -18,6 +20,7 @@ vi.mock('@/shared/lib/supabase/server', () => ({
           return r
         })
       },
+      setSession: (...a: unknown[]) => setSessionMock(...a),
       signOut: (...a: unknown[]) => signOutMock(...a),
     },
   }),
@@ -102,7 +105,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('happy path: exchange ok + upsert ok → 307 a inbox subdomain root (host-aware)', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-1', email: 'ana@example.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-1', email: 'ana@example.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -119,7 +125,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('next /<slug>/conversations → place subdomain (host-aware)', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-place', email: 'p@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-place', email: 'p@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -132,7 +141,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('next /invite/accept/<tok> → apex (host-aware, paths globales)', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-i', email: 'i@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-i', email: 'i@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -145,7 +157,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('next inválido → fallback al inbox subdomain root', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-3', email: 'x@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-3', email: 'x@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -158,7 +173,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('upsert User falla → signOut + 307 a /login?error=sync', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-4', email: 'fail@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-4', email: 'fail@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockRejectedValue(new Error('db down'))
@@ -172,7 +190,10 @@ describe('GET /auth/callback (PKCE)', () => {
 
   it('cleanup legacy cookies invocado al inicio', async () => {
     exchangeCodeForSessionMock.mockReturnValue({
-      data: { user: { id: 'usr-cleanup', email: 'c@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-cleanup', email: 'c@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})

@@ -73,13 +73,23 @@ export async function GET(req: NextRequest) {
     token_hash: tokenHash,
     type,
   })
-  if (error || !verify.user) {
+  if (error || !verify.user || !verify.session) {
     log.warn(
-      { err: new InvalidMagicLinkError(error?.message ?? 'no user'), type },
+      { err: new InvalidMagicLinkError(error?.message ?? 'no user/session'), type },
       'invite_callback_verify_failed',
     )
     return htmlRedirect(buildLoginUrl('invalid_link'))
   }
+
+  // **Workaround para supabase/ssr#36 + discussions/35615:** verifyOtp setea
+  // cookies vía onAuthStateChange listener async, que puede no ejecutarse
+  // antes de que el response salga del handler. setSession() fuerza la
+  // escritura síncrona de cookies vía cookieStore.set() de next/headers,
+  // garantizando que el response incluya los Set-Cookie con la sesión nueva.
+  await supabase.auth.setSession({
+    access_token: verify.session.access_token,
+    refresh_token: verify.session.refresh_token,
+  })
 
   const { user } = verify
   try {

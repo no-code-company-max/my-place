@@ -51,13 +51,19 @@ export async function GET(req: NextRequest) {
   const supabase = await createSupabaseServer()
 
   const { data: exchange, error } = await supabase.auth.exchangeCodeForSession(code)
-  if (error || !exchange.user) {
+  if (error || !exchange.user || !exchange.session) {
     log.warn(
-      { err: new InvalidMagicLinkError(error?.message ?? 'no user') },
+      { err: new InvalidMagicLinkError(error?.message ?? 'no user/session') },
       'callback_exchange_failed',
     )
     return htmlRedirect(buildLoginUrl('invalid_link'))
   }
+
+  // Workaround supabase/ssr#36 — fuerza escritura síncrona de cookies.
+  await supabase.auth.setSession({
+    access_token: exchange.session.access_token,
+    refresh_token: exchange.session.refresh_token,
+  })
 
   const { user } = exchange
   try {

@@ -9,6 +9,8 @@ const cleanupLegacyCookiesMock = vi.fn()
 
 // Mock createSupabaseServer (patrón canónico Next 15 + Supabase SSR via
 // `cookies()` de next/headers — ver `src/shared/lib/supabase/server.ts`).
+const setSessionMock = vi.fn().mockResolvedValue({ data: null, error: null })
+
 vi.mock('@/shared/lib/supabase/server', () => ({
   createSupabaseServer: async () => ({
     auth: {
@@ -25,6 +27,7 @@ vi.mock('@/shared/lib/supabase/server', () => ({
           return r
         })
       },
+      setSession: (...a: unknown[]) => setSessionMock(...a),
       signOut: (...a: unknown[]) => signOutMock(...a),
     },
   }),
@@ -121,7 +124,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('happy path invite: verifyOtp ok + upsert ok → 307 a apex /invite/accept (host-aware)', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-1', email: 'ana@example.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-1', email: 'ana@example.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -149,7 +155,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('happy path magiclink (fallback path para users existentes)', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-2', email: 'bob@example.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-2', email: 'bob@example.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -171,7 +180,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('next /<slug>/conversations → place subdomain (host-aware)', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-place', email: 'p@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-place', email: 'p@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -186,7 +198,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('next inválido (no en allowlist) → fallback al inbox subdomain root', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-3', email: 'x@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-3', email: 'x@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -200,7 +215,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('upsert User falla → signOut + 307 a /login?error=sync', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-4', email: 'fail@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-4', email: 'fail@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockRejectedValue(new Error('db down'))
@@ -214,7 +232,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('user con email null → upsert usa fallbackEmail derivado del userId', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-5', email: null, user_metadata: {} } },
+      data: {
+        user: { id: 'usr-5', email: null, user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})
@@ -231,7 +252,10 @@ describe('GET /auth/invite-callback', () => {
 
   it('cleanup legacy cookies invocado al inicio (defensa contra cookies viejas Domain=app.<apex>)', async () => {
     verifyOtpMock.mockReturnValue({
-      data: { user: { id: 'usr-cleanup', email: 'c@y.com', user_metadata: {} } },
+      data: {
+        user: { id: 'usr-cleanup', email: 'c@y.com', user_metadata: {} },
+        session: { access_token: 'at', refresh_token: 'rt' },
+      },
       error: null,
     })
     userUpsertMock.mockResolvedValue({})

@@ -232,4 +232,221 @@ pnpm tsx scripts/lint/check-slice-size.ts
 - **Sesión 2** (1-2h): B.1 + B.2 (borrar legacy). Merge.
 - **Sesión 3** (30 min): C (docs). Merge.
 
+---
+
+## 7. Plan detallado de B.2 + C (production-grade, post-B.1)
+
+> **Fecha del sub-plan:** 2026-05-09 post-commit `0a718f3`
+> **Estado base verificado:** A.1, A.2, B.1 deployados y smoke verificado en prod.
+> **Cambio importante vs § 3 de este doc:** los 3 archivos del "cleanup oportunista" (`featured-thread-card.tsx`, `thread-row.tsx`, `post-list.tsx`) **NO son código muerto** — son la única implementación wireada hoy. El sub-slice `discussions/threads/` está cableado en su `public.ts` pero cero consumers externos (huérfano). Su consolidación queda fuera del scope de B.2 → **B.3** (nuevo follow-up).
+
+### 7.1 Auditoría empírica (verificada in-situ)
+
+#### Archivos del scope core de B.2
+
+| Archivo                                             | LOC | Importadores activos                                                  | Diff vs sub-slice                 | Veredicto                           |
+| --------------------------------------------------- | --- | --------------------------------------------------------------------- | --------------------------------- | ----------------------------------- |
+| `discussions/ui/thread-presence.tsx`                | 132 | 0 (sólo refs textuales en comentarios)                                | 4 líneas de comentarios cross-ref | **BORRABLE LIBRE**                  |
+| `discussions/ui/post-readers-block.tsx`             | 45  | 1 (sólo su test legacy)                                               | 1 línea (path import)             | **BORRABLE LIBRE** (con su test)    |
+| `discussions/__tests__/post-readers-block.test.tsx` | 96  | n/a                                                                   | 1 línea (path)                    | **BORRABLE**                        |
+| `discussions/__tests__/reader-stack.test.tsx`       | 72  | n/a                                                                   | 1 línea (path)                    | **BORRABLE LIBRE**                  |
+| `discussions/ui/post-unread-dot.tsx`                | 15  | 2 internos: `featured-thread-card.tsx:6`, `thread-row.tsx:6` (legacy) | byte-idéntico                     | **TIED a B.3 — NO se borra en B.2** |
+| `discussions/ui/reader-stack.tsx`                   | 72  | 3 internos (los anteriores + `post-readers-block` legacy)             | imports relativos                 | **TIED a B.3 — NO se borra en B.2** |
+
+Comandos exactos para reproducir auditoría:
+
+```bash
+grep -rn "ui/thread-presence['\"]" src tests
+grep -rn "ui/post-readers-block['\"]" src tests
+grep -rn "ui/post-unread-dot['\"]" src tests
+grep -rn "ui/reader-stack['\"]" src tests
+
+diff src/features/discussions/ui/thread-presence.tsx \
+     src/features/discussions/presence/ui/thread-presence.tsx
+# (idem para los demás)
+
+# Sub-slice threads sin consumers externos (justifica excluir cleanup oportunista)
+grep -rn "discussions/threads/public\|features/discussions/threads/" src tests
+```
+
+### 7.2 LOC accounting predicho
+
+| Slice/sub-slice        | LOC actual (post-B.1) | LOC post-B.2 | Cap  | Distancia al cap |
+| ---------------------- | --------------------- | ------------ | ---- | ---------------- |
+| `discussions` (raíz)   | 6371                  | **6187**     | 1500 | -4687            |
+| `discussions/presence` | 872                   | 872          | 1500 | +628             |
+| (resto sin cambios)    | —                     | —            | —    | —                |
+
+**Bajada B.2: 132 + 45 + 7 = 184 LOC** (`thread-presence.tsx` 132 + `post-readers-block.tsx` 45 + `export type PostReader` de `queries.ts` 7).
+
+**Honestidad sobre la excepción de tamaño:** B.2 reduce 184 LOC. **No cierra la excepción.** Aún consolidando todo lo pendiente (B.3 threads -550, B.4 posts -300/-600, B.5 comments -400/-800), raíz queda en ~3500-4500 LOC — el cap 1500 no es alcanzable con el dominio actual sin sub-split más fino o aceptando una excepción permanente con cap mayor.
+
+### 7.3 Sub-splitting de B.2 — TRES commits secuenciales
+
+Razones para splittear (no todo-en-uno):
+
+- Riesgo distinto por archivo (thread-presence toca runtime presence; post-readers-block es SSR).
+- Granularidad reversible: si smoke detecta regresión, los siguientes no se pushean.
+
+#### B.2a — Test legacy duplicado (LOW RISK, ~10 min)
+
+**Scope:** `src/features/discussions/__tests__/reader-stack.test.tsx`.
+
+**Bajada:** 0 LOC prod.
+
+**Verificación:** typecheck + lint + vitest.
+
+**Smoke:** N/A (no toca runtime).
+
+#### B.2b — `post-readers-block.tsx` legacy + test + cleanup `PostReader` en queries.ts (MEDIUM RISK, ~25 min)
+
+**Scope:**
+
+- `src/features/discussions/ui/post-readers-block.tsx`
+- `src/features/discussions/__tests__/post-readers-block.test.tsx`
+- `discussions/server/queries.ts`: borrar `export type PostReader` (líneas 224-240, type + JSDoc completo).
+
+**Pre-borrado gates:**
+
+```bash
+# 0 importadores de runtime (sólo test)
+grep -rn "ui/post-readers-block\|/post-readers-block['\"]" src tests | grep -v "presence/"
+# Esperado: SOLO __tests__/post-readers-block.test.tsx:17
+
+# PostReader no usado internamente en queries.ts
+grep -n "PostReader" src/features/discussions/server/queries.ts
+# Esperado: sólo el bloque a borrar (líneas 224-240)
+```
+
+**Verificación post-borrado:** typecheck + lint + vitest + boundaries + `ANALYZE=true pnpm build`.
+
+**Smoke manual obligatorio en preview:**
+
+1. `/conversations/<post>` con DevTools — bloque "X leyeron" presente (SSR), sin warnings de hydration.
+2. `/library/<cat>/<item>` — idem.
+
+**Bajada:** 45 + 7 = 52 LOC.
+
+#### B.2c — `thread-presence.tsx` legacy (MEDIUM-HIGH RISK, ~25 min)
+
+**Scope:** `src/features/discussions/ui/thread-presence.tsx`.
+
+**Pre-borrado gates:**
+
+```bash
+grep -rn "ui/thread-presence['\"]" src tests
+# Esperado: 0
+
+grep -n "thread-presence" src/features/discussions/presence/ui/thread-presence-lazy.tsx
+# Esperado: import('./thread-presence') (path al sub-slice)
+```
+
+**Verificación post-borrado:** typecheck + lint + vitest + boundaries + `helpers-realtime.test.ts` + `post-read.test.ts` + `ANALYZE=true pnpm build`.
+
+**Smoke manual obligatorio en preview:**
+
+1. `/conversations/<post>` con DevTools.
+   - Network: chunk lazy presence carga post-FCP. Aceptable hasta +5 kB delta vs baseline.
+   - Console: sin `cannot add presence callbacks ... after subscribe()`.
+   - Visual: avatares de presence aparecen tras 1-2s.
+2. Mismo thread en otra tab/perfil → avatar del otro viewer aparece.
+3. `/library/<cat>/<item>`: idem.
+4. Cambio a otra tab por 6s y volver: dwell tracker pausa+reanuda silenciosamente.
+
+**Bajada:** 132 LOC.
+
+### 7.4 Riesgos B.2 (específicos, no genéricos)
+
+| #   | Riesgo                                                                                                                   | Probabilidad | Impacto | Mitigación                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | ------------ | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| 1   | Webpack reorganiza chunks al borrar `thread-presence` legacy y el lazy del sub-slice gana/pierde gzip                    | media        | medio   | `ANALYZE=true pnpm build` antes/después de B.2c. Aceptar ±5 kB; revert si >5 kB                                       |
+| 2   | El lazy chunk del sub-slice falla en runtime (regresión del bug original) y como ya no hay copia legacy queda muerto     | baja         | alto    | Smoke manual obligatorio en preview ANTES de merge. RLS test enforce SQL function                                     |
+| 3   | Borrar `export type PostReader` rompe a un consumer no detectado                                                         | baja         | medio   | `grep -rn "PostReader" src tests` post-borrado debe mostrar 0 hits fuera de `presence/server/queries/post-readers.ts` |
+| 4   | Sub-slice tiene un fallo en cobertura del test borrado                                                                   | baja         | bajo    | Diff verificado: 1 línea de delta. Misma cobertura                                                                    |
+| 5   | Comentario obsoleto en `presence/ui/thread-presence.tsx:46` queda apuntando a "copia legacy" inexistente                 | alta         | bajo    | Actualizar en C.5 (restaurar comentario rico del legacy)                                                              |
+| 6   | Comentario en `queries.ts:230` referencia el `legacy ui/post-readers-block.tsx`. Al borrar B.2b ese argumento desaparece | alta         | nulo    | El bloque entero (líneas 224-240) se borra como parte de B.2b                                                         |
+| 7   | Otra sesión paralela toca presence mientras B.2 está en limbo                                                            | baja         | medio   | Cerrar B.2a → B.2b → B.2c en sesiones consecutivas; máx 2 días gap                                                    |
+| 8   | `check-slice-size.ts` sigue rojo en `discussions` post-B.2                                                               | media        | bajo    | Mencionar en commit message: "discussions raíz baja 6371→6187, sigue en violación, deuda B.3/B.4/B.5"                 |
+
+### 7.5 Plan C detallado (7 superficies)
+
+#### C.1 — `docs/decisions/2026-04-20-discussions-size-exception.md`
+
+- Update box "Update 2026-05-09: Sub-slice presence consolidado" + tabla LOC actualizada.
+- Nueva sección "## Pendientes para cerrar la excepción" con checklist de B.3/B.4/B.5.
+- Honestidad: el cap 1500 no es alcanzable; la excepción quedará vigente con cap mayor autorizado.
+
+#### C.2 — `docs/decisions/2026-05-09-realtime-presence-topic-split.md`
+
+- Reemplazar bullet sobre "duplicación temporal de thread-presence.tsx" por uno que confirme consolidación.
+
+#### C.3 — `docs/gotchas/supabase-channel-topic-collision.md`
+
+- En § "Fix aplicado", reemplazar bullet sobre 2 archivos (legacy + sub-slice) por uno solo apuntando al sub-slice.
+
+#### C.4 — `members/ui/resend-invitation-button.tsx` y `members/invitations/ui/resend-invitation-button.tsx` (línea 18 cada uno)
+
+- Cambiar `discussions/ui/dwell-tracker.tsx` → `discussions/presence/ui/dwell-tracker.tsx` en comentario JSDoc.
+
+#### C.5 — `src/features/discussions/presence/ui/thread-presence.tsx` líneas 43-47
+
+- Restaurar el comentario rico que vivía en el legacy (era el delta de 4 líneas verificado por diff). Era valor histórico/documentación de la trampa Realtime; debe persistir en la única copia restante.
+
+#### C.6 — Cross-refs path actualizados
+
+- `composers/mention-prefetch-provider.tsx:29`: `thread-presence-lazy.tsx` → `presence/ui/thread-presence-lazy.tsx`.
+- `member-detail-header.test.tsx:6`: `reader-stack.test.tsx` → `presence/__tests__/reader-stack.test.tsx`.
+
+#### C.7 — `src/features/discussions/presence/README.md` (NUEVO, opcional pero recomendado)
+
+- ≤ 50 LOC orientando al próximo dev: componentes, server, action, boundaries, topic Realtime, plan de creación.
+
+**Commit C único:** `docs(presence): cerrar sub-slice migration plan + actualizar refs cruzadas`.
+
+### 7.6 Test plan integral cierre del refactor (post B.2 + C)
+
+```bash
+# Ningún archivo del legacy presence sigue importado externamente
+grep -rn "from '@/features/discussions/ui/thread-presence\|from '@/features/discussions/ui/post-readers-block\|from '@/features/discussions/ui/post-unread-dot\|from '@/features/discussions/ui/reader-stack\|from '@/features/discussions/ui/dwell-tracker\|from '@/features/discussions/server/place-opening\|from '@/features/discussions/server/actions/reads" src tests
+# Esperado: 0
+
+# Boundaries respetadas
+pnpm test --run tests/boundaries.test.ts
+
+# RLS de presence
+pnpm test --run tests/rls/helpers-realtime.test.ts tests/rls/post-read.test.ts
+
+# Bundle equivalente
+ANALYZE=true pnpm build
+# /conversations/[postSlug]: 292 kB ±2; /library/[categorySlug]/[itemSlug]: 295 kB ±2
+
+# LOC final
+pnpm tsx scripts/lint/check-slice-size.ts
+# Esperado: discussions raíz 6187 LOC; presence 872
+```
+
+**Smoke checklist final:** ver § 4.3 del sub-plan original (URLs, Network, Console, comportamiento).
+
+### 7.7 Cronograma estimado
+
+| Sub-fase             | Trabajo                                | Estimado                                |
+| -------------------- | -------------------------------------- | --------------------------------------- |
+| Pre-flight           | Auditoría con greps                    | 15 min                                  |
+| B.2a                 | Borrar test legacy                     | 10 min                                  |
+| B.2b                 | Borrar componente + test + PostReader  | 25 min                                  |
+| B.2c                 | Borrar thread-presence + ANALYZE build | 25 min                                  |
+| Push + preview smoke |                                        | 20 min                                  |
+| C                    | 7 superficies de docs                  | 30 min                                  |
+| Push + final preview |                                        | 10 min                                  |
+| **Total**            |                                        | **~2h 15min, splittable en 2 sesiones** |
+
+### 7.8 Follow-ups post-B.2 (deuda explícita, NO incluir acá)
+
+- **B.3** — `discussions/threads/` consolidation: re-cablear `public.ts:123` y `public.server.ts:78` al sub-slice; borrar 8 archivos legacy + tests. -550 LOC al raíz. Smoke crítico: home gated `/conversations`, library home, paginación.
+- **B.4** — `discussions/posts/` consolidation: borrar `listPostsByPlace` legacy + 3 helpers privados + `load-more.ts` legacy. -300 a -600 LOC.
+- **B.5** — `discussions/comments/` consolidation: borrar `findCommentById`, `listCommentsByPost`, `CommentView` legacy. -400 a -800 LOC.
+- **F1** (del sub-plan original) — `presence/__tests__/post-event-relation.test.ts` mal ubicado, mover a `posts/__tests__/`.
+- **F2** — acoplamiento cross-sub-slice de helpers privados de presence consumidos por posts.
+- **WHITELIST** del slice-size script vacía — discutir si re-poblar o eliminar el script.
+
 Total ~4-5h efectivas. Ventana entre sesiones puede ser días sin riesgo (Fase A es no-op semántico).

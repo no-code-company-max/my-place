@@ -226,7 +226,7 @@ export function HoursForm({
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8 md:space-y-10" noValidate>
         {/* `formError` se queda inline (no toast) porque corresponde a errores
             de validación del schema client-side: el usuario necesita verlos
             cerca del campo problemático para corregir, no como notif fugaz.

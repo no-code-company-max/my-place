@@ -2,15 +2,15 @@
 
 import { useState } from 'react'
 import {
-  BottomSheet,
-  BottomSheetBody,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetFooter,
-  BottomSheetHeader,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelBody,
+  EditPanelClose,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelFooter,
+  EditPanelHeader,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import type { DayOfWeek, RecurringWindow } from '@/features/hours/domain/types'
 import { DAY_ES } from './week-editor'
 
@@ -44,7 +44,7 @@ export function WindowSheet({ sheet, onClose, onAdd, onUpdate, onRemove }: Props
   const open = sheet.mode !== 'closed'
 
   return (
-    <BottomSheet
+    <EditPanel
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose()
@@ -53,7 +53,7 @@ export function WindowSheet({ sheet, onClose, onAdd, onUpdate, onRemove }: Props
       {open ? (
         <WindowSheetForm sheet={sheet} onAdd={onAdd} onUpdate={onUpdate} onRemove={onRemove} />
       ) : null}
-    </BottomSheet>
+    </EditPanel>
   )
 }
 
@@ -119,14 +119,14 @@ function WindowSheetForm({
         : 'Añadir horario'
 
   return (
-    <BottomSheetContent aria-describedby={undefined}>
-      <BottomSheetHeader>
-        <BottomSheetTitle>{title}</BottomSheetTitle>
-        <BottomSheetDescription>
+    <EditPanelContent aria-describedby={undefined}>
+      <EditPanelHeader>
+        <EditPanelTitle>{title}</EditPanelTitle>
+        <EditPanelDescription>
           La ventana debe ser del mismo día (sin cruzar medianoche).
-        </BottomSheetDescription>
-      </BottomSheetHeader>
-      <BottomSheetBody>
+        </EditPanelDescription>
+      </EditPanelHeader>
+      <EditPanelBody>
         <div className="space-y-4 py-2">
           {sheet.mode === 'add-new-day' ? (
             <fieldset className="space-y-2">
@@ -172,8 +172,8 @@ function WindowSheetForm({
             </p>
           ) : null}
         </div>
-      </BottomSheetBody>
-      <BottomSheetFooter>
+      </EditPanelBody>
+      <EditPanelFooter>
         <button
           type="button"
           onClick={handleSubmit}
@@ -209,16 +209,16 @@ function WindowSheetForm({
             </button>
           )
         ) : (
-          <BottomSheetClose asChild>
+          <EditPanelClose asChild>
             <button
               type="button"
               className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm"
             >
               Cancelar
             </button>
-          </BottomSheetClose>
+          </EditPanelClose>
         )}
-      </BottomSheetFooter>
-    </BottomSheetContent>
+      </EditPanelFooter>
+    </EditPanelContent>
   )
 }

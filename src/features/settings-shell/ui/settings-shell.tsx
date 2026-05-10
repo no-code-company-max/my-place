@@ -31,6 +31,11 @@ export function SettingsShell({
 }: Props): React.ReactNode {
   const sections = buildSettingsShellSections({ isOwner, placeSlug })
 
+  // Content area: solo centrado + max-width + flex-1 (toma el resto del grid).
+  // **NO aplica padding propio.** Cada sub-page maneja su padding interno
+  // (canonical: `space-y-6 px-3 py-6 md:px-4 md:py-8` según ux-patterns.md).
+  // Si el shell agregara padding, se acumularía con el de la page → overflow
+  // en 360px y desktop con espacio descomensurado.
   return (
     <div className="md:flex md:gap-6">
       <Sidebar
@@ -39,7 +44,7 @@ export function SettingsShell({
         ariaLabel="Configuración del place"
         className="hidden md:flex"
       />
-      <div className="mx-auto max-w-screen-md flex-1 px-3 py-6 md:px-8 md:py-10">{children}</div>
+      <div className="mx-auto w-full max-w-screen-md flex-1">{children}</div>
     </div>
   )
 }

@@ -35,6 +35,7 @@ Problemas operativos sutiles descubiertos durante el desarrollo. Cada entry desc
 
 - [Resend: dominio del `From` debe estar verificado](resend-domain-verification.md) — DNS (SPF + DKIM + DMARC) por ambiente; dev local cae a `FakeMailer`.
 - [Supabase Auth manda magic links via SMTP de Resend](supabase-smtp-resend.md) — config separada del `EMAIL_FROM` del app; al cambiar dominio hay que actualizar dos lugares.
+- [Magic links de Supabase Admin requieren `/auth/callback`](supabase-magic-link-callback-required.md) — `redirectTo` directo al destino genera double-magic-link friction; pasar SIEMPRE por `/auth/callback?next=...` via helper `authCallbackUrlForNext()`.
 
 ## Arquitectura del repo
 

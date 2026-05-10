@@ -179,7 +179,12 @@ describe('resendInvitationAction', () => {
 
     expect(generateInviteMagicLinkMock).toHaveBeenCalledWith({
       email: 'ana@example.com',
-      redirectTo: 'http://lvh.me:3000/invite/accept/tok_abc',
+      // 2026-05-09 fix: redirectTo pasa por /auth/callback?next=... para
+      // que el code de Supabase magic link sea exchanged por sesión cookie
+      // ANTES de llegar a la accept page. Sin esto, el accept page recibe
+      // user sin sesión y redirige a /login (fricción doble magic link).
+      // Ver `src/shared/lib/auth-callback-url.ts`.
+      redirectTo: 'http://lvh.me:3000/auth/callback?next=%2Finvite%2Faccept%2Ftok_abc',
     })
 
     expect(fakeMailer.captures).toHaveLength(1)

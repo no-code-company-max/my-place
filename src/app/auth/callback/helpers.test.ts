@@ -71,6 +71,27 @@ describe('resolveSafeNext', () => {
     expect(resolveSafeNext('/auth/callback', FALLBACK).pathname).toBe('/auth/callback')
   })
 
+  it('acepta /invite/accept/<token> (post 2026-05-09 fix invitation flow)', () => {
+    // Token base64url-safe de 43 chars (formato generateInvitationToken).
+    const token = 'aBcDeF0123456789-_xyzABCDEF0123456789-_xyz0'
+    const out = resolveSafeNext(`/invite/accept/${token}`, FALLBACK)
+    expect(out.pathname).toBe(`/invite/accept/${token}`)
+  })
+
+  it('rechaza /invite/accept/<malformed> con caracteres no válidos', () => {
+    const out = resolveSafeNext('/invite/accept/has space', FALLBACK)
+    expect(out.toString()).toBe(FALLBACK.toString())
+    expect(getChildLogger().warn).toHaveBeenCalledWith(
+      expect.objectContaining({ rawNext: '/invite/accept/has space' }),
+      'callback_unsafe_next_unknown_path',
+    )
+  })
+
+  it('rechaza /invite/accept/<token>/extra (path con suffix extra)', () => {
+    const out = resolveSafeNext('/invite/accept/sometoken/extra', FALLBACK)
+    expect(out.toString()).toBe(FALLBACK.toString())
+  })
+
   it('rechaza /not-found (path conocido que rendea 404) y loguea warn', () => {
     const out = resolveSafeNext('/not-found', FALLBACK)
     expect(out.toString()).toBe(FALLBACK.toString())

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { logger } from '@/shared/lib/logger'
-import { clientEnv } from '@/shared/config/env'
+import { authCallbackUrlForNext } from '@/shared/lib/auth-callback-url'
 import {
   AuthorizationError,
   ConflictError,
@@ -52,7 +52,7 @@ export async function resendInvitationAction(
   await deliverInvitationEmail({
     invitationId: invitation.id,
     email: invitation.email,
-    redirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/invite/accept/${invitation.token}`,
+    redirectTo: authCallbackUrlForNext(`/invite/accept/${invitation.token}`),
     placeName: invitation.place.name,
     placeSlug: invitation.place.slug,
     inviterDisplayName: await fetchInviterDisplayName(actorId),

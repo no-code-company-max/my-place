@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/db/client'
 import { logger } from '@/shared/lib/logger'
-import { clientEnv } from '@/shared/config/env'
+import { authCallbackUrlForNext } from '@/shared/lib/auth-callback-url'
 import { ConflictError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { inviteMemberSchema, type InviteMemberInput } from '@/features/members/schemas'
 import {
@@ -48,7 +48,7 @@ export async function inviteMemberAction(
   await deliverInvitationEmail({
     invitationId,
     email: data.email,
-    redirectTo: `${clientEnv.NEXT_PUBLIC_APP_URL}/invite/accept/${token}`,
+    redirectTo: authCallbackUrlForNext(`/invite/accept/${token}`),
     placeName: place.name,
     placeSlug: place.slug,
     inviterDisplayName: await fetchInviterDisplayName(actorId),

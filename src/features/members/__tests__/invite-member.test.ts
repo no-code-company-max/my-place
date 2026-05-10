@@ -229,8 +229,10 @@ describe('inviteMemberAction — flujo de delivery (Resend)', () => {
 
     expect(generateInviteMagicLinkMock).toHaveBeenCalledWith({
       email: 'ana@example.com',
+      // 2026-05-09 fix: redirectTo pasa por /auth/callback?next=...
+      // (URL-encoded). Ver `src/shared/lib/auth-callback-url.ts`.
       redirectTo: expect.stringMatching(
-        /^http:\/\/lvh\.me:3000\/invite\/accept\/[A-Za-z0-9_-]{43}$/,
+        /^http:\/\/lvh\.me:3000\/auth\/callback\?next=%2Finvite%2Faccept%2F[A-Za-z0-9_-]{43}$/,
       ) as unknown,
     })
 

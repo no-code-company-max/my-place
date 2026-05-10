@@ -24,6 +24,12 @@ const SAFE_NEXT_PATTERNS: readonly RegExp[] = [
   /^\/[a-z0-9-]+\/(conversations|library|events|m\/[a-z0-9-]+|settings)(\/|$)/,
   /^\/login$/, // edge: re-login sin loop infinito
   /^\/auth\/callback$/, // edge: bouncing intencional
+  // 2026-05-09: invitation flow rutea via /auth/callback?next=/invite/accept/{token}
+  // para que el code de Supabase magic link sea exchanged por sesión cookie ANTES
+  // de llegar a la accept page (ver `src/shared/lib/auth-callback-url.ts`). Sin
+  // este pattern, la accept page recibiría el `next` resuelto al fallback (inbox)
+  // y rompería la UX de "un click → entré al place". Token base64url-safe.
+  /^\/invite\/accept\/[A-Za-z0-9_-]+$/,
 ] as const
 
 const log = logger.child({ scope: 'auth/callback' })

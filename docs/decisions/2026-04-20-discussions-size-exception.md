@@ -8,6 +8,8 @@
 
 > **Update 2026-05-09:** Aplicación del Approach C del plan G.3 port (`docs/plans/2026-05-09-g3-debt-port-to-legacy.md`). Cierre del experimento sub-slice posts/comments/moderation (35 archivos borrados, ADR `2026-05-09-discussions-subslice-experiment-closed.md`). El raíz queda en **6202 LOC** (vs cap 1500 — viola por 4702). B.4 y B.5 cancelados. B.3 (threads consolidation) sigue vigente como follow-up no urgente — el sub-slice `discussions/threads/` es byte-equivalente al legacy y su consolidación bajaría -550 LOC del raíz a ~5650 (sigue 4× sobre el cap). **El cap 1500 no es alcanzable con el dominio actual.** Se acepta excepción permanente con cap mayor autorizado a ser definido cuando B.3 cierre. Tabla de medición actualizada abajo.
 
+> **Update 2026-05-09 (post-B.3):** B.3 ejecutado en 5 sub-commits (B.3.1-B.3.5) según plan `docs/plans/2026-05-09-threads-subslice-migration.md`. Sub-slice `threads/` consolidado: re-wire de `ThreadHeaderBar` y `PostList` al sub-slice, borrado de 9 archivos legacy (8 UI thread-related + 1 test duplicado) + cleanup oportunista de `reader-stack.tsx` y `post-unread-dot.tsx` (orphan post-B.3.4). Bundle `/conversations` byte-idéntico al baseline (290 kB). Tests verdes 1889/1889. **Raíz queda en 5602 LOC** (vs cap 1500 — viola por 4102). Bajada total de la sesión: -600 LOC (match perfecto con predicción del plan). **Esto cierra todos los sub-slices accionables de `discussions/`** — el raíz no se acerca más al cap sin micro-splits adicionales. La excepción queda con cap mayor permanente (a formalizar antes del lanzamiento).
+
 ## Contexto
 
 `CLAUDE.md` fija tres límites no cosméticos:
@@ -68,19 +70,19 @@ Revisar esta excepción al cerrar:
 
 ## Estado a 2026-05-09 (post-G.3 port + cierre sub-slices)
 
-**Medición actual** (output de `pnpm tsx scripts/lint/check-slice-size.ts`):
+**Medición actual post-B.3** (output de `pnpm tsx scripts/lint/check-slice-size.ts`):
 
 ```
-✗  discussions                   6202 / 1500 (-4702)
+✗  discussions                   5602 / 1500 (-4102)
 ✓  discussions/presence           872 / 1500 (+628)
 ✓  discussions/threads            531 / 1500 (+969)
 ✓  discussions/reactions          368 / 1500 (+1132)
 ✓  discussions/composers          192 / 1500 (+1308)
 ```
 
-**Sub-slices consolidados** (`presence`, `reactions`, `composers`) suman **1432 LOC** descontados del raíz.
+**Sub-slices consolidados** (`presence`, `reactions`, `composers`, `threads`) suman **1963 LOC** descontados del raíz. Todos cableados a sus consumers vía `discussions/public.{ts,server.ts}`.
 
-**Sub-slice orphan vigente:** `threads/` (531 LOC) — sigue sin consumers externos. Plan B.3 (`docs/plans/2026-05-09-threads-subslice-migration.md`) propone consolidación con bajada esperada del raíz -550 LOC. Pendiente de ejecución.
+**Cero sub-slices orphan vigentes en `discussions/`** post-B.3.
 
 **Sub-slices borrados (cierre del experimento, 2026-05-09):**
 
@@ -98,11 +100,11 @@ Total ~2528 LOC fuera del repo. Detalle en ADR `2026-05-09-discussions-subslice-
 - [x] **`posts/`** — sub-slice eliminado, port G.3 al legacy en su lugar.
 - [x] **`comments/`** — sub-slice eliminado, port G.3 al legacy en su lugar.
 - [x] **`moderation/`** — sub-slice orphan eliminado.
-- [ ] **`threads/`** — pendiente B.3 (-550 LOC esperados).
+- [x] **`threads/`** — cerrado en B.3 (-600 LOC del raíz: -513 archivos thread UI + -87 cleanup oportunista reader-stack/post-unread-dot).
 - [ ] **`server/queries.ts` cleanup** — ya no contiene queries de comments duplicadas. Sigue con queries de posts (-287 LOC eliminables si se hace un `posts/server/queries/` mini-split en el futuro, pero no es urgente).
 - [ ] **`server/actions/posts/{create,edit}.ts`** — son los 2 archivos legacy más grandes del raíz. Su split por concern (CRUD vs auditoría) podría bajar otros -200 LOC.
 
-**Estimación de cierre máximo:** post-B.3 + posibles micro-splits = ~5450 LOC en el raíz. **Sigue 3.6× sobre el cap 1500.** Se acepta excepción permanente con cap mayor autorizado (a definir formalmente cuando B.3 cierre o al lanzamiento, lo que ocurra primero).
+**Estimación de cierre máximo:** post-B.3 actual = **5602 LOC**. Posibles micro-splits adicionales (`server/actions/posts/{create,edit}.ts` partido por concern) podrían bajar otros ~200 LOC → ~5400 LOC. **Sigue 3.6× sobre el cap 1500.** Se acepta excepción permanente con cap mayor autorizado (a formalizar antes del lanzamiento — cap propuesto: **6000 LOC** que da headroom de crecimiento orgánico ~7% sin tocar la decisión).
 
 ## No aplica
 

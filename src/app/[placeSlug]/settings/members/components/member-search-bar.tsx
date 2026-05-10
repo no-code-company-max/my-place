@@ -10,8 +10,8 @@ import { useEffect, useRef, useState } from 'react'
  * **Debounce 300ms**: cada keystroke actualiza el estado local pero el
  * `router.push` se dispara con `setTimeout` reseteado en cada input.
  * Evita spam de revalidación del Server Component padre. Patrón
- * referencia: `discussions/ui/thread-filter-pills.tsx` (el pills no
- * debouncea porque cada click es una intención discreta — el typing
+ * referencia: `discussions/threads/ui/thread-filter-pills.tsx` (el pills
+ * no debouncea porque cada click es una intención discreta — el typing
  * sí lo necesita).
  *
  * **Conserva otros params**: clona los `useSearchParams()` actuales

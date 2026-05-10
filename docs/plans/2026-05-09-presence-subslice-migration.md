@@ -442,7 +442,7 @@ pnpm tsx scripts/lint/check-slice-size.ts
 
 ### 7.8 Follow-ups post-B.2 (deuda explícita, NO incluir acá)
 
-- **B.3** — `discussions/threads/` consolidation: re-cablear `public.ts:123` y `public.server.ts:78` al sub-slice; borrar 8 archivos legacy + tests. -550 LOC al raíz. Smoke crítico: home gated `/conversations`, library home, paginación.
+- **B.3** — ✅ **CERRADO 2026-05-09**: `discussions/threads/` consolidado en 5 sub-commits + C (docs). Re-cableo `ThreadHeaderBar` + `PostList` al sub-slice + borrado de 9 archivos legacy + cleanup oportunista `reader-stack`/`post-unread-dot`. **-600 LOC al raíz** (de 6202 a 5602, match perfecto con la predicción del plan). Bundle byte-idéntico al baseline (`/conversations` 290 kB). Plan: `docs/plans/2026-05-09-threads-subslice-migration.md`. Audit: `docs/plans/2026-05-09-threads-subslice-migration-audit.md`. Cierra TODOS los sub-slices accionables de `discussions/`.
 - **B.4** — `discussions/posts/` consolidation: borrar `listPostsByPlace` legacy + 3 helpers privados + `load-more.ts` legacy. -300 a -600 LOC.
 - **B.5** — `discussions/comments/` consolidation: borrar `findCommentById`, `listCommentsByPost`, `CommentView` legacy. -400 a -800 LOC.
 - **F1** (del sub-plan original) — `presence/__tests__/post-event-relation.test.ts` mal ubicado, mover a `posts/__tests__/`.

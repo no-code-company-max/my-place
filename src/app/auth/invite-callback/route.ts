@@ -124,17 +124,6 @@ export async function GET(req: NextRequest) {
 
   const redirectTarget = resolveNextRedirect(rawNext)
 
-  // DEBUG TEMPORAL — log Set-Cookie count para confirmar que el bag llega al response.
-  log.warn(
-    {
-      debug: 'invite_callback_cookie_bag',
-      userId: user.id,
-      bagSize: cookieBag.length,
-      bagNames: cookieBag.map((c) => `${c.name}(d=${c.options.domain ?? '-'},v=${c.value.length})`),
-    },
-    `DBG bag size=${cookieBag.length}`,
-  )
-
   log.info({ userId: user.id, type }, 'invite_callback_success')
   return finalize(htmlRedirect(redirectTarget), cookieBag)
 }
@@ -142,6 +131,12 @@ export async function GET(req: NextRequest) {
 /** Apply cookie bag al response final + retornar. */
 function finalize(response: ReturnType<typeof htmlRedirect>, bag: CookieToSet[]) {
   applyCookies(response, bag)
+  // DEBUG TEMPORAL — bag info en headers para verificar vía curl.
+  response.headers.set('x-debug-bag-size', String(bag.length))
+  response.headers.set(
+    'x-debug-bag-names',
+    bag.map((c) => `${c.name}|d=${c.options.domain ?? '-'}|v=${c.value.length}`).join(','),
+  )
   return response
 }
 

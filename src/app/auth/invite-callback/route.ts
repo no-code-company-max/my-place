@@ -60,7 +60,11 @@ export async function GET(req: NextRequest) {
 
   // Acumulamos cookies a setear en el response final (sea cual sea).
   const cookieBag: CookieToSet[] = []
-  cookieBag.push(...buildLegacyCookieCleanup(req))
+  const projectRef = extractProjectRef(clientEnv.NEXT_PUBLIC_SUPABASE_URL)
+  // Cleanup excluyendo cookies del proyecto actual (la session nueva las
+  // sobrescribe naturalmente; emitir cleanup + nueva con mismo name+domain
+  // hace que Safari iOS borre la nueva).
+  cookieBag.push(...buildLegacyCookieCleanup(req, { currentProjectRef: projectRef }))
 
   const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
   const supabase = createServerClient(
@@ -102,7 +106,6 @@ export async function GET(req: NextRequest) {
   // no se invoca sincrónicamente en route handlers (race con
   // onAuthStateChange async listener). Replicamos el formato exacto que
   // el SDK lee con combineChunks. Ver supabase/ssr#36.
-  const projectRef = extractProjectRef(clientEnv.NEXT_PUBLIC_SUPABASE_URL)
   cookieBag.push(
     ...buildSessionCookies({
       session: verify.session,

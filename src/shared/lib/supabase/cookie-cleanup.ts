@@ -44,13 +44,37 @@ function isSupabaseAuthCookie(name: string): boolean {
  *   subdomain (sino Safari rechaza). Lo seguimos emitiendo defensivamente
  *   porque NO causa daño (browsers que no coinciden lo ignoran sin error).
  */
-export function buildLegacyCookieCleanup(req: NextRequest): CookieToSet[] {
+export function buildLegacyCookieCleanup(
+  req: NextRequest,
+  options?: { currentProjectRef?: string },
+): CookieToSet[] {
   const apex = clientEnv.NEXT_PUBLIC_APP_DOMAIN.split(':')[0] ?? ''
   const domainsToClean = [apex, `app.${apex}`]
+  const currentRef = options?.currentProjectRef
   const out: CookieToSet[] = []
 
   for (const cookie of req.cookies.getAll()) {
     if (!isSupabaseAuthCookie(cookie.name)) continue
+
+    // **CRÍTICO:** NO limpiar `sb-<currentRef>-auth-token` (incluyendo chunks
+    // `.0`, `.1`, ...) — la session nueva del callback las sobrescribirá. Si
+    // emitimos cleanup `maxAge=0` para el mismo `name+domain`, Safari iOS
+    // procesa el cleanup ANTES de la session nueva (orden de Set-Cookie
+    // headers no garantizado en Safari) y termina borrando la session.
+    //
+    // Sí limpiamos `-code-verifier` del current project (nombre distinto, no
+    // colisiona con la session) y todo lo de OTROS project refs (cookies
+    // residuales de proyectos Supabase anteriores).
+    if (currentRef) {
+      const currentAuthTokenBase = `sb-${currentRef}-auth-token`
+      if (cookie.name === currentAuthTokenBase) continue
+      if (/^sb-[A-Za-z0-9]+-auth-token\.\d+$/.test(cookie.name)) {
+        // Es chunked. Skipear si el ref matchea current.
+        const refMatch = cookie.name.match(/^sb-([A-Za-z0-9]+)-auth-token\./)
+        if (refMatch && refMatch[1] === currentRef) continue
+      }
+    }
+
     for (const domain of domainsToClean) {
       out.push({ name: cookie.name, value: '', options: { domain, path: '/', maxAge: 0 } })
     }

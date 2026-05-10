@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
   }
 
   const cookieBag: CookieToSet[] = []
-  cookieBag.push(...buildLegacyCookieCleanup(req))
+  const projectRef = extractProjectRef(clientEnv.NEXT_PUBLIC_SUPABASE_URL)
+  cookieBag.push(...buildLegacyCookieCleanup(req, { currentProjectRef: projectRef }))
 
   const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
   const supabase = createServerClient(
@@ -70,7 +71,6 @@ export async function GET(req: NextRequest) {
   const { user } = exchange
 
   // Build session cookies manually (workaround supabase/ssr#36).
-  const projectRef = extractProjectRef(clientEnv.NEXT_PUBLIC_SUPABASE_URL)
   cookieBag.push(
     ...buildSessionCookies({
       session: exchange.session,

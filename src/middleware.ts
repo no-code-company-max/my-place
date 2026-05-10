@@ -64,6 +64,11 @@ export async function middleware(req: NextRequest) {
 
   const requestHeaders = new Headers(req.headers)
   requestHeaders.set(REQUEST_ID_HEADER, requestId)
+  // Server Components no tienen acceso a usePathname(). Inyectamos el path
+  // como header para que layouts/pages puedan leerlo via headers() sin
+  // necesidad de client components. Usado por <SettingsShell> para resolver
+  // active state del sidebar (Sub-sesión 1c plan settings desktop).
+  requestHeaders.set('x-pathname', req.nextUrl.pathname)
 
   const routed = isAuth
     ? passthrough(requestHeaders, sessionResponse)

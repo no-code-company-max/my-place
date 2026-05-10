@@ -1,8 +1,10 @@
+import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { getCurrentAuthUser } from '@/shared/lib/auth-user'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { findMemberPermissions } from '@/features/members/public.server'
 import { SettingsNavFab } from '@/features/shell/public'
+import { SettingsShell } from '@/features/settings-shell/public'
 
 type Props = {
   children: React.ReactNode
@@ -41,15 +43,29 @@ export default async function SettingsLayout({ children, params }: Props) {
     notFound()
   }
 
-  // FAB de sub-navegación entre settings — único affordance para saltar entre
-  // General · Horarios · Biblioteca · Acceso · Miembros · Reportes sin volver
-  // al inbox. Sibling de `{children}` (no wrapper), patrón coherente con
-  // `<ZoneFab>` en `(gated)/layout.tsx`. Visibilidad gateada por este layout
-  // (admin/owner ya validado arriba); el componente no es admin-aware.
+  // **Shell de settings (rediseño desktop, Sub-sesión 1c)**:
+  //  - Desktop: <SettingsShell> renderea sidebar 240px a la izquierda + content
+  //    area max-w-screen-md a la derecha. Children van adentro del content area.
+  //  - Mobile: el sidebar está oculto (CSS `hidden md:flex`); el FAB queda
+  //    visible (wrapper `md:hidden`) como único affordance de navegación.
+  //  - Coexisten por viewport, no se reemplazan en JS (sin hydration concerns).
+  //
+  // `currentPath` viene del header `x-pathname` que setea el middleware
+  // (server-rendered, sin usePathname client). Usado para resolver el
+  // active state del sidebar.
+  //
+  // Ver `docs/features/settings-shell/spec.md`.
+  const headerStore = await headers()
+  const currentPath = headerStore.get('x-pathname') ?? ''
+
   return (
     <>
-      {children}
-      <SettingsNavFab isOwner={perms.isOwner} />
+      <SettingsShell currentPath={currentPath} placeSlug={placeSlug} isOwner={perms.isOwner}>
+        {children}
+      </SettingsShell>
+      <div className="md:hidden">
+        <SettingsNavFab isOwner={perms.isOwner} />
+      </div>
     </>
   )
 }

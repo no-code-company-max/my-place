@@ -20,6 +20,12 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFoundMock(),
 }))
 
+// Mock `next/headers` — el layout lee `x-pathname` (seteado por el middleware)
+// para resolver active state del SettingsShell. En tests no hay request scope.
+vi.mock('next/headers', () => ({
+  headers: () => Promise.resolve({ get: (_key: string) => '/p/settings' }),
+}))
+
 const getCurrentAuthUserMock = vi.fn()
 vi.mock('@/shared/lib/auth-user', () => ({
   getCurrentAuthUser: () => getCurrentAuthUserMock(),
@@ -37,11 +43,36 @@ vi.mock('@/features/members/public.server', () => ({
 }))
 
 // Stub del FAB con `data-testid` predecible: así verificamos que el layout lo
-// MONTA (regresión del bug original donde el return era `<>{children}</>` sin
-// el FAB) y que le pasa `isOwner` correctamente.
+// MONTA y que le pasa `isOwner` correctamente.
 vi.mock('@/features/shell/public', () => ({
   SettingsNavFab: ({ isOwner }: { isOwner?: boolean }) => (
     <div data-testid="settings-nav-fab" data-is-owner={String(!!isOwner)} />
+  ),
+}))
+
+// Stub del SettingsShell — interesa verificar que el layout lo monta y le
+// pasa props correctas, no testear su render interno (eso ya tiene cobertura
+// en src/features/settings-shell/__tests__/).
+vi.mock('@/features/settings-shell/public', () => ({
+  SettingsShell: ({
+    children,
+    currentPath,
+    placeSlug,
+    isOwner,
+  }: {
+    children: React.ReactNode
+    currentPath: string
+    placeSlug: string
+    isOwner: boolean
+  }) => (
+    <div
+      data-testid="settings-shell"
+      data-current-path={currentPath}
+      data-place-slug={placeSlug}
+      data-is-owner={String(isOwner)}
+    >
+      {children}
+    </div>
   ),
 }))
 

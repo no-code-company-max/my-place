@@ -67,6 +67,10 @@ export async function GET(req: NextRequest) {
   cookieBag.push(...buildLegacyCookieCleanup(req, { currentProjectRef: projectRef }))
 
   const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
+  // El SDK NO escribe en nuestro bag — buildSessionCookies abajo construye
+  // la session manualmente. setAll noop para evitar que el SDK emita
+  // maxAge=0 cleanup de la cookie del proyecto actual (cuando ve un value
+  // corrupto en el request) y compita con nuestra session nueva.
   const supabase = createServerClient(
     clientEnv.NEXT_PUBLIC_SUPABASE_URL,
     clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -75,15 +79,7 @@ export async function GET(req: NextRequest) {
         getAll() {
           return req.cookies.getAll()
         },
-        setAll(cookiesToSet) {
-          for (const c of cookiesToSet) {
-            cookieBag.push({
-              name: c.name,
-              value: c.value,
-              options: { ...c.options, ...(domain ? { domain } : {}) },
-            })
-          }
-        },
+        setAll() {},
       },
     },
   )

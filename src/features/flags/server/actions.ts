@@ -7,6 +7,7 @@ import { logger } from '@/shared/lib/logger'
 import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { hardDeletePost } from '@/features/discussions/public.server'
 import { buildAuthorSnapshot } from '@/features/discussions/public'
+import { hasPermission } from '@/features/members/public.server'
 import { FlagAlreadyExists } from '../domain/errors'
 import { flagInputSchema, reviewFlagInputSchema } from '../schemas'
 import { resolveActorForPlace, type FlagActor } from './actor'
@@ -156,7 +157,11 @@ async function loadAndAuthorizeFlag(
   if (!flag) throw new NotFoundError('Flag no encontrado.', { flagId: data.flagId })
 
   const actor = await resolveActorForPlace({ placeId: flag.placeId })
-  if (!actor.isAdmin) {
+  // G.3 port (2026-05-09): owner + cualquier grupo (preset o custom) con
+  // `flags:review`. Antes solo `actor.isAdmin` (preset/owner). Ver
+  // `docs/plans/2026-05-09-g3-debt-port-to-legacy.md` § A1.
+  const allowed = await hasPermission(actor.actorId, actor.placeId, 'flags:review')
+  if (!allowed) {
     throw new AuthorizationError('Sólo admins pueden revisar flags.', { flagId: flag.id })
   }
 

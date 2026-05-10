@@ -30,17 +30,27 @@ export function htmlRedirect(target: URL): NextResponse {
   const url = target.toString()
   const escapedAttr = escapeHtmlAttr(url)
   const escapedJs = escapeJsString(url)
+  // Meta refresh con delay 1s + script con setTimeout 250ms — DOS escapes
+  // para que Safari iOS termine de procesar Set-Cookie headers ANTES de
+  // navegar. Ejecución síncrona (replace inmediato) hace que Safari aborte
+  // el procesamiento de cookies del response actual cuando navega.
+  // Verificado empíricamente con /api/test-set-cookie?html=1 (con
+  // setTimeout 1000ms) que las cookies SÍ se persisten en Safari iOS.
   const html = `<!DOCTYPE html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0;url=${escapedAttr}" />
+    <meta http-equiv="refresh" content="1;url=${escapedAttr}" />
     <title>Redirigiendo…</title>
     <style>body{font-family:sans-serif;color:#666;padding:2rem;text-align:center}</style>
   </head>
   <body>
     <p>Redirigiendo…</p>
-    <script>window.location.replace("${escapedJs}");</script>
+    <script>
+      setTimeout(function() {
+        window.location.replace("${escapedJs}");
+      }, 250);
+    </script>
     <noscript>
       <p>Si no eres redirigido automáticamente,
         <a href="${escapedAttr}">click acá</a>.

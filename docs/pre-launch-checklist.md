@@ -99,4 +99,34 @@ Si COUNT > 2 (más allá del seed E2E), priorizar el smoke porque hay users real
 
 ---
 
+### Smoke test del flow auth post-deploy (2026-05-10)
+
+**Origen:** ADR `docs/decisions/2026-05-10-auth-callbacks-on-apex.md` — refactor de `/auth/callback` y `/auth/invite-callback` para correr en apex + host-aware redirect post-callback + cookie cleanup defensivo (commits `7189f80`, `8b9a2ba`).
+
+**Cuándo:** correr **una vez después del deploy de S2** (`8b9a2ba`) para confirmar que ambos flows están green en prod.
+
+**Checklist:**
+
+1. **Invite flow (browser nuevo / incógnito):** admin envía invite desde `/settings/access` a un email externo → user click email → debe llegar a `/invite/accept/<tok>` autenticado (sin pasar por `/login`). Click "Aceptar" → `acceptedAt` se llena en `Invitation` (verificable via `mcp__supabase-place__execute_sql`).
+
+2. **Login magic link (browser nuevo / incógnito):** user existente va a `app.<apex>/login` → tipea email → recibe magic link → click → llega al destino (`/inbox` o el path original que disparó el gate) autenticado.
+
+3. **Cookie cleanup defensivo (browser con sesión vieja):** user con sesión pre-2026-05-10 (cookies `Domain=app.place.community`) hace logout y login de nuevo → debería loguearse OK; verificar en DevTools que las cookies viejas se limpiaron y solo queda `sb-*-auth-token; Domain=place.community`.
+
+4. **Logs Supabase + Vercel:**
+   - `mcp__supabase-place__get_logs auth` muestra `Login` event + `auth.sessions` row created en el momento del flow.
+   - Vercel runtime logs: `invite_callback_success` o `callback_success` (level info), seguido del request al destino con sesión válida (no más `307 → /login`).
+
+**Pass/Fail:**
+
+- **Pass**: ambos flows verde + cookie cleanup confirmado → cierre del item, no hace falta acción.
+- **Fail (cualquier flow rompe)**: investigar con MCPs antes de revertir; el refactor está cubierto por 1953 tests verde + ADR documenta trade-offs. Considerar rollback al commit anterior (`42200e6`) si reproducible.
+
+**Cleanup posterior** (no bloqueante):
+
+- Auditoría de otros consumers de `clientEnv.NEXT_PUBLIC_APP_URL` en el repo que asuman subdomain. Si ningún code path lo necesita en subdomain post-S2, considerar cambiar el env var en Vercel a `https://place.community` (apex) para consistencia.
+- E2E test automatizado del invite + login flow (necesita harness de email mock/intercept; no incluido en S1-S3).
+
+---
+
 (otros items futuros van acá con su propio header `### Título — fecha`)

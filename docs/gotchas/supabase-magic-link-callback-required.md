@@ -63,6 +63,23 @@ Ambos callbacks comparten el allowlist (`src/app/auth/callback/helpers.ts`). Cua
 
 Hoy `AUTH_PATHS = ['/login', '/logout', '/auth/callback', '/auth/invite-callback']`. Cuando agregues otro callback que setee sesión, sumarlo acá también.
 
+## El callback DEBE correr en APEX (no subdomain)
+
+Decisión arquitectónica registrada en ADR `2026-05-10-auth-callbacks-on-apex.md`: los helpers `authCallbackUrlForNext` e `inviteCallbackUrl` siempre construyen URL del callback con `apexUrl()` (de `src/shared/lib/app-url.ts`), no con `clientEnv.NEXT_PUBLIC_APP_URL`.
+
+**Por qué:** si el callback corre en `app.<apex>` (subdomain inbox), el redirect post-callback queda en host inbox y el middleware caso `inbox` (`src/middleware.ts:116-120`) reescribe `/<path>` → `/inbox/<path>`. Para paths globales como `/invite/accept/<tok>` (que viven en `/app/invite/accept/[token]/page.tsx`, fuera de `/app/inbox/`), el rewrite produce `/inbox/invite/accept/<tok>` que no existe → 404 global de Next ("No existe. Lo que buscabas no vive acá.").
+
+Las cookies setteadas con `Domain=<apex>` cruzan a todos los subdomains (apex + inbox + place subdomains), así que el callback en apex sigue logueando a users que después navegan a un subdomain.
+
+**Side effect requerido:** el redirect post-callback debe usar `resolveNextRedirect(rawNext)` (`src/shared/lib/next-redirect.ts`), que mapea host-aware:
+
+- `/invite/accept/<tok>`, `/login`, `/auth/callback`, `/auth/invite-callback` → apex
+- `/inbox` → root del subdomain `app.<apex>` (NO `/inbox` literal — daría rewrite a `/inbox/inbox`)
+- `/inbox/<sub>` → `app.<apex>/<sub>` (deja que el rewrite resulte en `/inbox/<sub>`)
+- `/<slug>/(conversations|library|events|m/<id>|settings)(/...)?` → subdomain `<slug>.<apex>`
+
+NO usar `resolveSafeNext + buildInboxUrl()` para construir el target del redirect — ese patrón ataba el host al subdomain inbox.
+
 ## Backward compat
 
 Invitations enviadas ANTES del fix tienen el `action_link` viejo de Supabase como `inviteUrl` (implicit flow). Los users que las clickean siguen cayendo en `/login`. Workarounds:

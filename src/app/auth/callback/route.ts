@@ -10,7 +10,7 @@ import {
   buildLegacyCookieCleanup,
   type CookieToSet,
 } from '@/shared/lib/supabase/cookie-cleanup'
-import { buildSessionCookies, extractProjectRef } from '@/shared/lib/supabase/build-session-cookies'
+import { extractProjectRef } from '@/shared/lib/supabase/build-session-cookies'
 import { resolveNextRedirect } from '@/shared/lib/next-redirect'
 import { htmlRedirect } from '@/shared/lib/auth-redirect-html'
 import { deriveDisplayName } from './helpers'
@@ -38,7 +38,8 @@ export async function GET(req: NextRequest) {
   cookieBag.push(...buildLegacyCookieCleanup(req, { currentProjectRef: projectRef }))
 
   const domain = cookieDomain(clientEnv.NEXT_PUBLIC_APP_DOMAIN)
-  // setAll noop — buildSessionCookies abajo construye session manualmente.
+  // SDK setAll captura cookies en bag (formato canónico del SDK con
+  // refresh_token válido server-side).
   const supabase = createServerClient(
     clientEnv.NEXT_PUBLIC_SUPABASE_URL,
     clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -47,7 +48,15 @@ export async function GET(req: NextRequest) {
         getAll() {
           return req.cookies.getAll()
         },
-        setAll() {},
+        setAll(cookiesToSet) {
+          for (const c of cookiesToSet) {
+            cookieBag.push({
+              name: c.name,
+              value: c.value,
+              options: { ...c.options, ...(domain ? { domain } : {}) },
+            })
+          }
+        },
       },
     },
   )
@@ -63,20 +72,9 @@ export async function GET(req: NextRequest) {
 
   const { user } = exchange
 
-  // Build session cookies manually (workaround supabase/ssr#36).
-  cookieBag.push(
-    ...buildSessionCookies({
-      session: exchange.session,
-      user: {
-        id: user.id,
-        email: user.email,
-        user_metadata: user.user_metadata as Record<string, unknown> | undefined,
-        app_metadata: user.app_metadata as Record<string, unknown> | undefined,
-      },
-      projectRef,
-      domain,
-    }),
-  )
+  // Drain microtasks → onAuthStateChange listener corre → setAll captura
+  // session cookies con formato canónico del SDK.
+  await new Promise<void>((resolve) => setImmediate(resolve))
   try {
     const email = user.email ?? null
     await prisma.user.upsert({

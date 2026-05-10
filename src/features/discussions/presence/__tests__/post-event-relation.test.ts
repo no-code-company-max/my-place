@@ -15,7 +15,7 @@ vi.mock('../server/place-opening', () => ({
 }))
 vi.mock('server-only', () => ({}))
 
-import { findPostById, findPostBySlug } from '@/features/discussions/posts/public.server'
+import { findPostById, findPostBySlug } from '@/features/discussions/server/queries'
 
 beforeEach(() => {
   vi.resetAllMocks()

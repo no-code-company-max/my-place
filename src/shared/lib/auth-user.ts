@@ -22,10 +22,35 @@ export const getCurrentAuthUser = cache(async (): Promise<AuthUser | null> => {
   // hop hará el redirect correspondiente.
   try {
     const { data } = await supabase.auth.getUser()
-    if (!data.user) return null
+    if (!data.user) {
+      // DEBUG TEMPORAL — getUser retornó sin user (sin throw).
+      logger.warn(
+        { debug: 'AU_getUser_no_user', layer: 'rsc' },
+        `DBG AU[getUser-no-user] supabase returned no user without error`,
+      )
+      return null
+    }
     return { id: data.user.id, email: data.user.email ?? null }
   } catch (err) {
-    if (!isStaleSessionError(err)) throw err
+    // DEBUG TEMPORAL — capturar TODA la info del error en RSC.
+    const e = err as { code?: string; message?: string; name?: string; status?: number }
+    logger.warn(
+      {
+        debug: 'AU_getUser_error',
+        layer: 'rsc',
+        errName: e?.name ?? null,
+        errCode: e?.code ?? null,
+        errStatus: e?.status ?? null,
+        errMessage: e?.message ?? null,
+        isStale: isStaleSessionError(err),
+      },
+      `DBG AU[getUser-err] name=${e?.name} code=${e?.code} status=${e?.status} msg=${e?.message} stale=${isStaleSessionError(err)}`,
+    )
+    if (!isStaleSessionError(err)) {
+      // DURANTE DIAGNÓSTICO: tratar como anonymous en lugar de propagar
+      // (para no crashear el render con error overlay y poder ver el log).
+      return null
+    }
     logger.warn(
       {
         event: 'authSessionStale',

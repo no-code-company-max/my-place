@@ -44,26 +44,43 @@ export async function updateSession(req: NextRequest): Promise<{
     },
   )
 
-  // DEBUG TEMPORAL — log de cookies entrantes en paths críticos del flow auth.
+  // DEBUG TEMPORAL — log de cookies entrantes + decoded session en TODOS los paths.
+  // Decodea sb-*-auth-token (formato base64-{json}) para extraer expires_at del
+  // access_token + first/last 8 chars del refresh_token. Permite trackear
+  // identidad/rotación del token a lo largo del flow.
   const path = req.nextUrl.pathname
   const host = req.headers.get('host') ?? '?'
   const traceId = req.nextUrl.searchParams.get('_t') ?? 'no-trace'
-  const isAuthFlowPath =
-    path.startsWith('/invite/accept/') ||
-    path.startsWith('/auth/') ||
-    path === '/login' ||
-    path === '/inbox'
-  if (isAuthFlowPath) {
-    const sbCookieNames = req.cookies
-      .getAll()
-      .filter((c) => /^sb-/.test(c.name))
-      .map((c) => `${c.name}(${c.value?.length ?? 0})`)
-      .join(',')
-    logger.warn(
-      { debug: 'MW_entry', traceId, host, path, sbCookieNames },
-      `DBG MW[entry] tr=${traceId} host=${host} path=${path} sb=[${sbCookieNames || '(none)'}]`,
-    )
+  const sbCookies = req.cookies.getAll().filter((c) => /^sb-.*-auth-token(\.\d+)?$/.test(c.name))
+  const sbCookieSummary = sbCookies.map((c) => `${c.name}(${c.value?.length ?? 0})`).join(',')
+  let decodedSession = ''
+  try {
+    const chunks = sbCookies
+      .filter((c) => /-auth-token(\.\d+)?$/.test(c.name) && !/code-verifier/.test(c.name))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    const raw = chunks.map((c) => c.value).join('')
+    if (raw.startsWith('base64-')) {
+      const json = Buffer.from(raw.slice('base64-'.length), 'base64').toString('utf8')
+      const parsed = JSON.parse(json) as {
+        access_token?: string
+        refresh_token?: string
+        expires_at?: number
+      }
+      const rt = parsed.refresh_token ?? ''
+      const rtFp = rt ? `${rt.slice(0, 8)}…${rt.slice(-4)}(${rt.length})` : 'none'
+      const expSec = parsed.expires_at ?? 0
+      const nowSec = Math.floor(Date.now() / 1000)
+      const ttl = expSec - nowSec
+      decodedSession = `rt=${rtFp} exp=${expSec} ttl=${ttl}s`
+    }
+  } catch (decodeErr) {
+    decodedSession = `decode_err=${(decodeErr as Error).message}`
   }
+  logger.warn(
+    { debug: 'MW_entry', traceId, host, path, sbCookieSummary, decodedSession },
+    `DBG MW[entry] tr=${traceId} host=${host} path=${path} sb=[${sbCookieSummary || '(none)'}] sess=[${decodedSession || '(none)'}]`,
+  )
+  const isAuthFlowPath = true // log siempre durante diagnóstico
 
   // **`getSession()` no `getUser()`** — getSession solo lee la cookie y decodea
   // el JWT (sin server validation, sin refresh). getUser hace una llamada al
@@ -89,7 +106,27 @@ export async function updateSession(req: NextRequest): Promise<{
       )
     }
   } catch (err) {
-    if (!isStaleSessionError(err)) throw err
+    // DEBUG TEMPORAL — capturar TODO el error antes de cualquier filtro.
+    const e = err as { code?: string; message?: string; name?: string; status?: number }
+    logger.warn(
+      {
+        debug: 'MW_getSession_error',
+        traceId,
+        path,
+        errName: e?.name ?? null,
+        errCode: e?.code ?? null,
+        errStatus: e?.status ?? null,
+        errMessage: e?.message ?? null,
+        isStale: isStaleSessionError(err),
+      },
+      `DBG MW[getSession-err] tr=${traceId} path=${path} name=${e?.name} code=${e?.code} status=${e?.status} msg=${e?.message} stale=${isStaleSessionError(err)}`,
+    )
+    if (!isStaleSessionError(err)) {
+      // DURANTE DIAGNÓSTICO: no re-throw para no crashear MW. Tratar como anonymous.
+      // El user verá redirect a login (igual que stale) y veremos el log error.
+      user = null
+      return { response, user }
+    }
     logger.warn(
       { event: 'authSessionStale', reason: (err as { code?: string }).code ?? 'unknown' },
       'session stale — clearing cookies and treating as anonymous',

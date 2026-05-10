@@ -53,6 +53,12 @@ export async function updateSession(req: NextRequest): Promise<{
   const traceId = req.nextUrl.searchParams.get('_t') ?? 'no-trace'
   const sbCookies = req.cookies.getAll().filter((c) => /^sb-.*-auth-token(\.\d+)?$/.test(c.name))
   const sbCookieSummary = sbCookies.map((c) => `${c.name}(${c.value?.length ?? 0})`).join(',')
+  // DEBUG TEMPORAL — currentProjectRef del env para detectar mismatch storage<>cookie.
+  const currentRef = clientEnv.NEXT_PUBLIC_SUPABASE_URL.match(/https:\/\/([^.]+)\./)?.[1] ?? '?'
+  const cookiesForCurrent = sbCookies
+    .filter((c) => c.name.startsWith(`sb-${currentRef}-`))
+    .map((c) => c.name)
+    .join(',')
   let decodedSession = ''
   try {
     const chunks = sbCookies
@@ -77,8 +83,17 @@ export async function updateSession(req: NextRequest): Promise<{
     decodedSession = `decode_err=${(decodeErr as Error).message}`
   }
   logger.warn(
-    { debug: 'MW_entry', traceId, host, path, sbCookieSummary, decodedSession },
-    `DBG MW[entry] tr=${traceId} host=${host} path=${path} sb=[${sbCookieSummary || '(none)'}] sess=[${decodedSession || '(none)'}]`,
+    {
+      debug: 'MW_entry',
+      traceId,
+      host,
+      path,
+      sbCookieSummary,
+      decodedSession,
+      currentRef,
+      cookiesForCurrent,
+    },
+    `DBG MW[entry] tr=${traceId} host=${host} path=${path} ref=${currentRef} forCur=[${cookiesForCurrent || '(none)'}] sb=[${sbCookieSummary || '(none)'}] sess=[${decodedSession || '(none)'}]`,
   )
   const isAuthFlowPath = true // log siempre durante diagnóstico
 
@@ -100,9 +115,22 @@ export async function updateSession(req: NextRequest): Promise<{
       ? { id: data.session.user.id, email: data.session.user.email ?? null }
       : null
     if (isAuthFlowPath) {
+      // DEBUG TEMPORAL — dump COMPLETO del session retornado por SDK.
+      const s = data.session
+      const sessionDebug = s
+        ? `hasSession=true exp=${s.expires_at ?? '?'} userId=${s.user?.id?.slice(0, 8) ?? '?'} accessLen=${s.access_token?.length ?? 0} refreshLen=${s.refresh_token?.length ?? 0}`
+        : 'hasSession=false'
       logger.warn(
-        { debug: 'MW_getSession', traceId, path, hasUser: !!user, userId: user?.id ?? null },
-        `DBG MW[getSession] tr=${traceId} path=${path} user=${user?.id ?? 'null'}`,
+        {
+          debug: 'MW_getSession',
+          traceId,
+          path,
+          host,
+          hasUser: !!user,
+          userId: user?.id ?? null,
+          sessionDebug,
+        },
+        `DBG MW[getSession] tr=${traceId} host=${host} path=${path} user=${user?.id ?? 'null'} session=[${sessionDebug}]`,
       )
     }
   } catch (err) {

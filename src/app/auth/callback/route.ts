@@ -154,7 +154,7 @@ export async function GET(req: NextRequest) {
   )
 
   log.info({ userId: user.id }, 'callback_success')
-  return finalize(htmlRedirect(redirectTarget), cookieBag)
+  return finalize(htmlRedirect(redirectTarget, { kind: 'login' }), cookieBag)
 }
 
 function finalize(response: ReturnType<typeof htmlRedirect>, bag: CookieToSet[]) {

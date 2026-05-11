@@ -195,6 +195,11 @@ export async function GET(req: NextRequest) {
   // Plan: docs/plans/2026-05-10-invite-callback-direct-accept.md
   const inviteToken = extractInviteToken(rawNext)
   let redirectTarget: URL
+  // Si hay inviteToken, la página intermedia muestra copy de "Aceptar
+  // invitación a {placeName}". placeName solo está disponible en el path
+  // de accept inline exitoso; en fallback queda undefined → copy genérico
+  // "Aceptar invitación →" (la accept page real renderiza el nombre).
+  let placeName: string | undefined
   if (inviteToken) {
     try {
       const acceptResult = await acceptInvitationCore(inviteToken, user.id)
@@ -204,6 +209,7 @@ export async function GET(req: NextRequest) {
       revalidatePath(`/${acceptResult.placeSlug}`, 'layout')
       revalidateMemberPermissions(user.id, acceptResult.placeId)
       redirectTarget = placeUrl(acceptResult.placeSlug)
+      placeName = acceptResult.placeName
       logDiag(
         'cb_invite_accept_inline',
         {
@@ -263,12 +269,16 @@ export async function GET(req: NextRequest) {
       redirectTarget: redirectTarget.toString(),
       bagSize: cookieBag.length,
       bagCookieNames: cookieBag.map((c) => c.name),
+      hasPlaceName: !!placeName,
     },
     userDiagCtx,
   )
 
   log.info({ userId: user.id, type, traceId }, 'invite_callback_success')
-  return finalize(htmlRedirect(redirectTarget), cookieBag)
+  const htmlOptions = inviteToken
+    ? { kind: 'invite' as const, ...(placeName ? { placeName } : {}) }
+    : { kind: 'login' as const }
+  return finalize(htmlRedirect(redirectTarget, htmlOptions), cookieBag)
 }
 
 /**

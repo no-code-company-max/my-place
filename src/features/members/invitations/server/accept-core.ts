@@ -12,6 +12,7 @@ export type AcceptInvitationCoreResult = {
   ok: true
   placeSlug: string
   placeId: string
+  placeName: string
   alreadyMember: boolean
 }
 
@@ -77,12 +78,13 @@ export async function acceptInvitationCore(
     ok: true,
     placeSlug: invitation.place.slug,
     placeId: invitation.placeId,
+    placeName: invitation.place.name,
     alreadyMember,
   }
 }
 
 async function handleAlreadyAcceptedInvitation(
-  invitation: { id: string; placeId: string; place: { slug: string } },
+  invitation: { id: string; placeId: string; place: { slug: string; name: string } },
   actorId: string,
 ): Promise<AcceptInvitationCoreResult> {
   const existing = await findActiveMembership(actorId, invitation.placeId)
@@ -101,6 +103,7 @@ async function handleAlreadyAcceptedInvitation(
       ok: true,
       placeSlug: invitation.place.slug,
       placeId: invitation.placeId,
+      placeName: invitation.place.name,
       alreadyMember: true,
     }
   }

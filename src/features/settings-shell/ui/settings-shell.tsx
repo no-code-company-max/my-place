@@ -1,5 +1,6 @@
 import { Sidebar } from '@/shared/ui/sidebar/sidebar'
 import { buildSettingsShellSections } from '../domain/sections'
+import { SettingsUsageTracker } from './settings-usage-tracker'
 
 /**
  * Composer del shell de settings desktop. Server Component que envuelve
@@ -40,6 +41,9 @@ export function SettingsShell({ children, currentPath, isOwner }: Props): React.
   // atrapadas en 768px y el detail pane sería ~408px (insuficiente).
   return (
     <div className="md:flex md:gap-6">
+      {/* Tracker invisible: incrementa contador en localStorage cuando el
+          currentPath cambia. Alimenta el FrequentlyAccessedHub mobile. */}
+      <SettingsUsageTracker currentPath={currentPath} />
       <Sidebar
         items={sections}
         currentPath={currentPath}

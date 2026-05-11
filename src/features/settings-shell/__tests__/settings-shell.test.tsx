@@ -1,7 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { SettingsShell } from '../ui/settings-shell'
 import { SettingsMobileHub } from '../ui/settings-mobile-hub'
+
+beforeEach(() => {
+  // SettingsShell monta SettingsUsageTracker que escribe a localStorage,
+  // y SettingsMobileHub renderea FrequentlyAccessedHub que lee de él.
+  // Sin clear, tracking de un test contamina visualmente el siguiente
+  // (Hub renderea links duplicados).
+  localStorage.clear()
+})
 
 afterEach(() => cleanup())
 

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { buildSettingsShellSections } from '../domain/sections'
+import { FrequentlyAccessedHub } from './frequently-accessed-hub'
 
 /**
  * Vista del root `/settings` en mobile (y como fallback desktop hasta
@@ -28,6 +29,7 @@ export function SettingsMobileHub({ isOwner }: Props): React.ReactNode {
         </p>
       </header>
       <div className="space-y-6">
+        <FrequentlyAccessedHub sections={sections} />
         {sections.map((group) => (
           <section key={group.id} aria-labelledby={`hub-group-${group.id}`}>
             {group.label ? (

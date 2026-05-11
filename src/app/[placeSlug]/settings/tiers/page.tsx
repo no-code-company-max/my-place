@@ -57,7 +57,7 @@ export default async function SettingsTiersPage({ params }: Props) {
   const tiers = await listTiersByPlace(place.id, true)
 
   return (
-    <div className="space-y-6 px-3 py-6 md:px-4 md:py-8">
+    <div className="mx-auto max-w-screen-md space-y-6 px-3 py-6 md:px-4 md:py-8">
       <PageHeader
         title="Tiers"
         description="Definí los segmentos de membresía del place. Los tiers nuevos arrancan ocultos — publicalos cuando estén listos. v1 sólo gestiona la definición; cobros y asignación a miembros llegan más adelante."

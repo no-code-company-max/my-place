@@ -79,7 +79,7 @@ export default async function SettingsAccessPage({ params }: Props) {
     : []
 
   return (
-    <div className="space-y-6 px-3 py-6 md:px-4 md:py-8">
+    <div className="mx-auto max-w-screen-md space-y-6 px-3 py-6 md:px-4 md:py-8">
       <PageHeader
         title="Acceso"
         description="Owners activos y pendientes, transferencia de ownership y salida del place."

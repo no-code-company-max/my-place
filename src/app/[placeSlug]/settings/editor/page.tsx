@@ -41,7 +41,7 @@ export default async function SettingsEditorPage({ params }: Props) {
   const config = await getEditorConfigForPlace(place.id)
 
   return (
-    <div className="space-y-6 px-3 py-6 md:px-4 md:py-8">
+    <div className="mx-auto max-w-screen-md space-y-6 px-3 py-6 md:px-4 md:py-8">
       <PageHeader
         title="Editor"
         description="Plugins habilitados al crear contenido nuevo en este place."

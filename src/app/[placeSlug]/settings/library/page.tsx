@@ -62,7 +62,7 @@ export default async function SettingsLibraryPage({ params }: Props) {
   const canCreateMore = remaining > 0
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
+    <div className="mx-auto max-w-screen-md space-y-6 p-4 md:p-8">
       <header>
         <p className="text-sm text-muted">Settings · {place.name}</p>
         <h1 className="font-serif text-3xl italic text-text">Biblioteca</h1>

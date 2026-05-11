@@ -1,5 +1,6 @@
 import { Sidebar } from '@/shared/ui/sidebar/sidebar'
 import { buildSettingsShellSections } from '../domain/sections'
+import { SettingsCommandPalette } from './settings-command-palette'
 import { SettingsUsageTracker } from './settings-usage-tracker'
 
 /**
@@ -44,6 +45,10 @@ export function SettingsShell({ children, currentPath, isOwner }: Props): React.
       {/* Tracker invisible: incrementa contador en localStorage cuando el
           currentPath cambia. Alimenta el FrequentlyAccessedHub mobile. */}
       <SettingsUsageTracker currentPath={currentPath} />
+      {/* Cmd+K command palette para navegación entre sub-pages. Hidden
+          en mobile (FAB cubre nav). Listener global keydown — solo activo
+          mientras este shell está montado (= dentro de /settings/*). */}
+      <SettingsCommandPalette sections={sections} />
       <Sidebar
         items={sections}
         currentPath={currentPath}

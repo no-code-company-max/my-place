@@ -1,5 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+
+// SettingsShell ahora monta SettingsCommandPalette que usa useRouter.
+// Mock para que no falle "invariant expected app router to be mounted".
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), prefetch: vi.fn() }),
+}))
+
 import { SettingsShell } from '../ui/settings-shell'
 import { SettingsMobileHub } from '../ui/settings-mobile-hub'
 

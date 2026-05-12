@@ -179,7 +179,7 @@ function WindowSheetForm({
           onClick={handleSubmit}
           className="inline-flex min-h-12 w-full items-center justify-center rounded-md bg-neutral-900 px-4 text-sm font-medium text-white"
         >
-          Guardar
+          Listo
         </button>
         {sheet.mode === 'edit' ? (
           confirmDelete ? (

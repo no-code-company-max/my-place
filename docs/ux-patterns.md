@@ -264,41 +264,34 @@ Same form layout, same Guardar/Cancelar; in `edit` mode an inline "Eliminar" →
 - Touch targets: each desktop icon button is `min-h-11 min-w-11` (44px). Don't override.
 - The trigger `<button>` for mobile and the `<span>` for desktop both render in the DOM (CSS hide-show). Avoid stateful `children` to prevent double-mount issues.
 
-## Autosave with soft barrier
+## Save model — todo manual (consistente)
 
-**What.** Single-item commits (sheet "Guardar", per-chip "Eliminar") autosave when the form is otherwise clean. Bulk transformations (copy-to-all, timezone, mode toggle) never autosave. If the user does a single-item op while the form already has pending changes, that op also defers — applies locally, shows `toast.info("Cambio aplicado localmente. Tocá «Guardar cambios» para confirmar todos los pendientes.")`, waits for explicit Save.
+**What.** Cualquier mutación del form (add/edit/remove ventana, add/edit/remove excepción, toggle día, copyTo, timezone, 24/7) aplica SOLO localmente. RHF marca `formState.isDirty` automáticamente. El user confirma todos los cambios pendientes con UN tap en el botón page-level "Guardar cambios".
 
-**Why.** Pure autosave is dangerous: if the user changes the timezone (bulk, no commit yet) and then deletes a window (single-item), an autosave on the delete would persist the timezone change as a side-effect. The user loses control of when each thing commits. The soft barrier rule: "your single-item action commits only if nothing else is pending — otherwise wait for explicit Save."
+**Why.** Iter previa "autosave con soft barrier" (single-item ops autosaveaban si el form estaba limpio, bulk ops requerían Save) era confuso: el mismo gesto (eliminar una ventana) tenía dos comportamientos distintos según el estado dirty del form. Modelo "todo manual" es predecible: el user siempre sabe cuándo se persiste (cuando toca "Guardar cambios").
 
-**When to use.** Forms where some operations are atomic and confirmable in-place (a single sheet submit) and others are bulk transforms the user should review before committing.
+**When to use.** Forms con múltiples mutaciones discretas donde el user puede querer revisar el resultado antes de commitear (settings, config, schedules).
 
-**When NOT to use.** Pages with one save operation — submit the whole thing once. Forms with inter-field validations that depend on the whole snapshot.
+**When NOT to use.** Forms con UNA sola mutación clara (e.g. crear post, send mensaje) — submit directo es más simple.
 
-**How.** The `wasDirty` pre-check pattern: read `methods.formState.isDirty` _before_ mutating, then route via a single `commitOrDefer` helper.
+**How.** Handlers solo mutan via RHF (`recurring.append`, `recurring.remove`, etc). Sin `commitOrDefer`, sin `snapshot()`, sin toasts por mutation. El indicator visual del botón "Guardar cambios" + label "• Cambios sin guardar" señalan el estado dirty.
 
 ```ts
 function handleAddRecurring(w: RecurringWindow) {
-  const wasDirty = methods.formState.isDirty
-  const next = [...methods.getValues('recurring'), w]
   recurring.append(w)
-  commitOrDefer(wasDirty, { recurring: next }, { successMessage: 'Horario agregado.' })
-}
-
-function commitOrDefer(wasDirty, snapshotOverride, opts) {
-  if (wasDirty) {
-    toast.info(DEFER_HINT)
-    return
-  }
-  persist(snapshot(snapshotOverride), opts)
+  // Eso es todo. RHF marca dirty. El user toca "Guardar cambios" cuando quiere persistir.
 }
 ```
 
-See `src/features/hours/ui/hours-form.tsx:134-225`.
+**Sub-form buttons:** botones dentro de BottomSheet/EditPanel (como el de add/edit ventana) dicen "Listo" — NO "Guardar". Diferenciación importante: "Listo" = aplicar cambio local; "Guardar cambios" page-level = persistir todos los pendientes a DB.
+
+See `src/features/hours/admin/ui/hours-form.tsx`.
 
 **Pitfalls.**
 
-- `methods.getValues()` after `recurring.append()` may not reflect the append (RHF mutations are async w.r.t. the next render). Compute `next` from current values + the change and pass it as `snapshotOverride`.
-- Read `wasDirty` _before_ mutating — `append/update/remove` flip `isDirty` to true synchronously, so reading after collapses the soft barrier.
+- `recurring.append/update/remove/replace` flip `isDirty` synchronously — el botón Save se enciende inmediato.
+- `methods.reset(snapshot)` en el `persist()` post-success re-baseliña dirty.
+- No reintroducir autosave por chip — anti-pattern documentado abajo.
 
 ## `persist()` helper as the single commit path
 

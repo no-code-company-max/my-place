@@ -22,16 +22,19 @@ import { humanTimezone } from '@/features/hours/member/public'
  *    `exceptions` "stashed" para que destogglear no destruya el schedule.
  *  - `alwaysOpen=false` → `kind: 'scheduled'` con ventanas + excepciones.
  *
- * **Save model — autosave con soft barrier**:
- *  - Operaciones discretas commit-explícitas (sheet "Guardar", per-chip
- *    "Eliminar"): si el form NO tiene cambios pending de otras ops bulk
- *    (copyTo, timezone, toggle), autosavean. Toast `success`.
- *  - Si el form YA tenía cambios pending al momento de la op: NO autosavea,
- *    aplica el cambio solo localmente, y avisa con toast `info`. Razón: si
- *    autosaveáramos, persistiríamos también las ops bulk no confirmadas
- *    (ej. copyTo) como side-effect — el usuario perdería control.
- *  - copyTo (bulk) y timezone/toggle: nunca autosavean. Esperan al batch
- *    save vía el botón "Guardar cambios" page-level.
+ * **Save model — todo manual (iter 2026-05-11):**
+ *
+ * Cualquier cambio (agregar/editar/eliminar ventana, agregar/editar/eliminar
+ * excepción, toggle día, copyTo, timezone, 24/7) aplica SOLO localmente. El
+ * `formState.isDirty` se enciende automáticamente vía RHF.
+ *
+ * El user confirma todos los cambios juntos con el botón "Guardar cambios"
+ * page-level. NO hay autosave de operaciones single-item — eliminado por
+ * decisión UX (modelo previo "soft barrier" era confuso: algunos cambios
+ * autosaveaban, otros no, según el estado dirty del form).
+ *
+ * Indicator visual: el botón "Guardar cambios" + label "• Cambios sin
+ * guardar" señalan estado dirty. Sin toasts por cada mutation.
  *
  * **Dirty indicator**: `formState.isDirty` es la fuente de verdad — se
  *  enciende ante cualquier divergencia con el baseline. El page Save
@@ -40,12 +43,6 @@ import { humanTimezone } from '@/features/hours/member/public'
  * Validación: se ejecuta con el mismo `updateHoursInputSchema` que el server;
  * el `safeParse` client-side muestra errores inline antes de hacer el round-trip.
  */
-
-/**
- * Copy del toast cuando deferimos el commit (soft barrier).
- */
-const DEFER_HINT =
-  'Cambio aplicado localmente. Tocá «Guardar cambios» para confirmar todos los pendientes.'
 
 export type HoursFormDefaults = {
   timezone: (typeof ALLOWED_TIMEZONES)[number]
@@ -131,97 +128,49 @@ export function HoursForm({
   }
 
   // ---------------------------------------------------------------
-  // Handlers para window/exception ops con soft barrier.
+  // Handlers para window/exception ops — TODO MANUAL.
   //
-  // Pattern: leemos `wasDirty` ANTES de mutar (refleja si había otros
-  // cambios pending). Computamos el `next` array, mutamos RHF (UI re-render),
-  // y delegamos al helper `commitOrDefer` que decide:
-  //   - wasDirty=false → autosave (commit immediato + toast.success).
-  //   - wasDirty=true  → defer (no autosave + toast.info pidiendo guardar).
+  // Cada handler solo muta local (RHF append/update/remove/replace). RHF
+  // marca dirty automáticamente. El user confirma todos los cambios con
+  // "Guardar cambios" page-level (onSubmit → persist).
   //
-  // Sin esto, autosaveáramos el snapshot completo aún con cambios pending
-  // de copyTo / timezone / toggle, persistiéndolos como side-effect — el
-  // usuario perdería control sobre cuándo confirma cada cosa.
+  // No hay toasts por cada mutación — el indicator visual del botón
+  // "Guardar cambios" + label "• Cambios sin guardar" son suficientes.
+  // Iter previa "soft barrier" eliminada por decisión UX (era confusa:
+  // algunos cambios autosaveaban, otros no, según estado dirty).
   // ---------------------------------------------------------------
 
-  function snapshot(overrides: Partial<FormValues>): FormValues {
-    return { ...methods.getValues(), ...overrides }
-  }
-
-  function commitOrDefer(
-    wasDirty: boolean,
-    snapshotOverride: Partial<FormValues>,
-    opts: { successMessage: string },
-  ) {
-    if (wasDirty) {
-      toast.info(DEFER_HINT)
-      return
-    }
-    persist(snapshot(snapshotOverride), opts)
-  }
-
   function handleAddRecurring(w: RecurringWindow) {
-    const wasDirty = methods.formState.isDirty
-    const next = [...methods.getValues('recurring'), w]
     recurring.append(w)
-    commitOrDefer(wasDirty, { recurring: next }, { successMessage: 'Horario agregado.' })
   }
 
   function handleUpdateRecurring(idx: number, w: RecurringWindow) {
-    const wasDirty = methods.formState.isDirty
-    const current = methods.getValues('recurring')
-    const next = current.map((r, i) => (i === idx ? w : r))
     recurring.update(idx, w)
-    commitOrDefer(wasDirty, { recurring: next }, { successMessage: 'Horario actualizado.' })
   }
 
   function handleRemoveRecurring(idx: number) {
-    const wasDirty = methods.formState.isDirty
-    const current = methods.getValues('recurring')
-    const next = current.filter((_, i) => i !== idx)
     recurring.remove(idx)
-    commitOrDefer(wasDirty, { recurring: next }, { successMessage: 'Horario eliminado.' })
   }
 
   /**
    * Reemplaza el array completo de recurring en una sola operación. Lo usa
-   * `<WeekEditor>` para "Copiar a todos los días" / weekdays / weekend.
-   *
-   * **Importante**: NO autosavea. Las copias bulk son transformaciones que
-   * el usuario no ha "confirmado" explícitamente — copiar a todos los días
-   * es un atajo, no un commit. La user revisa el resultado y confirma con
-   * el botón "Guardar zona horaria" page-level (el `formState.isDirty` se
-   * enciende automáticamente al cambiar el array).
-   *
-   * Operaciones single-item (add/edit/delete via sheet o per-chip menu) sí
-   * autosavean porque pasan por un commit explícito ("Guardar" en el sheet
-   * o "Eliminar" en el menú).
+   * `<WeekEditor>` para "Copiar a todos los días" / weekdays / weekend +
+   * para borrar todas las ventanas de un día (switch ON → OFF).
    */
   function handleReplaceRecurring(next: RecurringWindow[]) {
     recurring.replace(next)
   }
 
   function handleAddException(e: DateException) {
-    const wasDirty = methods.formState.isDirty
-    const next = [...methods.getValues('exceptions'), e]
     exceptions.append(e)
-    commitOrDefer(wasDirty, { exceptions: next }, { successMessage: 'Excepción agregada.' })
   }
 
   function handleUpdateException(idx: number, e: DateException) {
-    const wasDirty = methods.formState.isDirty
-    const current = methods.getValues('exceptions')
-    const next = current.map((x, i) => (i === idx ? e : x))
     exceptions.update(idx, e)
-    commitOrDefer(wasDirty, { exceptions: next }, { successMessage: 'Excepción actualizada.' })
   }
 
   function handleRemoveException(idx: number) {
-    const wasDirty = methods.formState.isDirty
-    const current = methods.getValues('exceptions')
-    const next = current.filter((_, i) => i !== idx)
     exceptions.remove(idx)
-    commitOrDefer(wasDirty, { exceptions: next }, { successMessage: 'Excepción eliminada.' })
   }
 
   return (

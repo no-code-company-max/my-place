@@ -1,7 +1,7 @@
 'use client'
 
 import * as RadixDialog from '@radix-ui/react-dialog'
-import type { ComponentPropsWithoutRef, ReactNode } from 'react'
+import { useEffect, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
 /**
  * Panel responsive de edit/add. Hereda mobile-first del `<BottomSheet>` y
@@ -25,14 +25,12 @@ import type { ComponentPropsWithoutRef, ReactNode } from 'react'
  * Z-index: 50 (mismo que `<Dialog>` y `<BottomSheet>`). `<Toaster />` queda
  * en 60 — sigue siendo el top.
  *
- * **Animations (2026-05-12 v3, post-bug-fix close):** keyframes definidos en
- * `globals.css` con selector `[data-state]` directo (NO via tailwindcss-animate
- * plugin). Razón: el plugin setea las CSS vars del exit (`--tw-exit-translate-*`)
- * via clases `data-[state=closed]:slide-out-*`, pero Radix Dialog evalúa si hay
- * exit animation ANTES de aplicar `data-state="closed"` al DOM — el plugin's
- * vars aún no están activas → Radix concluye "no exit animation" → unmount
- * instantáneo sin animar. Los keyframes propios con `animation: name duration
- * easing forwards` aplicados via class CSS estática evitan ese race.
+ * **Animations (2026-05-12 v4):** keyframes definidos en `globals.css` con
+ * selector `.edit-panel-content[data-state]` directo (no via plugin). Para
+ * que el close funcione, usamos `forceMount` en Portal/Overlay/Content:
+ * Radix mantiene el elemento en DOM siempre, y los keyframes CSS responden
+ * al cambio de `data-state`. `animation-fill-mode: forwards` mantiene el
+ * estado final del keyframe.
  *
  * Ver `docs/research/2026-05-10-settings-desktop-ux-research.md` § "Edit
  * forms desktop" y `docs/plans/2026-05-10-settings-desktop-redesign.md`
@@ -43,16 +41,6 @@ export const EditPanel = RadixDialog.Root
 export const EditPanelTrigger = RadixDialog.Trigger
 export const EditPanelPortal = RadixDialog.Portal
 export const EditPanelClose = RadixDialog.Close
-
-function EditPanelOverlay(props: ComponentPropsWithoutRef<typeof RadixDialog.Overlay>) {
-  const { className = '', ...rest } = props
-  return (
-    <RadixDialog.Overlay
-      className={`edit-panel-overlay fixed inset-0 z-50 bg-black/40 ${className}`}
-      {...rest}
-    />
-  )
-}
 
 type EditPanelContentProps = ComponentPropsWithoutRef<typeof RadixDialog.Content> & {
   children: ReactNode
@@ -67,17 +55,154 @@ type EditPanelContentProps = ComponentPropsWithoutRef<typeof RadixDialog.Content
  *   slide right → left abrir / left → right cerrar.
  *
  * Las animations vienen de la clase `edit-panel-content` definida en
- * `globals.css` (ver doc del módulo arriba).
+ * `globals.css`. `forceMount` en Portal/Overlay/Content garantiza que
+ * Radix NO desmonte automáticamente — el DOM persiste hasta que el
+ * componente padre cierre. Animations responden a `data-state` que sí
+ * cambia correctamente.
  *
  * Children deben estructurarse con `<EditPanelHeader>`, `<EditPanelBody>`,
  * `<EditPanelFooter>`.
  */
 export function EditPanelContent({ children, className = '', ...rest }: EditPanelContentProps) {
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // DEBUG TEMPORAL (2026-05-12 v4): logs granulares para diagnosticar
+  // el bug del close. Mantener hasta que el user confirme que las
+  // animations open + close funcionan visualmente.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const ts = () => `+${performance.now() | 0}ms`
+
+    console.log(`[EditPanel ${ts()}] mount useEffect`)
+
+    function snapshot(label: string, el: HTMLElement | null): void {
+      if (!el) {
+        console.warn(`[EditPanel ${ts()}] ${label}: el is null`)
+        return
+      }
+      const cs = window.getComputedStyle(el)
+      console.log(`[EditPanel ${ts()}] ${label}:`, {
+        dataState: el.getAttribute('data-state'),
+        animationName: cs.animationName,
+        animationDuration: cs.animationDuration,
+        animationFillMode: cs.animationFillMode,
+        animationPlayState: cs.animationPlayState,
+        animationDelay: cs.animationDelay,
+        animationIterationCount: cs.animationIterationCount,
+        transform: cs.transform,
+        opacity: cs.opacity,
+        display: cs.display,
+        visibility: cs.visibility,
+        classList: Array.from(el.classList),
+      })
+    }
+
+    // Listener GLOBAL en document — captura ANY animation event, no perdemos nada
+    function onAnimStart(e: AnimationEvent): void {
+      const target = e.target as HTMLElement
+      if (
+        !target.classList?.contains('edit-panel-content') &&
+        !target.classList?.contains('edit-panel-overlay')
+      ) {
+        return
+      }
+      console.log(`[EditPanel ${ts()}] animationstart:`, {
+        name: e.animationName,
+        target: target.className,
+        dataState: target.getAttribute('data-state'),
+      })
+    }
+    function onAnimEnd(e: AnimationEvent): void {
+      const target = e.target as HTMLElement
+      if (
+        !target.classList?.contains('edit-panel-content') &&
+        !target.classList?.contains('edit-panel-overlay')
+      ) {
+        return
+      }
+      console.log(`[EditPanel ${ts()}] animationend:`, {
+        name: e.animationName,
+        target: target.className,
+        dataState: target.getAttribute('data-state'),
+      })
+    }
+    function onAnimCancel(e: AnimationEvent): void {
+      const target = e.target as HTMLElement
+      console.warn(`[EditPanel ${ts()}] animationcancel:`, {
+        name: e.animationName,
+        target: target.className,
+        dataState: target.getAttribute('data-state'),
+      })
+    }
+    document.addEventListener('animationstart', onAnimStart, true)
+    document.addEventListener('animationend', onAnimEnd, true)
+    document.addEventListener('animationcancel', onAnimCancel, true)
+
+    // MutationObserver en BODY — captura agregar/quitar elementos en cualquier lado
+    // del árbol (Radix Portal anida en body). Si el elemento se desmonta sin que
+    // veamos data-state="closed", lo vemos acá.
+    const bodyObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type !== 'childList') continue
+        m.removedNodes.forEach((n) => {
+          if (n instanceof HTMLElement && n.classList.contains('edit-panel-content')) {
+            console.log(`[EditPanel ${ts()}] REMOVED edit-panel-content from DOM`, {
+              dataState: n.getAttribute('data-state'),
+            })
+          }
+        })
+        m.addedNodes.forEach((n) => {
+          if (n instanceof HTMLElement && n.classList.contains('edit-panel-content')) {
+            console.log(`[EditPanel ${ts()}] ADDED edit-panel-content to DOM`, {
+              dataState: n.getAttribute('data-state'),
+            })
+          }
+        })
+      }
+    })
+    bodyObserver.observe(document.body, { childList: true, subtree: true })
+
+    // MutationObserver en el elemento mismo — captura cambios de data-state
+    requestAnimationFrame(() => {
+      const el =
+        contentRef.current ??
+        (document.querySelector('.edit-panel-content[data-state]') as HTMLElement | null)
+      if (!el) {
+        console.warn(`[EditPanel ${ts()}] no encontré .edit-panel-content`)
+        return
+      }
+      snapshot('initial (after RAF)', el)
+
+      const attrObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.type === 'attributes' && m.attributeName === 'data-state') {
+            console.log(`[EditPanel ${ts()}] data-state ATTRIBUTE CHANGED`)
+            snapshot('post state-change', el)
+          }
+        }
+      })
+      attrObserver.observe(el, { attributes: true, attributeFilter: ['data-state'] })
+    })
+
+    return () => {
+      console.log(`[EditPanel ${ts()}] cleanup useEffect`)
+      document.removeEventListener('animationstart', onAnimStart, true)
+      document.removeEventListener('animationend', onAnimEnd, true)
+      document.removeEventListener('animationcancel', onAnimCancel, true)
+      bodyObserver.disconnect()
+    }
+  }, [])
+
   return (
-    <EditPanelPortal>
-      <EditPanelOverlay />
+    <EditPanelPortal forceMount>
+      <RadixDialog.Overlay
+        forceMount
+        className="edit-panel-overlay fixed inset-0 z-50 bg-black/40 data-[state=closed]:pointer-events-none"
+      />
       <RadixDialog.Content
-        className={`edit-panel-content fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl border-t shadow-2xl outline-none md:bottom-0 md:left-auto md:right-0 md:top-0 md:h-screen md:max-h-screen md:w-[520px] md:rounded-none md:border-l md:border-t-0 ${className}`}
+        ref={contentRef}
+        forceMount
+        className={`edit-panel-content fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl border-t shadow-2xl outline-none data-[state=closed]:pointer-events-none md:bottom-0 md:left-auto md:right-0 md:top-0 md:h-screen md:max-h-screen md:w-[520px] md:rounded-none md:border-l md:border-t-0 ${className}`}
         style={{
           backgroundColor: 'var(--surface)',
           borderColor: 'var(--border)',

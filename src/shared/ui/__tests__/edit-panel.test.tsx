@@ -113,7 +113,13 @@ describe('<EditPanel> primitive', () => {
   })
 
   describe('open vs closed', () => {
-    it('cuando open=false, el content NO se monta', () => {
+    it('cuando open=false, el content SÍ está en el DOM con data-state="closed" (forceMount)', () => {
+      // Post 2026-05-12 v4: `forceMount` aplicado al Portal/Overlay/Content
+      // para que Radix NO desmonte automáticamente. Esto garantiza que las
+      // CSS animations del close ejecuten (`.edit-panel-content[data-state="closed"]`
+      // aplica slide-out). El elemento queda en DOM pero con animation-fill-mode:
+      // forwards lo mantiene off-screen, y data-[state=closed]:pointer-events-none
+      // evita interacciones.
       render(
         <EditPanel open={false}>
           <EditPanelContent aria-describedby={undefined}>
@@ -124,8 +130,14 @@ describe('<EditPanel> primitive', () => {
           </EditPanelContent>
         </EditPanel>,
       )
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(screen.queryByText('Hidden title')).not.toBeInTheDocument()
+      // El dialog existe en el DOM (forceMount)
+      const dialog = screen.queryByRole('dialog')
+      expect(dialog).toBeInTheDocument()
+      // Pero está en estado closed
+      expect(dialog?.getAttribute('data-state')).toBe('closed')
+      // Y tiene pointer-events-none aplicado vía data attr selector (que
+      // jsdom no procesa, pero validamos que la clase declarativa esté)
+      expect(dialog?.className).toMatch(/data-\[state=closed\]:pointer-events-none/)
     })
   })
 })

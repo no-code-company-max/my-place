@@ -3,22 +3,23 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import {
-  BottomSheet,
-  BottomSheetBody,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetFooter,
-  BottomSheetHeader,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelBody,
+  EditPanelClose,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelFooter,
+  EditPanelHeader,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import { toast } from '@/shared/ui/toaster'
 import { isDomainError } from '@/shared/errors/domain-error'
 import { inviteMemberSchema } from '@/features/members/schemas'
 import { inviteMemberAction } from '../server/actions/invite'
 
 /**
- * BottomSheet para invitar un nuevo owner desde `/settings/access`.
+ * Panel responsive para invitar un nuevo owner desde `/settings/access`.
+ * Desktop: side drawer derecho 520px. Mobile: bottom sheet.
  *
  * El flow `/access` SÓLO invita owners (no members ni admins): el form fuerza
  * `asOwner: true` (no expone checkbox) y la action server-side aplica auth
@@ -84,17 +85,17 @@ export function InviteOwnerSheet({ open, onOpenChange, placeSlug }: Props): Reac
   }
 
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange}>
-      <BottomSheetContent aria-describedby={undefined}>
-        <BottomSheetHeader>
-          <BottomSheetTitle>Invitar owner</BottomSheetTitle>
-          <BottomSheetDescription>
+    <EditPanel open={open} onOpenChange={onOpenChange}>
+      <EditPanelContent aria-describedby={undefined}>
+        <EditPanelHeader>
+          <EditPanelTitle>Invitar owner</EditPanelTitle>
+          <EditPanelDescription>
             La persona invitada recibe un email; al aceptar queda como co-owner del place.
-          </BottomSheetDescription>
-        </BottomSheetHeader>
+          </EditPanelDescription>
+        </EditPanelHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <BottomSheetBody>
+          <EditPanelBody>
             <div className="space-y-4 py-2">
               <label className="block">
                 <span className="mb-1 block text-sm text-neutral-600">Email</span>
@@ -114,9 +115,9 @@ export function InviteOwnerSheet({ open, onOpenChange, placeSlug }: Props): Reac
                 ) : null}
               </label>
             </div>
-          </BottomSheetBody>
+          </EditPanelBody>
 
-          <BottomSheetFooter>
+          <EditPanelFooter>
             <button
               type="submit"
               disabled={pending}
@@ -124,7 +125,7 @@ export function InviteOwnerSheet({ open, onOpenChange, placeSlug }: Props): Reac
             >
               {pending ? 'Enviando…' : 'Enviar invitación'}
             </button>
-            <BottomSheetClose asChild>
+            <EditPanelClose asChild>
               <button
                 type="button"
                 disabled={pending}
@@ -132,11 +133,11 @@ export function InviteOwnerSheet({ open, onOpenChange, placeSlug }: Props): Reac
               >
                 Cancelar
               </button>
-            </BottomSheetClose>
-          </BottomSheetFooter>
+            </EditPanelClose>
+          </EditPanelFooter>
         </form>
-      </BottomSheetContent>
-    </BottomSheet>
+      </EditPanelContent>
+    </EditPanel>
   )
 }
 

@@ -2,23 +2,24 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import {
-  BottomSheet,
-  BottomSheetBody,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetFooter,
-  BottomSheetHeader,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelBody,
+  EditPanelClose,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelFooter,
+  EditPanelHeader,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import { toast } from '@/shared/ui/toaster'
 import { isDomainError } from '@/shared/errors/domain-error'
 import { transferOwnershipAction } from '../server/actions'
 
 /**
- * BottomSheet para transferir ownership del place a otro miembro activo.
- * Form inlineado siguiendo el patrón canónico de UX (`category-form-sheet`):
- * inputs en `BottomSheetBody`, submit + cancel en `BottomSheetFooter` sticky.
+ * Panel responsive para transferir ownership a otro miembro activo. Desktop:
+ * side drawer derecho 520px. Mobile: bottom sheet. Form inlineado siguiendo
+ * el patrón canónico: inputs en `EditPanelBody`, submit + cancel en
+ * `EditPanelFooter` sticky.
  *
  * `removeActor=true` cede también la membership del actor (sale del place).
  * Default `false` deja una co-ownership con el target.
@@ -86,18 +87,18 @@ export function TransferOwnershipSheet({
   const noCandidates = candidates.length === 0
 
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange}>
-      <BottomSheetContent aria-describedby={undefined}>
-        <BottomSheetHeader>
-          <BottomSheetTitle>Transferir ownership</BottomSheetTitle>
-          <BottomSheetDescription>
+    <EditPanel open={open} onOpenChange={onOpenChange}>
+      <EditPanelContent aria-describedby={undefined}>
+        <EditPanelHeader>
+          <EditPanelTitle>Transferir ownership</EditPanelTitle>
+          <EditPanelDescription>
             El nuevo owner tiene que ser miembro activo. Si tildás la opción de salir, perdés acceso
             al place en el mismo paso.
-          </BottomSheetDescription>
-        </BottomSheetHeader>
+          </EditPanelDescription>
+        </EditPanelHeader>
 
         <form onSubmit={onSubmit} noValidate>
-          <BottomSheetBody>
+          <EditPanelBody>
             <div className="space-y-4 py-2">
               {noCandidates ? (
                 <p className="text-sm italic text-neutral-500">
@@ -136,9 +137,9 @@ export function TransferOwnershipSheet({
                 </>
               )}
             </div>
-          </BottomSheetBody>
+          </EditPanelBody>
 
-          <BottomSheetFooter>
+          <EditPanelFooter>
             <button
               type="submit"
               disabled={pending || noCandidates}
@@ -146,7 +147,7 @@ export function TransferOwnershipSheet({
             >
               {pending ? 'Transfiriendo…' : 'Transferir ownership'}
             </button>
-            <BottomSheetClose asChild>
+            <EditPanelClose asChild>
               <button
                 type="button"
                 disabled={pending}
@@ -154,11 +155,11 @@ export function TransferOwnershipSheet({
               >
                 Cancelar
               </button>
-            </BottomSheetClose>
-          </BottomSheetFooter>
+            </EditPanelClose>
+          </EditPanelFooter>
         </form>
-      </BottomSheetContent>
-    </BottomSheet>
+      </EditPanelContent>
+    </EditPanel>
   )
 }
 

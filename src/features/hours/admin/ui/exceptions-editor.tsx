@@ -2,15 +2,15 @@
 
 import { useState } from 'react'
 import {
-  BottomSheet,
-  BottomSheetBody,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetFooter,
-  BottomSheetHeader,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelBody,
+  EditPanelClose,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelFooter,
+  EditPanelHeader,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import type { DateException } from '@/features/hours/domain/types'
 import { formatTime } from '@/features/hours/ui/format-time'
 
@@ -24,7 +24,7 @@ import { formatTime } from '@/features/hours/ui/format-time'
  * La `date` se interpreta en el timezone del place (no UTC).
  *
  * UX: lista de filas tappables + botón "Agregar excepción" full-width que
- * abre un `<BottomSheet>`. La edición ocurre en el mismo sheet (tap fila).
+ * abre un `<EditPanel>`. La edición ocurre en el mismo sheet (tap fila).
  *
  * **API pública**: `fields`, `onAdd`, `onUpdate`, `onRemove`. El parent
  * (`<HoursForm>`) es el ÚNICO que invoca `useFieldArray({ name: 'exceptions' })`
@@ -291,7 +291,7 @@ function ExceptionSheet({
 }) {
   const open = sheet.mode !== 'closed'
   return (
-    <BottomSheet
+    <EditPanel
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose()
@@ -300,7 +300,7 @@ function ExceptionSheet({
       {open ? (
         <ExceptionSheetForm sheet={sheet} onAdd={onAdd} onUpdate={onUpdate} onRemove={onRemove} />
       ) : null}
-    </BottomSheet>
+    </EditPanel>
   )
 }
 
@@ -372,14 +372,14 @@ function ExceptionSheetForm({
       : 'Agregar excepción'
 
   return (
-    <BottomSheetContent aria-describedby={undefined}>
-      <BottomSheetHeader>
-        <BottomSheetTitle>{title}</BottomSheetTitle>
-        <BottomSheetDescription>
+    <EditPanelContent aria-describedby={undefined}>
+      <EditPanelHeader>
+        <EditPanelTitle>{title}</EditPanelTitle>
+        <EditPanelDescription>
           Una excepción sobreescribe el horario recurrente de esa fecha.
-        </BottomSheetDescription>
-      </BottomSheetHeader>
-      <BottomSheetBody>
+        </EditPanelDescription>
+      </EditPanelHeader>
+      <EditPanelBody>
         <div className="space-y-4 py-2">
           <label className="block">
             <span className="mb-1 block text-sm text-neutral-600">Fecha</span>
@@ -444,8 +444,8 @@ function ExceptionSheetForm({
             </p>
           ) : null}
         </div>
-      </BottomSheetBody>
-      <BottomSheetFooter>
+      </EditPanelBody>
+      <EditPanelFooter>
         <button
           type="button"
           onClick={handleSubmit}
@@ -481,17 +481,17 @@ function ExceptionSheetForm({
             </button>
           )
         ) : (
-          <BottomSheetClose asChild>
+          <EditPanelClose asChild>
             <button
               type="button"
               className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm"
             >
               Cancelar
             </button>
-          </BottomSheetClose>
+          </EditPanelClose>
         )}
-      </BottomSheetFooter>
-    </BottomSheetContent>
+      </EditPanelFooter>
+    </EditPanelContent>
   )
 }
 

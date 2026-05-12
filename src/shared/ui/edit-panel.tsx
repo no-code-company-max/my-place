@@ -39,7 +39,7 @@ function EditPanelOverlay(props: ComponentPropsWithoutRef<typeof RadixDialog.Ove
   const { className = '', ...rest } = props
   return (
     <RadixDialog.Overlay
-      className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 data-[state=closed]:opacity-0 data-[state=open]:opacity-100 ${className}`}
+      className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-300 ease-out data-[state=closed]:opacity-0 data-[state=open]:opacity-100 ${className}`}
       {...rest}
     />
   )
@@ -65,7 +65,7 @@ export function EditPanelContent({ children, className = '', ...rest }: EditPane
     <EditPanelPortal>
       <EditPanelOverlay />
       <RadixDialog.Content
-        className={`fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl border-t shadow-2xl outline-none transition-transform duration-200 data-[state=closed]:translate-y-full data-[state=open]:translate-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:h-screen md:max-h-screen md:w-[520px] md:rounded-none md:border-l md:border-t-0 md:data-[state=closed]:translate-x-full md:data-[state=closed]:translate-y-0 md:data-[state=open]:translate-x-0 ${className}`}
+        className={`fixed bottom-0 left-0 right-0 z-50 flex max-h-[85vh] flex-col rounded-t-2xl border-t shadow-2xl outline-none transition-transform duration-300 ease-out data-[state=closed]:translate-y-full data-[state=open]:translate-y-0 md:bottom-0 md:left-auto md:right-0 md:top-0 md:h-screen md:max-h-screen md:w-[520px] md:rounded-none md:border-l md:border-t-0 md:data-[state=closed]:translate-x-full md:data-[state=closed]:translate-y-0 md:data-[state=open]:translate-x-0 ${className}`}
         style={{
           backgroundColor: 'var(--surface)',
           borderColor: 'var(--border)',

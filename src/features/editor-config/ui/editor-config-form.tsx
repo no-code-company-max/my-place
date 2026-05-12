@@ -2,34 +2,40 @@
 
 import * as React from 'react'
 import { useState, useTransition } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { toast } from '@/shared/ui/toaster'
 import { editorPluginsConfigSchema } from '../domain/schemas'
 import type { EditorPluginsConfig } from '../domain/types'
 import { updateEditorConfigAction } from '../server/actions'
 
 /**
- * Form orchestrator de `/settings/editor`. Toggles per-plugin con
- * autosave + soft barrier:
+ * Form orchestrator de `/settings/editor`. Toggles per-plugin renderizados
+ * como **Card-per-item con switch on/off** (patrón canónico de
+ * `docs/ux-patterns.md` § "Card-per-item con header + body + switch on/off").
  *
- * - Si el form está limpio (`!isDirty`), un toggle dispara persist
- *   inmediato + `toast.success`.
- * - Si ya hay otros pendings, el toggle aplica local + `toast.info(DEFER_HINT)`
- *   y espera el explicit Save.
+ * **Save model — todo manual (post 2026-05-12):**
  *
- * Patrón canónico de `docs/ux-patterns.md` § "Autosave with soft barrier"
- * + § "`persist()` helper as the single commit path".
+ * Cualquier toggle aplica solo localmente; `formState.isDirty` se enciende
+ * vía RHF. El user persiste todos los cambios pendientes con UN tap en el
+ * botón "Guardar cambios" page-level. NO hay autosave por toggle.
  *
- * Form state es la única source of truth (RHF). `methods.reset(snapshot)`
- * post-success re-baselinea defaultValues — sin esto, el botón Save queda
- * "Cambios sin guardar" para siempre.
+ * Iter previa usaba autosave + soft barrier (toggle limpio = persist
+ * inmediato; toggle con dirty = defer). Era confuso: el mismo gesto tenía
+ * dos comportamientos. Migrado a "todo manual" por decisión user
+ * 2026-05-12 (alinear con hours, access, system).
+ *
+ * **Single commit path:** `persist(snapshot)` invocado solo por `onSubmit`.
+ * `methods.reset(snapshot)` post-success re-baselinea defaultValues — sin
+ * esto, el botón Save queda "Cambios sin guardar" para siempre.
  */
 
-const PLUGIN_LABELS: ReadonlyArray<{
+type PluginEntry = {
   key: keyof EditorPluginsConfig
   label: string
   description: string
-}> = [
+}
+
+const PLUGIN_LABELS: ReadonlyArray<PluginEntry> = [
   {
     key: 'youtube',
     label: 'YouTube',
@@ -52,9 +58,6 @@ const PLUGIN_LABELS: ReadonlyArray<{
   },
 ]
 
-const DEFER_HINT =
-  'Cambio aplicado localmente. Tocá «Guardar cambios» para confirmar todos los pendientes.'
-
 export type EditorConfigFormProps = {
   placeId: string
   initial: EditorPluginsConfig
@@ -68,12 +71,19 @@ export function EditorConfigForm({ placeId, initial }: EditorConfigFormProps): R
     defaultValues: initial,
     mode: 'onSubmit',
   })
-  const { register, handleSubmit, getValues, setValue, formState, reset } = methods
+  const { handleSubmit, setValue, control, formState, reset } = methods
   const { isDirty } = formState
 
-  // Helper único de persist. Valida + dispara action + reset(snapshot)
-  // post-success. Usado por explicit Save y autosave.
-  function persist(snapshot: EditorPluginsConfig, opts: { successMessage?: string } = {}) {
+  // `useWatch` para re-render reactivo cuando los toggles cambian — el
+  // switch on/off depende del valor actual, no del defaultValue.
+  const values = useWatch({ control, defaultValue: initial }) as EditorPluginsConfig
+
+  /**
+   * Persiste el snapshot completo. Único caller: `onSubmit` (botón
+   * "Guardar cambios" page-level). NO hay autosave bajo el modelo "todo
+   * manual".
+   */
+  function persist(snapshot: EditorPluginsConfig): void {
     setFormError(null)
     const parsed = editorPluginsConfigSchema.safeParse(snapshot)
     if (!parsed.success) {
@@ -86,7 +96,7 @@ export function EditorConfigForm({ placeId, initial }: EditorConfigFormProps): R
         const result = await updateEditorConfigAction({ placeId, config: parsed.data })
         if (result.ok) {
           reset(parsed.data)
-          toast.success(opts.successMessage ?? 'Configuración guardada.')
+          toast.success('Configuración guardada.')
         } else {
           toast.error(mapErrorCode(result.error))
         }
@@ -96,22 +106,14 @@ export function EditorConfigForm({ placeId, initial }: EditorConfigFormProps): R
     })
   }
 
-  function onSubmit(values: EditorPluginsConfig) {
-    persist(values)
+  function onSubmit(snapshot: EditorPluginsConfig): void {
+    persist(snapshot)
   }
 
-  function handleToggle(key: keyof EditorPluginsConfig, checked: boolean) {
-    const wasDirty = isDirty
-    setValue(key, checked, { shouldDirty: true })
-    const next = { ...getValues(), [key]: checked }
-    if (wasDirty) {
-      // Soft barrier: hay otros pendings — diferimos hasta el explicit Save.
-      toast.info(DEFER_HINT)
-      return
-    }
-    persist(next, {
-      successMessage: checked ? `${labelFor(key)} activado.` : `${labelFor(key)} desactivado.`,
-    })
+  function handleToggle(key: keyof EditorPluginsConfig, next: boolean): void {
+    // Sólo muta RHF — sin autosave. RHF marca dirty automáticamente; el
+    // botón "Guardar cambios" se habilita.
+    setValue(key, next, { shouldDirty: true })
   }
 
   return (
@@ -125,37 +127,24 @@ export function EditorConfigForm({ placeId, initial }: EditorConfigFormProps): R
         </div>
       ) : null}
 
-      <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
-        {PLUGIN_LABELS.map(({ key, label, description }) => {
-          const inputId = `editor-config-${key}`
-          return (
-            <li key={key} className="flex min-h-[56px] items-center justify-between gap-4 py-2">
-              <div className="min-w-0">
-                <label htmlFor={inputId} className="block text-sm font-medium text-neutral-900">
-                  {label}
-                </label>
-                <p className="text-xs text-neutral-500">{description}</p>
-              </div>
-              <input
-                id={inputId}
-                type="checkbox"
-                {...register(key)}
-                onChange={(e) => handleToggle(key, e.target.checked)}
-                disabled={pending}
-                className="h-5 w-5 cursor-pointer accent-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-describedby={`${inputId}-desc`}
-              />
-            </li>
-          )
-        })}
-      </ul>
+      <div className="space-y-3">
+        {PLUGIN_LABELS.map((plugin) => (
+          <PluginCard
+            key={plugin.key}
+            plugin={plugin}
+            isOn={values[plugin.key] ?? true}
+            disabled={pending}
+            onToggle={(next) => handleToggle(plugin.key, next)}
+          />
+        ))}
+      </div>
 
       <div className="flex items-center justify-between gap-3">
         <span
           aria-live="polite"
           className={isDirty && !pending ? 'text-xs text-neutral-500' : 'text-xs text-transparent'}
         >
-          {isDirty && !pending ? '• Cambios sin guardar' : ' '}
+          {isDirty && !pending ? '• Cambios sin guardar' : ' '}
         </span>
         <button
           type="submit"
@@ -169,8 +158,77 @@ export function EditorConfigForm({ placeId, initial }: EditorConfigFormProps): R
   )
 }
 
-function labelFor(key: keyof EditorPluginsConfig): string {
-  return PLUGIN_LABELS.find((p) => p.key === key)?.label ?? key
+/**
+ * Card individual de plugin con header (label + descripción + switch).
+ * Sin body (los plugins no tienen sub-data) — el card se reduce al header.
+ *
+ * Patrón canónico de `docs/ux-patterns.md` § "Card-per-item": container
+ * rounded border-neutral-200, header h-[56px] mínimo, switch role="switch"
+ * accesible. Idéntico al `<DaySwitch>` de hours/week-editor-day-card.
+ */
+function PluginCard({
+  plugin,
+  isOn,
+  disabled,
+  onToggle,
+}: {
+  plugin: PluginEntry
+  isOn: boolean
+  disabled: boolean
+  onToggle: (next: boolean) => void
+}): React.JSX.Element {
+  return (
+    <div className="rounded-md border border-neutral-200">
+      <div className="flex min-h-[56px] items-center gap-3 px-3 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-base font-medium text-neutral-900">{plugin.label}</div>
+          <div className="text-xs text-neutral-500">{plugin.description}</div>
+        </div>
+        <PluginSwitch isOn={isOn} label={plugin.label} disabled={disabled} onToggle={onToggle} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Switch accesible sin dep nueva. `role="switch"` + `aria-checked` cumplen
+ * WAI-ARIA. Touch target 44px (el contenedor padre tiene min-h-[56px]).
+ *
+ * Implementación idéntica al `<DaySwitch>` de
+ * `src/features/hours/admin/ui/week-editor-day-card.tsx` para coherencia
+ * visual cross-feature.
+ */
+function PluginSwitch({
+  isOn,
+  label,
+  disabled,
+  onToggle,
+}: {
+  isOn: boolean
+  label: string
+  disabled: boolean
+  onToggle: (next: boolean) => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      aria-label={`${label}: ${isOn ? 'activado, tocá para desactivar' : 'desactivado, tocá para activar'}`}
+      disabled={disabled}
+      onClick={() => onToggle(!isOn)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 ${
+        isOn ? 'bg-neutral-900' : 'bg-neutral-300'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+          isOn ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  )
 }
 
 function mapErrorCode(code: 'forbidden' | 'invalid' | 'not_found'): string {

@@ -1,9 +1,16 @@
 /**
- * Smoke tests del `EditorConfigForm`. Cubre:
- *  - render: 4 toggles con labels en español + Save disabled de arranque.
- *  - autosave: cambiar 1 toggle desde estado limpio → action invocado.
- *  - soft barrier: cambiar 1 toggle estando dirty → toast.info, sin action.
- *  - dirty indicator + Save habilitado tras cambio.
+ * Smoke tests del `EditorConfigForm` post-rediseño "todo manual"
+ * (2026-05-12). Cubre:
+ *
+ *  - render: 4 cards con switches accesibles + Save disabled de arranque
+ *  - toggle aplica local (NO autosave) + dirty indicator se activa
+ *  - botón "Guardar cambios" se habilita cuando dirty
+ *  - submit invoca action con snapshot completo + reset post-success
+ *  - error mapping cuando action retorna forbidden
+ *
+ * Iter previa tenía tests de autosave + soft barrier — eliminados al
+ * migrar al save model "todo manual" (canon docs/ux-patterns.md
+ * § "Save model — todo manual").
  */
 
 import * as React from 'react'
@@ -41,7 +48,7 @@ const ALL_TRUE = {
   ivoox: true,
 }
 
-describe('EditorConfigForm', () => {
+describe('EditorConfigForm — save model "todo manual"', () => {
   beforeEach(() => {
     updateEditorConfigActionFn.mockClear()
     updateEditorConfigActionFn.mockResolvedValue({ ok: true })
@@ -54,75 +61,112 @@ describe('EditorConfigForm', () => {
     cleanup()
   })
 
-  it('renderiza los 4 toggles con labels en español y Save disabled', () => {
+  it('renderiza 4 cards con switches accesibles + Save disabled inicial', () => {
     render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
-    expect(screen.getByLabelText('YouTube')).toBeInTheDocument()
-    expect(screen.getByLabelText('Spotify')).toBeInTheDocument()
-    expect(screen.getByLabelText('Apple Podcasts')).toBeInTheDocument()
-    expect(screen.getByLabelText('iVoox')).toBeInTheDocument()
+    // Cada plugin tiene un switch con role="switch" y aria-label que incluye el nombre
+    const switches = screen.getAllByRole('switch')
+    expect(switches).toHaveLength(4)
+    expect(switches[0]?.getAttribute('aria-label')).toMatch(/YouTube/)
+    expect(switches[1]?.getAttribute('aria-label')).toMatch(/Spotify/)
+    expect(switches[2]?.getAttribute('aria-label')).toMatch(/Apple Podcasts/)
+    expect(switches[3]?.getAttribute('aria-label')).toMatch(/iVoox/)
+    // Todos inician en ON (initial ALL_TRUE)
+    for (const s of switches) {
+      expect(s.getAttribute('aria-checked')).toBe('true')
+    }
+    // Botón Save disabled de arranque
     expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
   })
 
-  it('autosave: cambiar 1 toggle desde estado limpio invoca el action', async () => {
+  it('toggle aplica solo local (NO invoca action) + habilita el botón Save', async () => {
     render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
-    fireEvent.click(screen.getByLabelText('Spotify'))
+    const spotify = screen.getAllByRole('switch')[1]!
+    fireEvent.click(spotify)
+
+    // El action NO se invocó — no hay autosave bajo el modelo "todo manual"
+    expect(updateEditorConfigActionFn).not.toHaveBeenCalled()
+
+    // El switch refleja el nuevo estado (OFF)
+    await waitFor(() => {
+      expect(spotify.getAttribute('aria-checked')).toBe('false')
+    })
+
+    // El botón Save se habilita
+    expect(screen.getByRole('button', { name: 'Guardar cambios' })).not.toBeDisabled()
+
+    // El indicator "• Cambios sin guardar" aparece
+    expect(screen.getByText(/Cambios sin guardar/)).toBeInTheDocument()
+  })
+
+  it('submit invoca action con snapshot completo + reset post-success', async () => {
+    render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
+    // Toggle 2 plugins
+    fireEvent.click(screen.getAllByRole('switch')[1]!) // Spotify OFF
+    fireEvent.click(screen.getAllByRole('switch')[3]!) // iVoox OFF
+
+    // Submit
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
     await waitFor(() => {
       expect(updateEditorConfigActionFn).toHaveBeenCalledTimes(1)
     })
+
     const arg = updateEditorConfigActionFn.mock.calls[0]?.[0] as {
       placeId: string
       config: typeof ALL_TRUE
     }
     expect(arg.placeId).toBe('place_1')
-    expect(arg.config).toEqual({ ...ALL_TRUE, spotify: false })
+    expect(arg.config).toEqual({
+      youtube: true,
+      spotify: false,
+      applePodcasts: true,
+      ivoox: false,
+    })
+
+    // toast.success disparado
     await waitFor(() => {
       expect(toastSuccess).toHaveBeenCalled()
     })
+
+    // Post-reset: el botón Save vuelve a disabled (form clean)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Guardar cambios' })).toBeDisabled()
+    })
   })
 
-  it('soft barrier: cambiar un 2do toggle defiere y muestra toast.info', async () => {
-    // Bloqueamos el primer save para que el form quede dirty cuando el 2do toggle dispare.
-    let resolveFirst: ((v: { ok: true }) => void) | null = null
-    updateEditorConfigActionFn.mockImplementationOnce(
-      () => new Promise<{ ok: true }>((r) => (resolveFirst = r)),
-    )
-
+  it('cero invocaciones de toast.info (soft barrier removido)', () => {
     render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
-
-    // 1er toggle dispara persist.
-    fireEvent.click(screen.getByLabelText('Spotify'))
-    await waitFor(() => {
-      expect(updateEditorConfigActionFn).toHaveBeenCalledTimes(1)
-    })
-
-    // 2do toggle estando todavía pending → form is dirty → defer.
-    fireEvent.click(screen.getByLabelText('YouTube'))
-    expect(toastInfo).toHaveBeenCalled()
-    // No se llama un 2do persist.
-    expect(updateEditorConfigActionFn).toHaveBeenCalledTimes(1)
-
-    if (resolveFirst) (resolveFirst as (v: { ok: true }) => void)({ ok: true })
-  })
-
-  it('autosave envía sólo el snapshot del cambio (caso típico, sin contención)', async () => {
-    render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
-    fireEvent.click(screen.getByLabelText('YouTube'))
-    await waitFor(() => {
-      expect(updateEditorConfigActionFn).toHaveBeenCalledTimes(1)
-    })
-    const arg = updateEditorConfigActionFn.mock.calls[0]?.[0] as {
-      config: typeof ALL_TRUE
-    }
-    expect(arg.config).toEqual({ ...ALL_TRUE, youtube: false })
+    // Toggle múltiples sin Save — bajo el modelo previo esto disparaba
+    // toast.info(DEFER_HINT). Ahora no debe disparar nada.
+    fireEvent.click(screen.getAllByRole('switch')[0]!)
+    fireEvent.click(screen.getAllByRole('switch')[1]!)
+    fireEvent.click(screen.getAllByRole('switch')[2]!)
+    expect(toastInfo).not.toHaveBeenCalled()
+    expect(updateEditorConfigActionFn).not.toHaveBeenCalled()
   })
 
   it('muestra toast.error cuando el action retorna error: forbidden', async () => {
     updateEditorConfigActionFn.mockResolvedValueOnce({ ok: false, error: 'forbidden' })
     render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
-    fireEvent.click(screen.getByLabelText('YouTube'))
+    fireEvent.click(screen.getAllByRole('switch')[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
     await waitFor(() => {
       expect(toastError).toHaveBeenCalled()
     })
     expect(toastError.mock.calls[0]?.[0]).toMatch(/permiso/i)
+  })
+
+  it('switch visual refleja correctamente el estado ON/OFF (aria-checked)', async () => {
+    render(<EditorConfigForm placeId="place_1" initial={ALL_TRUE} />)
+    const youtube = screen.getAllByRole('switch')[0]!
+    expect(youtube.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(youtube)
+    await waitFor(() => {
+      expect(youtube.getAttribute('aria-checked')).toBe('false')
+    })
+    fireEvent.click(youtube)
+    await waitFor(() => {
+      expect(youtube.getAttribute('aria-checked')).toBe('true')
+    })
   })
 })

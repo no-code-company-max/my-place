@@ -296,6 +296,8 @@ Reference: `src/features/hours/admin/ui/week-editor-day-card.tsx` § `DayOverflo
 - NO uses `destructive: true` para actions reversibles (e.g. "Archivar" que se puede des-archivar). Para esas, el patrón "amber semantic" — sin confirm forzado, color ámbar en vez de rojo.
 - Si el callsite necesita confirmación CON inputs adicionales (e.g. "Escribí el nombre del place para confirmar"), el primitive no cubre ese case — usar `<Dialog>` custom.
 
+**Permission gating del action server-side:** el confirm dialog es UX — NO sustituye al gate de permisos en el server. Si la action destructiva está delegable, agregá el permission code atómico al enum `PERMISSIONS_ALL` en `src/features/groups/domain/permissions.ts` y aplicalo en el server action con `hasPermission(actorId, placeId, 'feature:action-name')`. Owner siempre bypaseá automáticamente. Patrón canónico: `revokeInvitationAction` con `members:revoke-invitation` (post-2026-05-12). NO hardcodear "owner only" en el action — eso bloquea delegación legítima futura a grupos custom.
+
 ## `<BottomSheet>` for add / edit forms
 
 **What.** Forms with multiple inputs (time pickers, day picker, radios) open in a `<BottomSheet>` anchored to the bottom of the viewport — not a centered `<Dialog>`, not inline.
@@ -335,6 +337,47 @@ Same form layout, mismo botón **"Listo"** (NO "Guardar" — ese es el page-leve
 - Don't render the inner sheet form unless `open` — otherwise initial-state hooks (`useState`) run with stale defaults.
 - The sheet portals to `<body>` — pass state via the `SheetState` discriminated union, not parent context.
 - Si tu sheet necesita un 3er mode (e.g. day picker para add-new-day en hours iter previa), preferí refactorizar el flujo a UN solo entry point en lugar de inflar el discriminated union. La iter actual de hours eliminó `add-new-day` cuando los 7 días pasaron a tener su propio switch.
+
+## Side drawer responsive (`<EditPanel>` primitive)
+
+**What.** Primitive responsive que extiende `<BottomSheet>` a desktop como **side drawer derecho 520px**. UN solo componente, dos layouts via clases Tailwind — sin `useMediaQuery`, sin hydration mismatch.
+
+- **Mobile (default)**: bottom sheet anclado al bottom, slide bottom→top abrir / top→bottom cerrar.
+- **Desktop (`md:` ≥768px)**: side drawer fixed right, full height, w-520px, slide right→left abrir / left→right cerrar.
+- **Overlay**: fade in/out en ambos viewports.
+
+**API estructural idéntica a `<BottomSheet>`:** `EditPanel`, `EditPanelContent`, `EditPanelHeader`, `EditPanelTitle`, `EditPanelDescription`, `EditPanelBody`, `EditPanelFooter`, `EditPanelClose`. Migrar de uno a otro es drop-in (cambiar el import y el prefijo de los tags).
+
+**When to use.** Forms con ≥2 inputs invocados desde una list/row en `/settings/*` que se benefician del side drawer en desktop (la lista de fondo queda visible — Smashing 2026 decision tree). Es el primitive **canónico para todos los form sheets de settings/\*** post-2026-05-12. `<BottomSheet>` queda como primitive base sin desktop adaptation.
+
+**When NOT to use.**
+
+- Confirms cortos / alerts → `<Dialog>` (centered).
+- Forms standalone que toman toda la pantalla → su propia ruta.
+- Single-input prompts → `<DropdownMenuItem>` con inline.
+
+**Animations canónicas (post-2026-05-12 v5):**
+
+```
+data-[state=open]:animate-in data-[state=closed]:animate-out
+data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom
+data-[state=open]:duration-300 data-[state=closed]:duration-200
+md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=closed]:slide-out-to-bottom-0
+md:data-[state=open]:slide-in-from-right md:data-[state=closed]:slide-out-to-right
+```
+
+- Plugin `tailwindcss-animate` requerido (instalado en `tailwind.config.ts`).
+- `animate-in/out` aplica `animation-name: enter / exit` — distintos entre estados, lo que permite a Radix Dialog Presence detectar el cambio y esperar al `animationend` antes de unmount.
+- `slide-in-from-bottom-0 / slide-out-to-bottom-0` en md: **neutralizan** el translateY del mobile cuando aplica el slide-from-right desktop.
+- Durations asimétricas: 300ms abrir (decel, invitacional) / 200ms cerrar (accel, responsivo).
+
+**How.** Reference implementation: `src/shared/ui/edit-panel.tsx` + callsites en `features/members/invitations/ui/invite-owner-sheet.tsx`, `features/places/ui/transfer-ownership-sheet.tsx`, `features/hours/admin/ui/exceptions-editor.tsx`, `features/hours/admin/ui/week-editor-window-sheet.tsx`.
+
+**Pitfalls.**
+
+- **NO usar `forceMount`** (anti-pattern documentado abajo). El primitive original lo intentó como fix de animation close — rompió otras cosas (flash visual al cargar + clicks bloqueados por overlays persistentes).
+- **NO definir keyframes propios** en `globals.css` para reemplazar `tailwindcss-animate`. Probado y descartado: el race condition con `stylesRef` cached de Radix Presence hace que el close no se anime. El plugin sí lo resuelve correctamente.
+- El plugin agrega utilities `animate-in/out`, `slide-in-from-*`, `fade-in/out` que ya usan también `<DropdownMenu>` y `<CommunitySwitcher>`. Pre-2026-05-12 esas clases eran no-op silenciosas — el plugin no estaba instalado.
 
 ## Per-row actions (`<RowActions>`) — layout unificado
 
@@ -544,6 +587,8 @@ These were rejected in the hours redesign. Don't reintroduce them.
 - **`text-muted` for 3-dot dropdown triggers.** `var(--muted)` resolves to a beige-gray that disappears against the cream page bg. Use `text-neutral-600`.
 - **Top-right "+ Nueva X" filled accent button.** Competes with sheet primary CTAs and reads as global. Place an "+ Nueva X" dashed-border full-width button _after_ the list instead.
 - **`bg-surface` rounded card around a settings row list.** Adds visual weight without information. The cream page background + `divide-y divide-neutral-200 border-y` is the canonical container.
+- **`forceMount` en Radix Dialog (`<EditPanel>`, `<BottomSheet>`, `<Dialog>`) "para arreglar animation close".** Probado y descartado (2026-05-12 iter v4). Síntomas: (a) flash visual al cargar la página — el dialog se monta con `data-state="closed"` y la animation slide-down ejecuta desde posición visible inicial. (b) Clicks bloqueados — Radix aplica `pointer-events: auto` como inline style que overridea `data-[state=closed]:pointer-events-none` por specificity, dejando overlays invisibles interceptando todo. Fix correcto: pattern `tailwindcss-animate` con `animate-in/out + slide-in-from-*` (ver § "Side drawer responsive").
+- **Definir keyframes CSS propios en `globals.css` para reemplazar `tailwindcss-animate` en Radix Dialog.** Probado y descartado (iter v3). El issue: Radix Dialog Presence cachea `stylesRef.current` al mount y NO lo re-lee al cambio de state. Cuando present pasa de true a false, lee el `animationName` cacheado (que es la del open), compara con el current (también del open cached) → "no isAnimating" → unmount inmediato sin animar. El plugin `tailwindcss-animate` evita este race con su estructura CSS específica (`animate-in` setea `animation-name: enter`, `animate-out` setea `exit` — nombres garantizados distintos).
 
 ---
 
@@ -570,6 +615,35 @@ When redesigning a settings page, apply in order:
 17. **Verificá scroll-safe actions:** cero botones full-width en el body de cards (§ "Acciones fuera del scroll path").
 18. **Verificá confirm dialog en destructives:** todas las actions con `destructive: true` en `<RowActions>` usan el confirm automático. Para destructives standalone, `<Dialog>` propio.
 19. **Validate at 360px.** No horizontal scroll, no clipped CTAs. Validate the bottom sheet footer respects `safe-area-inset-bottom` on iOS.
+
+---
+
+## Cuándo dividir una sub-page settings
+
+Cuando una sub-page existente mezcla **más de un concern semántico**, el rediseño es oportunidad para dividir en sub-pages dedicadas. Eso protege el modelo mental del user y evita que decisiones destructivas convivan con config trivial.
+
+**Heurística para decidir si dividir:**
+
+1. **Concerns con DOMINIOS distintos.** "Owners + transfer ownership" (admin chrome) vs "Salir del place" (lifecycle decision) son dominios distintos aunque convivan hoy en `/settings/access`. Decisión 2026-05-12: split a `/settings/system`.
+2. **Riesgo de acción accidental.** Si una page contiene un botón destructivo prominente (rojo) junto a controles de config rutinaria, el user puede llegar accidentalmente al destructive mientras edita config. Mover el destructive a su propia page con copy contextual reduce ese riesgo.
+3. **Visibilidad por rol distinta.** Si parte del concern es owner-only y parte es para todos los miembros, conviene split: el owner-only va a una sub-page con `requiredRole: 'owner'` en `settings-sections.ts`, el rest a otra sin gate.
+4. **>5 secciones bajo el mismo h1.** Indica que la page está intentando cubrir demasiado. Ejemplo: `/settings/members` hoy mezcla 5 concerns (lista, invitar, pendientes, transfer, leave) → candidata fuerte a split (ver § "Settings/members" abajo).
+
+**Cuándo NO dividir:**
+
+- Un solo concern con N secciones complementarias (e.g. `/settings/hours` con timezone + recurring + exceptions — son todas configuración del MISMO concept "horario").
+- Sub-pages con menos de 30 LOC de content — fragmentar agrega navegación sin reducir complejidad.
+- Concerns que el user típicamente revisa juntos en el mismo flow.
+
+**Cuando dividís, documentar:**
+
+1. **ADR en `docs/decisions/<fecha>-settings-<area>-for-<reason>.md`** explicando: contexto, decisión, alternativas consideradas, implicaciones (sidebar entry, visibilidad, behavior edge cases). Ejemplo canónico: `docs/decisions/2026-05-12-settings-system-for-lifecycle.md`.
+2. **Actualizar `features/shell/settings-nav/domain/settings-sections.ts`** sumando el slug nuevo con label + `requiredRole` si aplica.
+3. **Actualizar el icon mapping** en `settings-nav/ui/settings-nav-fab.tsx` (FAB mobile) Y `settings-shell/domain/sections.tsx` (sidebar desktop).
+4. **Actualizar `SECTION_ICON` tests** en `settings-sections.test.ts` — espera todas las sections + labels + ordering.
+5. **Update mini-spec en este doc** (§ "Per-feature application matrix") explicando qué del patrón canónico aplica a la nueva sub-page + qué extensions necesita.
+
+**Reference implementation del flow completo de split:** `/settings/access` → `/settings/system` (2026-05-12). 2 sesiones: backend del action nuevo + ADR (Sesión 1, sin UI), UI con primitive + nueva route + sidebar entry (Sesión 2).
 
 ---
 

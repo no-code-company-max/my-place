@@ -33,63 +33,45 @@ describe('<RowActions> adaptive primitive', () => {
       return { onEdit, onRemove }
     }
 
-    it('mobile: renderea chip como dropdown trigger (button con aria-label)', () => {
+    it('renderea chip display-only (no es button) + icon buttons al lado', () => {
       renderInline()
-      const trigger = screen.getByRole('button', {
-        name: 'Opciones para ventana 09:00 a 17:00 del Lunes',
-      })
-      expect(trigger).toBeInTheDocument()
-      // Mobile-only via CSS
-      expect(trigger.className).toMatch(/md:hidden/)
-      // Contenido del chip (children) está en el trigger
-      expect(trigger.textContent).toContain('09:00')
-      expect(trigger.textContent).toContain('17:00')
+      // Iconos visibles en ambos viewports (mobile + desktop unificado)
+      expect(screen.getByTestId('edit-icon')).toBeInTheDocument()
+      expect(screen.getByTestId('remove-icon')).toBeInTheDocument()
+      // El chip ya no es un button (no chip-as-trigger). El children sigue
+      // visible como texto.
+      expect(screen.getByText('09:00 → 17:00')).toBeInTheDocument()
     })
 
-    it('desktop: renderea chip + icon buttons inline (hidden md:inline-flex)', () => {
+    it('icon buttons tienen aria-label = action.label', () => {
       renderInline()
-      const desktopWrapper = document.querySelector('.hidden.md\\:inline-flex')
-      expect(desktopWrapper).not.toBeNull()
-      // Icons visibles
-      expect(screen.getAllByTestId('edit-icon').length).toBeGreaterThan(0)
-      expect(screen.getAllByTestId('remove-icon').length).toBeGreaterThan(0)
+      expect(screen.getByRole('button', { name: 'Editar' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument()
     })
 
-    it('desktop icon buttons tienen aria-label = action.label', () => {
-      renderInline()
-      // Buscamos buttons con aria-label "Editar" / "Eliminar" (los desktop)
-      const editBtn = screen.getAllByRole('button', { name: 'Editar' })
-      const removeBtn = screen.getAllByRole('button', { name: 'Eliminar' })
-      expect(editBtn.length).toBeGreaterThan(0)
-      expect(removeBtn.length).toBeGreaterThan(0)
-    })
-
-    it('desktop click en icon button llama onSelect del action', () => {
+    it('click en icon button no-destructive llama onSelect directo', () => {
       const { onEdit } = renderInline()
-      const editBtn = screen.getAllByRole('button', { name: 'Editar' })[0]!
-      fireEvent.click(editBtn)
+      fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
       expect(onEdit).toHaveBeenCalledTimes(1)
     })
 
-    it('desktop action destructive aplica clase visual destructive (red-600)', () => {
+    it('action destructive aplica clase visual destructive (red-600) al icon button', () => {
       renderInline()
-      const removeBtn = screen.getAllByRole('button', { name: 'Eliminar' })[0]!
+      const removeBtn = screen.getByRole('button', { name: 'Eliminar' })
       expect(removeBtn.className).toMatch(/text-red-600/)
     })
 
-    it('desktop action no-destructive usa neutral-600 (chrome calmo)', () => {
+    it('action no-destructive usa neutral-600 (chrome calmo)', () => {
       renderInline()
-      const editBtn = screen.getAllByRole('button', { name: 'Editar' })[0]!
+      const editBtn = screen.getByRole('button', { name: 'Editar' })
       expect(editBtn.className).toMatch(/text-neutral-600/)
     })
 
-    it('chipClassName se aplica al chip mobile y al span desktop', () => {
+    it('chipClassName se aplica al span del chip', () => {
       renderInline()
-      const trigger = screen.getByRole('button', {
-        name: 'Opciones para ventana 09:00 a 17:00 del Lunes',
-      })
-      expect(trigger.className).toContain('rounded-full')
-      expect(trigger.className).toContain('border')
+      const chipSpan = screen.getByText('09:00 → 17:00')
+      expect(chipSpan.className).toContain('rounded-full')
+      expect(chipSpan.className).toContain('border')
     })
   })
 

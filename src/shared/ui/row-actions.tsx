@@ -10,30 +10,21 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui/dialog'
 
 /**
- * `<RowActions>` — primitive responsive de acciones por-row.
+ * `<RowActions>` — primitive de acciones por-row.
  *
- * Resuelve dos UX patterns canónicos según viewport:
+ * Layout unificado mobile + desktop (iter 2026-05-11):
  *
- * - **Mobile**: chip-as-dropdown-trigger. El children es el contenido
- *   visible del chip y se envuelve en un `<DropdownMenuTrigger>`. Tap
- *   abre dropdown con las acciones como items textuales. Patrón
- *   canonizado en `docs/ux-patterns.md` § "Per-item dropdown menus".
+ * - **1-3 actions (InlineMode)**: chip display-only + icon buttons al lado
+ *   con aria-label. Mismo layout en ambos viewports — los íconos son
+ *   visibles y tappeables siempre. Ganancia: descubrimiento + 1-tap edit.
+ *   Trade-off: si hay múltiples chips en una row con flex-wrap, ocupan más
+ *   width y wrap a 2da línea — aceptable.
  *
- * - **Desktop**: chip + icon buttons inline. El children es display-only
- *   (span no clickeable) y los icons se renderean al lado como buttons
- *   con aria-label. Más density (admin que pasa horas en settings),
- *   menos clicks (1 vs 2 del dropdown).
+ * - **Overflow (>3 actions)**: chip + kebab (3-dots) dropdown. Mismo en
+ *   ambos viewports. 4+ icons inline pierden claridad y fuerzan wrap denso.
  *
- * - **Overflow (>3 actions)**: ambos viewports usan kebab (3-dots) en
- *   lugar de chip-as-trigger (>3 icons inline harían chips más anchos
- *   que el viewport mobile, y desktop perdería claridad visual).
- *
- * **Sin `useMediaQuery`**: switching mobile/desktop es CSS-driven via
- * `md:hidden` / `hidden md:inline-flex`. Ambos modes están en el DOM,
- * el viewport decide cuál se ve.
- *
- * **Touch targets**: todos los buttons (kebab, icons desktop) tienen
- * `min-h-11 min-w-11` (44px) per `ux-patterns.md` § "Touch target minimums".
+ * **Touch targets**: todos los icon buttons tienen `min-h-11 min-w-11`
+ * (44px) per `ux-patterns.md` § "Touch target minimums".
  *
  * **Destructive ⇒ confirm dialog** (contrato fuerte): cualquier action con
  * `destructive: true` NO ejecuta `onSelect` directo. Abre un Dialog modal
@@ -42,9 +33,11 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/
  * implementarlo. Customizable vía `confirmTitle`, `confirmDescription`,
  * `confirmActionLabel`.
  *
- * Ver `docs/research/2026-05-10-settings-desktop-ux-research.md` § "Per-row
- * actions desktop" y `docs/plans/2026-05-10-settings-desktop-redesign.md`
- * § "Sesión 4".
+ * **Iter previa**: hasta 2026-05-11 mobile usaba chip-as-dropdown-trigger
+ * (sin icons visibles) y desktop chip + icons. Cambiado a layout unificado
+ * por feedback de UX: los iconos lápiz/trashcan deben ser visibles en
+ * ambos viewports para que el user encuentre la acción sin un tap extra.
+ * Ver `docs/ux-patterns.md` § "Adaptive per-row actions (`<RowActions>`)".
  */
 
 export type RowAction = {
@@ -162,45 +155,28 @@ type ModeProps = Props & {
   onSelect: (action: RowAction) => void
 }
 
-/** Mode 1-3 actions: chip-as-trigger mobile + chip+icons desktop. */
-function InlineMode({ actions, triggerLabel, children, chipClassName, onSelect }: ModeProps) {
+/** Mode 1-3 actions: chip display-only + icon buttons inline (mobile + desktop).
+ *
+ * `triggerLabel` queda como dato disponible si en el futuro reintroducimos
+ * un dropdown wrapper, pero hoy no se renderea — los icon buttons llevan
+ * cada uno su propio aria-label (action.label).
+ */
+function InlineMode({ actions, children, chipClassName, onSelect }: ModeProps) {
   return (
-    <>
-      {/* Mobile: chip ES el dropdown trigger */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" aria-label={triggerLabel} className={`md:hidden ${chipClassName}`}>
-            {children}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          {actions.map((a, i) => (
-            <DropdownMenuItem
-              key={i}
-              onSelect={() => onSelect(a)}
-              className={a.destructive ? 'text-red-600' : ''}
-            >
-              {a.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {/* Desktop: chip display-only + icon buttons inline */}
-      <div className="hidden md:inline-flex md:items-center md:gap-1">
-        <span className={chipClassName}>{children}</span>
-        {actions.map((a, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => onSelect(a)}
-            aria-label={a.label}
-            className={iconButtonClass(a.destructive)}
-          >
-            {a.icon}
-          </button>
-        ))}
-      </div>
-    </>
+    <div className="inline-flex items-center gap-1">
+      <span className={chipClassName}>{children}</span>
+      {actions.map((a, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onSelect(a)}
+          aria-label={a.label}
+          className={iconButtonClass(a.destructive)}
+        >
+          {a.icon}
+        </button>
+      ))}
+    </div>
   )
 }
 

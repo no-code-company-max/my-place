@@ -215,9 +215,11 @@ Same form layout, same Guardar/Cancelar; in `edit` mode an inline "Eliminar" →
 - The `aria-label` must include human-readable identifiers ("Opciones para ventana 09:00 a 17:00 del Lunes") — visible label is just times.
 - Use raw `HH:MM` in `aria-label`, not `formatTime()` (see hydration-safety section).
 
-## Adaptive per-row actions (`<RowActions>`)
+## Per-row actions (`<RowActions>`) — layout unificado
 
-**What.** Single primitive that adapts the per-row action UX between mobile (chip-as-dropdown-trigger) and desktop (chip + icon buttons inline). One CSS-driven component, no `useMediaQuery`.
+**What.** Single primitive for per-row actions. **Layout unificado mobile + desktop**: chip display-only + icon buttons al lado en cualquier viewport.
+
+**Iter previa (hasta 2026-05-11):** mobile usaba chip-as-dropdown-trigger (sin icons visibles), desktop chip + icons. Cambiado a layout unificado por feedback UX: los iconos lápiz/trashcan deben ser visibles en ambos viewports para que el user descubra la acción sin un tap extra. Trade-off aceptado: el chip + 2 íconos + gaps ocupan ~250px, con múltiples chips por row hacen `flex-wrap` a 2da línea — aceptable.
 
 ```tsx
 <RowActions
@@ -239,11 +241,11 @@ Same form layout, same Guardar/Cancelar; in `edit` mode an inline "Eliminar" →
 
 **Behavior.**
 
-- Mobile (`< md`): chip is a `<DropdownMenuTrigger asChild>`. Tap opens dropdown with `actions[].label` as text items. Original chip-as-trigger pattern preserved.
-- Desktop (`md:`): chip is display-only span; `actions[].icon` rendered as `<button aria-label={label}>` next to the chip. More density, fewer clicks.
-- **Overflow** (`actions.length > 3`): both viewports use a kebab `...` button instead. Threshold prevents 4+ icons making chips wider than 360px (mobile) or visually noisy (desktop).
+- **1-3 actions (InlineMode)**: chip display-only span + `actions[].icon` rendered as `<button aria-label={label}>` next to the chip. Same layout en ambos viewports.
+- **Overflow** (`actions.length > 3`): chip + kebab `...` dropdown. 4+ icons inline pierden claridad y fuerzan wrap denso.
+- **Destructive ⇒ confirm dialog automático**: cualquier action con `destructive: true` abre un Dialog modal en lugar de ejecutar `onSelect` directo. Cancelar (focus default) o "Sí, eliminar". Customizable vía `confirmTitle`, `confirmDescription`, `confirmActionLabel`.
 
-**Why.** Density vs touch-target tradeoff is viewport-dependent — admins on desktop want 1-click access to "Editar"/"Eliminar"; users on mobile want chip-as-trigger because hover doesn't exist and dedicated icons would inflate chip width past 360px.
+**Why.** Descubrimiento de acciones > densidad horizontal. Los iconos visibles inline en mobile permiten 1-tap edit/eliminar sin pasar por dropdown. El trade de width adicional se asume — `flex-wrap` cubre el case de múltiples chips.
 
 **When to use.** Per-row actions in lists/grids where each item has 1-3 primary actions and you want optimal UX in both viewports. Replaces the manual chip-as-DropdownMenuTrigger pattern from settings sub-pages.
 

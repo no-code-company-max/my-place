@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/ui/dropdown-menu'
 import { RowActions } from '@/shared/ui/row-actions'
@@ -13,15 +14,24 @@ import { formatTime } from '@/features/hours/ui/format-time'
 import { DAY_ES, type IndexedWindow } from './week-editor'
 
 /**
- * Card por día con switch on/off + ventanas inline + acciones visibles.
+ * Card por día con switch on/off + ventanas inline + acciones contextuales.
  *
- * Reemplaza al `<DayRow>` chip-row que vivía en `week-editor-day-row.tsx`.
- * Diferencias clave:
- *  - Card con border + header propio (en vez de row de tabla `divide-y`).
- *  - Switch on/off prominente como único control de "este día está abierto".
- *  - Cuando ON: ventanas como chips verticales, "+ Agregar ventana" inline,
- *    y "Copiar a otros días" como botón visible (no escondido en overflow).
- *  - Cuando OFF: card colapsado a solo el header — cero contenido extra.
+ * **Diseño "acciones fuera del scroll path" (iter 2026-05-11):**
+ *
+ * El body de la card contiene SOLO chips de información (ventanas + chip
+ * "+ Agregar"). Cero botones full-width. Razón: en mobile, scroll touch
+ * tiene threshold ~10px de movement; un dedo apoyado sobre un botón
+ * grande puede activarlo accidentalmente al hacer swipe vertical. El
+ * patrón anterior (botones `min-h-11 w-full` para "+ Agregar ventana" y
+ * "Copiar a otros días") era propenso a este accident.
+ *
+ * Ahora:
+ *  - "+ Agregar ventana" es un chip pequeño (mismo size que las ventanas
+ *    existentes) inline al final de la fila — discoverable sin ser zona
+ *    grande de tap accidental.
+ *  - "Copiar a otros días…" + "Agregar ventana" viven en un menú 3-dots
+ *    en el header de la card (al lado del switch). 44×44px típico de
+ *    overflow menu, lejos del scroll path del body.
  *
  * El parent (`<WeekEditor>`) renderiza UNA card por cada uno de los 7 días
  * (no condicional por `presentDays`). El switch refleja `windows.length > 0`.
@@ -31,9 +41,8 @@ import { DAY_ES, type IndexedWindow } from './week-editor'
  * Save explícito). Switch OFF → ON: dispara `onAddWindow()` que abre el sheet
  * con el día preseleccionado.
  *
- * **Pattern doc:** ver `docs/ux-patterns.md` § "Color palette & button styles"
- * y § "Per-item dropdown menus" — los chips usan `<RowActions>` y el dropdown
- * "Copiar a..." sigue el patrón canónico.
+ * **Pattern doc:** ver `docs/ux-patterns.md` § "Per-item dropdown menus" y
+ * § "Touch target minimums".
  */
 
 type Props = {
@@ -64,12 +73,23 @@ export function DayCard({
 
   return (
     <div className="rounded-md border border-neutral-200">
-      {/* Header del día: nombre + estado + switch. Siempre visible. */}
+      {/* Header del día: nombre + estado + (3-dots si ON) + switch.
+          El 3-dots solo aparece cuando ON — para OFF no hay acciones
+          contextuales (toggle ON via switch abre el sheet add). */}
       <div
-        className={`flex min-h-[56px] items-center gap-3 px-3 ${isOn ? 'border-b border-neutral-200' : ''}`}
+        className={`flex min-h-[56px] items-center gap-2 px-3 ${isOn ? 'border-b border-neutral-200' : ''}`}
       >
         <span className="flex-1 text-base font-medium text-neutral-900">{dayName}</span>
         <span className="text-xs text-neutral-500">{isOn ? 'Abierto' : 'Cerrado'}</span>
+        {isOn ? (
+          <DayOverflowMenu
+            dayName={dayName}
+            onAddWindow={onAddWindow}
+            onCopyToAll={onCopyToAll}
+            onCopyToWeekdays={onCopyToWeekdays}
+            onCopyToWeekend={onCopyToWeekend}
+          />
+        ) : null}
         <DaySwitch
           isOn={isOn}
           dayName={dayName}
@@ -80,10 +100,11 @@ export function DayCard({
         />
       </div>
 
-      {/* Body solo se renderea cuando hay ventanas. Layout vertical (no chips
-          horizontales) — en mobile evita el wrap denso del DayRow anterior. */}
+      {/* Body solo se renderea cuando hay ventanas. Layout horizontal con
+          flex-wrap: chips de ventanas + chip "+ Agregar" como último item
+          inline. Cero botones full-width — body 100% safe to scroll. */}
       {isOn ? (
-        <div className="space-y-2 px-3 py-3">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-3">
           {windows.map((w) => (
             <RowActions
               key={w.id}
@@ -109,38 +130,75 @@ export function DayCard({
             </RowActions>
           ))}
 
-          {/* Acciones inline visibles: + Agregar ventana (primary affordance)
-              y un dropdown explícito "Copiar a otros días" — antes vivía
-              escondido en el menú overflow de 3-dots. */}
+          {/* Chip "+ Agregar" inline. Visualmente diferenciado vía
+              border-dashed (en vez de solid) para no confundirse con
+              ventanas existentes. Mantiene min-h-11 (44px) de touch
+              target sin ocupar full-width. */}
           <button
             type="button"
             onClick={onAddWindow}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-300 px-4 text-sm font-medium text-neutral-600 hover:border-neutral-500"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full border border-dashed border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-600 hover:border-neutral-500"
+            aria-label={`Agregar ventana al ${dayName}`}
           >
-            <span aria-hidden="true">+</span> Agregar ventana
+            <span aria-hidden="true">+</span>
+            <span>Agregar</span>
           </button>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-4 text-sm text-neutral-600 hover:bg-neutral-100"
-                aria-label={`Copiar ${dayName} a otros días`}
-              >
-                Copiar a otros días…
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={onCopyToAll}>Copiar a todos los días</DropdownMenuItem>
-              <DropdownMenuItem onSelect={onCopyToWeekdays}>
-                Copiar a días de semana
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onCopyToWeekend}>Copiar a fin de semana</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Menú overflow del día (3-dots) en el header. Solo aparece cuando el día
+ * está ON. Items: agregar ventana adicional, copiar a otros días en sus
+ * 3 variantes. Patrón canónico: ver `ux-patterns.md` § "Per-item dropdown menus".
+ */
+function DayOverflowMenu({
+  dayName,
+  onAddWindow,
+  onCopyToAll,
+  onCopyToWeekdays,
+  onCopyToWeekend,
+}: {
+  dayName: string
+  onAddWindow: () => void
+  onCopyToAll: () => void
+  onCopyToWeekdays: () => void
+  onCopyToWeekend: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100"
+          aria-label={`Más opciones para ${dayName}`}
+        >
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="5" r="1" />
+            <circle cx="12" cy="12" r="1" />
+            <circle cx="12" cy="19" r="1" />
+          </svg>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onAddWindow}>Agregar ventana</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onCopyToAll}>Copiar a todos los días</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onCopyToWeekdays}>Copiar a días de semana</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onCopyToWeekend}>Copiar a fin de semana</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

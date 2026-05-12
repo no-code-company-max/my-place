@@ -64,12 +64,15 @@ describe('<EditPanel> primitive', () => {
       expect(dialog.className).toMatch(/left-0/)
       expect(dialog.className).toMatch(/right-0/)
       expect(dialog.className).toMatch(/max-h-\[85vh\]/)
-      // Las animations se aplican via la clase `edit-panel-content` definida
-      // en `globals.css` con keyframes + selector [data-state] directo. La
-      // iter previa con tailwindcss-animate fallaba al cerrar — Radix
-      // unmount antes de aplicar data-state=closed. Ver doc del módulo en
-      // src/shared/ui/edit-panel.tsx.
+      // Pattern shadcn Sheet (v5): tailwindcss-animate `animate-in / animate-out`
+      // con `slide-in-from-bottom / slide-out-to-bottom`. Permite a Radix
+      // Dialog Presence detectar el cambio de animation-name (enter vs exit)
+      // y esperar al animationend antes de unmount.
       expect(dialog.className).toMatch(/edit-panel-content/)
+      expect(dialog.className).toMatch(/data-\[state=open\]:animate-in/)
+      expect(dialog.className).toMatch(/data-\[state=closed\]:animate-out/)
+      expect(dialog.className).toMatch(/data-\[state=open\]:slide-in-from-bottom/)
+      expect(dialog.className).toMatch(/data-\[state=closed\]:slide-out-to-bottom/)
     })
 
     it('content tiene clases desktop md: que cambian a side drawer', () => {
@@ -80,8 +83,11 @@ describe('<EditPanel> primitive', () => {
       expect(dialog.className).toMatch(/md:top-0/)
       expect(dialog.className).toMatch(/md:h-screen/)
       expect(dialog.className).toMatch(/md:w-\[520px\]/)
-      // El slide-from-right en desktop lo aplica el @media query del
-      // `.edit-panel-content` en `globals.css` — no clase Tailwind aquí.
+      // Slide-from-right + neutralizar slide-from-bottom-0 en md:
+      expect(dialog.className).toMatch(/md:data-\[state=open\]:slide-in-from-right/)
+      expect(dialog.className).toMatch(/md:data-\[state=closed\]:slide-out-to-right/)
+      expect(dialog.className).toMatch(/md:data-\[state=open\]:slide-in-from-bottom-0/)
+      expect(dialog.className).toMatch(/md:data-\[state=closed\]:slide-out-to-bottom-0/)
     })
 
     it('drag handle visible solo en mobile (md:hidden)', () => {
@@ -113,13 +119,11 @@ describe('<EditPanel> primitive', () => {
   })
 
   describe('open vs closed', () => {
-    it('cuando open=false, el content SÍ está en el DOM con data-state="closed" (forceMount)', () => {
-      // Post 2026-05-12 v4: `forceMount` aplicado al Portal/Overlay/Content
-      // para que Radix NO desmonte automáticamente. Esto garantiza que las
-      // CSS animations del close ejecuten (`.edit-panel-content[data-state="closed"]`
-      // aplica slide-out). El elemento queda en DOM pero con animation-fill-mode:
-      // forwards lo mantiene off-screen, y data-[state=closed]:pointer-events-none
-      // evita interacciones.
+    it('cuando open=false, el content NO se monta', () => {
+      // v5 (post-revertir forceMount): comportamiento estándar de Radix Dialog
+      // sin forceMount. Cuando open=false, el Portal/Content NO se rendere.
+      // Eso evita el flash visual al cargar + el overlay bloqueando clicks
+      // que tenía la v4 con forceMount.
       render(
         <EditPanel open={false}>
           <EditPanelContent aria-describedby={undefined}>
@@ -130,14 +134,8 @@ describe('<EditPanel> primitive', () => {
           </EditPanelContent>
         </EditPanel>,
       )
-      // El dialog existe en el DOM (forceMount)
-      const dialog = screen.queryByRole('dialog')
-      expect(dialog).toBeInTheDocument()
-      // Pero está en estado closed
-      expect(dialog?.getAttribute('data-state')).toBe('closed')
-      // Y tiene pointer-events-none aplicado vía data attr selector (que
-      // jsdom no procesa, pero validamos que la clase declarativa esté)
-      expect(dialog?.className).toMatch(/data-\[state=closed\]:pointer-events-none/)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.queryByText('Hidden title')).not.toBeInTheDocument()
     })
   })
 })

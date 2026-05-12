@@ -78,30 +78,38 @@ test.describe('Tiers — owner CRUD (T.4)', () => {
     const uniqueName = uniqueTierName(testInfo)
     await page.goto(placeUrl(palermoSlug, '/settings/tiers'))
 
-    // CREATE — arranca HIDDEN (default).
+    // CREATE — arranca HIDDEN (default). Sheet usa botón "Listo" (sub-form
+    // pattern canon post 2026-05-12).
     await page.getByRole('button', { name: 'Nuevo tier' }).first().click()
     await page.getByLabel('Nombre').fill(uniqueName)
     await page.getByLabel(/Precio/).fill('1.99')
-    await page.getByRole('button', { name: 'Crear tier' }).click()
+    await page.getByRole('button', { name: 'Listo' }).click()
     await expect(page.getByText(/Tier creado/i).first()).toBeVisible({ timeout: 10_000 })
 
-    const row = page.locator('li', { hasText: uniqueName }).first()
-    await expect(row).toBeVisible({ timeout: 10_000 })
-    await expect(row.getByText('Oculto')).toBeVisible()
+    // El tier card vive en `<div className="rounded-md border">` con un
+    // heading que lleva el nombre. Localizamos via el heading (único).
+    const card = page
+      .locator('div')
+      .filter({ has: page.getByRole('heading', { name: uniqueName, exact: true }) })
+      .first()
+    await expect(card).toBeVisible({ timeout: 10_000 })
+    await expect(card.getByText('Oculto')).toBeVisible()
 
-    // PUBLISH — dropdown 3-dot por row → menuitem "Publicar tier".
-    // El dropdown se portalea al <body>, por eso los menuitems se buscan
-    // a nivel `page` (no scoped al `row`).
-    await row.getByRole('button', { name: `Opciones para ${uniqueName}` }).click()
-    await page.getByRole('menuitem', { name: 'Publicar tier' }).click()
+    // PUBLISH — switch on/off en el header del card. aria-label específico
+    // (post 2026-05-12 rediseño Card-per-item):
+    // `{name}: oculto, tocá para publicar` o `publicado, tocá para ocultar`.
+    await page
+      .getByRole('switch', { name: new RegExp(`^${escapeRegex(uniqueName)}: oculto`) })
+      .click()
     await expect(page.getByText(/Tier publicado/i).first()).toBeVisible({ timeout: 10_000 })
-    await expect(row.getByText('Publicado')).toBeVisible({ timeout: 10_000 })
+    await expect(card.getByText('Publicado')).toBeVisible({ timeout: 10_000 })
 
-    // HIDE de vuelta — mismo patrón.
-    await row.getByRole('button', { name: `Opciones para ${uniqueName}` }).click()
-    await page.getByRole('menuitem', { name: 'Ocultar tier' }).click()
+    // HIDE de vuelta — mismo switch, ahora el aria-label cambió a "publicado".
+    await page
+      .getByRole('switch', { name: new RegExp(`^${escapeRegex(uniqueName)}: publicado`) })
+      .click()
     await expect(page.getByText(/Tier oculto/i).first()).toBeVisible({ timeout: 10_000 })
-    await expect(row.getByText('Oculto')).toBeVisible({ timeout: 10_000 })
+    await expect(card.getByText('Oculto')).toBeVisible({ timeout: 10_000 })
   })
 
   test('crear N tiers con mismo nombre HIDDEN coexisten — sin error', async ({
@@ -114,11 +122,11 @@ test.describe('Tiers — owner CRUD (T.4)', () => {
     const sharedName = `Basic-${testInfo.workerIndex}-${Date.now()}`
     await page.goto(placeUrl(palermoSlug, '/settings/tiers'))
 
-    // Primer create OK.
+    // Primer create OK. Sheet usa "Listo" (sub-form canon post 2026-05-12).
     await page.getByRole('button', { name: 'Nuevo tier' }).first().click()
     await page.getByLabel('Nombre').fill(sharedName)
     await page.getByLabel(/Precio/).fill('1.00')
-    await page.getByRole('button', { name: 'Crear tier' }).click()
+    await page.getByRole('button', { name: 'Listo' }).click()
     await expect(page.getByText(/Tier creado/i).first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 })
 
@@ -127,13 +135,14 @@ test.describe('Tiers — owner CRUD (T.4)', () => {
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 })
     await page.getByLabel('Nombre').fill(sharedName.toUpperCase())
     await page.getByLabel(/Precio/).fill('2.00')
-    await page.getByRole('button', { name: 'Crear tier' }).click()
+    await page.getByRole('button', { name: 'Listo' }).click()
     await expect(page.getByText(/Tier creado/i).first()).toBeVisible({ timeout: 10_000 })
 
-    // Ambos tiers visibles en la lista.
-    await expect(page.locator('li', { hasText: sharedName }).first()).toBeVisible({
-      timeout: 10_000,
-    })
+    // Ambos tiers visibles en la lista (heading-role para evitar match con
+    // chips u otros textos).
+    await expect(
+      page.getByRole('heading', { name: new RegExp(escapeRegex(sharedName), 'i') }).first(),
+    ).toBeVisible({ timeout: 10_000 })
   })
 
   test('publicar segundo tier con mismo nombre case-insensitive → toast friendly', async ({
@@ -147,11 +156,11 @@ test.describe('Tiers — owner CRUD (T.4)', () => {
     const sharedName = `Premium-${testInfo.workerIndex}-${Date.now()}`
     await page.goto(placeUrl(palermoSlug, '/settings/tiers'))
 
-    // Crear tier #1.
+    // Crear tier #1. Sheet "Listo" (sub-form canon).
     await page.getByRole('button', { name: 'Nuevo tier' }).first().click()
     await page.getByLabel('Nombre').fill(sharedName)
     await page.getByLabel(/Precio/).fill('1.99')
-    await page.getByRole('button', { name: 'Crear tier' }).click()
+    await page.getByRole('button', { name: 'Listo' }).click()
     await expect(page.getByText(/Tier creado/i).first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 })
 
@@ -160,33 +169,40 @@ test.describe('Tiers — owner CRUD (T.4)', () => {
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 })
     await page.getByLabel('Nombre').fill(sharedName)
     await page.getByLabel(/Precio/).fill('2.99')
-    await page.getByRole('button', { name: 'Crear tier' }).click()
+    await page.getByRole('button', { name: 'Listo' }).click()
     await expect(page.getByText(/Tier creado/i).first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 })
 
-    // Publicar tier #1 — primero de su nombre, no debería colisionar.
-    // El dropdown 3-dot abre el menuitem "Publicar tier"; el contenido se
-    // portalea al <body>, por eso `page.getByRole('menuitem', ...)`.
-    const rows = page.locator('li', { hasText: sharedName })
-    await expect(rows).toHaveCount(2, { timeout: 10_000 })
-    await rows
-      .first()
-      .getByRole('button', { name: `Opciones para ${sharedName}` })
-      .click()
-    await page.getByRole('menuitem', { name: 'Publicar tier' }).click()
+    // Publicar via switch on/off del card (post 2026-05-12 redesign).
+    // Ambos tiers están HIDDEN al crearse — ambos switches dicen
+    // "{name}: oculto, tocá para publicar". Tocamos el primero, debería
+    // pasar a PUBLISHED.
+    const hiddenSwitches = page.getByRole('switch', {
+      name: new RegExp(`^${escapeRegex(sharedName)}: oculto`, 'i'),
+    })
+    await expect(hiddenSwitches).toHaveCount(2, { timeout: 10_000 })
+    await hiddenSwitches.first().click()
     await expect(page.getByText(/Tier publicado/i).first()).toBeVisible({ timeout: 10_000 })
 
-    // Intentar publicar tier #2 — debería fallar (otro PUBLISHED con mismo name).
-    await rows
-      .nth(1)
-      .getByRole('button', { name: `Opciones para ${sharedName}` })
+    // Intentar publicar tier #2 — debería fallar (otro PUBLISHED con mismo
+    // name). El switch que queda en "oculto" es el del segundo tier.
+    await page
+      .getByRole('switch', { name: new RegExp(`^${escapeRegex(sharedName)}: oculto`, 'i') })
       .click()
-    await page.getByRole('menuitem', { name: 'Publicar tier' }).click()
     await expect(page.getByText(/Ya hay otro tier publicado con ese nombre/i).first()).toBeVisible({
       timeout: 10_000,
     })
   })
 })
+
+/**
+ * Escapa caracteres regex en strings dinámicos (nombres de tier con
+ * timestamps + workerIndex). Evita falsos matches por `.` o caracteres
+ * especiales en nombres user-input style.
+ */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 test.describe('Tiers — admin gateado (T.4)', () => {
   test.use({ storageState: storageStateFor('admin') })

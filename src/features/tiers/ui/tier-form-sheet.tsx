@@ -3,15 +3,15 @@
 import { useEffect, useTransition } from 'react'
 import { useForm } from 'react-hook-form'
 import {
-  BottomSheet,
-  BottomSheetBody,
-  BottomSheetClose,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetFooter,
-  BottomSheetHeader,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelBody,
+  EditPanelClose,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelFooter,
+  EditPanelHeader,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import { toast } from '@/shared/ui/toaster'
 import {
   TIER_DESCRIPTION_MAX_LENGTH,
@@ -92,7 +92,7 @@ function initialValuesFor(mode: CreateMode | EditMode): FormValues {
 }
 
 /**
- * BottomSheet con form para crear o editar un tier. Owner-only — el page
+ * EditPanel con form para crear o editar un tier. Owner-only — el page
  * padre gateó con `if (!perms.isOwner) notFound()`, así que el sheet no
  * necesita gate adicional.
  *
@@ -195,25 +195,22 @@ export function TierFormSheet({ open, onOpenChange, mode }: Props): React.ReactN
     mode.kind === 'create'
       ? 'Definí un segmento de membresía. Los tiers nuevos arrancan ocultos.'
       : 'Modificá nombre, precio o duración del tier.'
-  const submitText =
-    mode.kind === 'create'
-      ? pending
-        ? 'Creando…'
-        : 'Crear tier'
-      : pending
-        ? 'Guardando…'
-        : 'Guardar cambios'
+  // Sub-form pattern canon (ux-patterns § Color palette): el sheet usa
+  // "Listo" — el commit explícito atómico de esta acción se hace en el
+  // server action invocado al submit, NO en un "Guardar cambios" page-level
+  // (tiers no tiene form page-level, cada CRUD es discreto).
+  const submitText = pending ? (mode.kind === 'create' ? 'Creando…' : 'Guardando…') : 'Listo'
 
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange}>
-      <BottomSheetContent aria-describedby={undefined}>
-        <BottomSheetHeader>
-          <BottomSheetTitle>{titleText}</BottomSheetTitle>
-          <BottomSheetDescription>{descriptionText}</BottomSheetDescription>
-        </BottomSheetHeader>
+    <EditPanel open={open} onOpenChange={onOpenChange}>
+      <EditPanelContent aria-describedby={undefined}>
+        <EditPanelHeader>
+          <EditPanelTitle>{titleText}</EditPanelTitle>
+          <EditPanelDescription>{descriptionText}</EditPanelDescription>
+        </EditPanelHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
-          <BottomSheetBody>
+          <EditPanelBody>
             <div className="space-y-4 py-2">
               <label className="block">
                 <span className="mb-1 block text-sm text-neutral-600">Nombre</span>
@@ -267,9 +264,9 @@ export function TierFormSheet({ open, onOpenChange, mode }: Props): React.ReactN
                 </label>
               </div>
             </div>
-          </BottomSheetBody>
+          </EditPanelBody>
 
-          <BottomSheetFooter>
+          <EditPanelFooter>
             <button
               type="submit"
               disabled={pending}
@@ -277,7 +274,7 @@ export function TierFormSheet({ open, onOpenChange, mode }: Props): React.ReactN
             >
               {submitText}
             </button>
-            <BottomSheetClose asChild>
+            <EditPanelClose asChild>
               <button
                 type="button"
                 disabled={pending}
@@ -285,10 +282,10 @@ export function TierFormSheet({ open, onOpenChange, mode }: Props): React.ReactN
               >
                 Cancelar
               </button>
-            </BottomSheetClose>
-          </BottomSheetFooter>
+            </EditPanelClose>
+          </EditPanelFooter>
         </form>
-      </BottomSheetContent>
-    </BottomSheet>
+      </EditPanelContent>
+    </EditPanel>
   )
 }

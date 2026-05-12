@@ -34,8 +34,21 @@ type SheetState =
       initialDuration: TierDuration
     }
 
-/** Listado + orquestador de overlays para `/settings/tiers`. PUBLISHED chip
- *  neutral, HIDDEN chip amber (recoverable → amber, no rojo). */
+/**
+ * Listado + orquestador de overlays para `/settings/tiers`.
+ *
+ * **Layout canon (post 2026-05-12):** cada tier = card individual con border
+ * + header h-[56px] (nombre + meta + status chip + 3-dots + switch on/off
+ * visibility). Patrón canónico § "Card-per-item con header + body + switch
+ * on/off" en `docs/ux-patterns.md`.
+ *
+ * Visibility (PUBLISHED ↔ HIDDEN) se controla por **el switch del header**
+ * — affordance prominente, no escondido en el menú overflow. El 3-dots
+ * dropdown queda solo con "Editar" (abre TierFormSheet).
+ *
+ * Iter previa usaba `<ul><li>` con menuitems "Publicar tier" / "Ocultar
+ * tier" en el dropdown. Migrado a switch por canon UX (decisión 2026-05-12).
+ */
 export function TiersListAdmin({ placeSlug, tiers }: Props): React.ReactNode {
   const [sheet, setSheet] = useState<SheetState>({ kind: 'closed' })
 
@@ -82,9 +95,9 @@ export function TiersListAdmin({ placeSlug, tiers }: Props): React.ReactNode {
           Todavía no hay tiers. Definí el primero para empezar a estructurar la membresía del place.
         </p>
       ) : (
-        <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+        <div className="space-y-3">
           {tiers.map((tier) => (
-            <TierRow
+            <TierCard
               key={tier.id}
               tier={tier}
               onEdit={() =>
@@ -100,7 +113,7 @@ export function TiersListAdmin({ placeSlug, tiers }: Props): React.ReactNode {
               }
             />
           ))}
-        </ul>
+        </div>
       )}
 
       <button
@@ -123,17 +136,17 @@ export function TiersListAdmin({ placeSlug, tiers }: Props): React.ReactNode {
 }
 
 // ---------------------------------------------------------------
-// Row component (internal). Vive en el mismo archivo para mantener
-// el orquestador autocontenido y evitar prop drilling para el
-// dispatch de visibility.
+// TierCard internal — card con header (nombre + meta + chip + 3-dots +
+// switch). Vive en el mismo archivo para mantener el orquestador
+// autocontenido y evitar prop drilling.
 // ---------------------------------------------------------------
 
-type TierRowProps = {
+type TierCardProps = {
   tier: Tier
   onEdit: () => void
 }
 
-function TierRow({ tier, onEdit }: TierRowProps): React.ReactNode {
+function TierCard({ tier, onEdit }: TierCardProps): React.ReactNode {
   const [pending, startTransition] = useTransition()
   const isPublished = tier.visibility === 'PUBLISHED'
   const targetVisibility: TierVisibility = isPublished ? 'HIDDEN' : 'PUBLISHED'
@@ -169,66 +182,113 @@ function TierRow({ tier, onEdit }: TierRowProps): React.ReactNode {
     : 'rounded-full border border-amber-300 px-2 py-0.5 text-[11px] text-amber-700'
   const chipLabel = isPublished ? 'Publicado' : 'Oculto'
 
-  // Accessible names para el dropdown menuitem de toggle. Los E2E asertan
-  // estos nombres exactos (`Publicar tier` / `Ocultar tier`).
-  const toggleLabel = isPublished ? 'Ocultar tier' : 'Publicar tier'
-
   return (
-    <li className="flex min-h-[56px] items-center gap-3 py-2">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate font-serif text-base">{tier.name}</h3>
-          <span className={chipClass}>{chipLabel}</span>
+    <div className="rounded-md border border-neutral-200">
+      {/* Header: name + meta + chip + 3-dots + switch. Siempre visible. */}
+      <div
+        className={`flex min-h-[56px] items-center gap-2 px-3 py-3 ${tier.description ? 'border-b border-neutral-200' : ''}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate font-serif text-base">{tier.name}</h3>
+            <span className={chipClass}>{chipLabel}</span>
+          </div>
+          <p className="mt-0.5 text-xs text-neutral-600">
+            <span>{formatPrice(tier.priceCents, tier.currency)}</span>
+            <span className="mx-1.5">·</span>
+            <span>{tierDurationLabel(tier.duration)}</span>
+          </p>
         </div>
-        <p className="mt-0.5 text-xs text-neutral-600">
-          <span>{formatPrice(tier.priceCents, tier.currency)}</span>
-          <span className="mx-1.5">·</span>
-          <span>{tierDurationLabel(tier.duration)}</span>
-        </p>
-        {tier.description ? (
-          <p className="mt-1 line-clamp-2 text-xs text-neutral-600">{tier.description}</p>
-        ) : null}
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100"
+              aria-label={`Opciones para ${tier.name}`}
+              disabled={pending}
+            >
+              <svg
+                aria-hidden="true"
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="5" r="1" />
+                <circle cx="12" cy="12" r="1" />
+                <circle cx="12" cy="19" r="1" />
+              </svg>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onSelect={onEdit}>Editar</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <TierVisibilitySwitch
+          tierName={tier.name}
+          isPublished={isPublished}
+          disabled={pending}
+          onToggle={handleVisibilityToggle}
+        />
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md text-neutral-600 hover:bg-neutral-100"
-            aria-label={`Opciones para ${tier.name}`}
-            disabled={pending}
-          >
-            <svg
-              aria-hidden="true"
-              className="h-5 w-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="5" r="1" />
-              <circle cx="12" cy="12" r="1" />
-              <circle cx="12" cy="19" r="1" />
-            </svg>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onSelect={onEdit}>Editar</DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              // Radix cierra el menu automáticamente tras onSelect — no
-              // bloqueamos el cierre. El `startTransition` corre en background;
-              // el toast + revalidate dan feedback del resultado.
-              handleVisibilityToggle()
-            }}
-            aria-label={toggleLabel}
-          >
-            {toggleLabel}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </li>
+      {/* Body opcional: solo si tier tiene description. Sin description, el
+          card colapsa al header simple. */}
+      {tier.description ? (
+        <div className="px-3 py-2">
+          <p className="line-clamp-2 text-xs text-neutral-600">{tier.description}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Switch on/off para visibility del tier. PUBLISHED → ON (negro), HIDDEN →
+ * OFF (gris). Tap dispara la action sin confirm modal — la operación es
+ * reversible (toggle al otro state). Si publicar colisiona con name unique,
+ * el handler muestra toast.error y el switch revierte al estado real
+ * (revalidatePath del action sincroniza la lista).
+ *
+ * aria-label específico para que E2E tests puedan encontrarlo:
+ * "{Name}: publicado, tocá para ocultar" o "{Name}: oculto, tocá para publicar".
+ * Reemplaza los E2E selectors previos que buscaban menuitems "Publicar tier"
+ * / "Ocultar tier" (2026-05-12).
+ */
+function TierVisibilitySwitch({
+  tierName,
+  isPublished,
+  disabled,
+  onToggle,
+}: {
+  tierName: string
+  isPublished: boolean
+  disabled: boolean
+  onToggle: () => void
+}): React.ReactNode {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isPublished}
+      aria-label={`${tierName}: ${isPublished ? 'publicado, tocá para ocultar' : 'oculto, tocá para publicar'}`}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-900 disabled:cursor-not-allowed disabled:opacity-60 ${
+        isPublished ? 'bg-neutral-900' : 'bg-neutral-300'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+          isPublished ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
   )
 }

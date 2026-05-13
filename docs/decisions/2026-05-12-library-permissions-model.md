@@ -57,10 +57,9 @@ elimina del producto (no se ofrece como knob).
 
 ## Decisión
 
-Modelar permisos de library como **dos enums independientes** (`ReadAccessKind`
-
-- `WriteAccessKind` nuevo) **con 6 tablas pivote** (3 read + 3 write) de
-  shape idéntico:
+Modelar permisos de library como **dos enums independientes**
+(`ReadAccessKind` ya existente, `WriteAccessKind` nuevo) **con 6 tablas
+pivote** (3 read + 3 write) de shape idéntico:
 
 ```prisma
 enum ReadAccessKind {

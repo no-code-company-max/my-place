@@ -5,25 +5,32 @@ import { E2E_LIBRARY_CATEGORIES, E2E_PLACES } from '../../fixtures/e2e-data'
 import { getTestPrisma } from '../../helpers/prisma'
 
 /**
- * Flow R.7.3 / R.7.4 — Admin CRUD de categorías de Library en Palermo.
+ * Flow R.7.3 + S2/S3 — Admin CRUD de categorías de Library en Palermo.
+ *
+ * **Rewrite S4 (2026-05-13):** adaptado al modelo de permisos v2 +
+ * wizard 4-step (Identidad → Escritura → Lectura → Tipo).
  *
  * Cubre:
  *   - Listing en `/library` muestra las 3 categorías baseline del seed.
- *   - Admin crea una categoría nueva via `/settings/library` → aparece
- *     en el listing (cleanup en afterAll).
- *   - Admin edita el título de la categoría `tutorials` → cambio
- *     reflejado en `/library` (revert en afterAll).
- *   - Admin cambia `contributionPolicy` de `tutorials` MEMBERS_OPEN
- *     → ADMIN_ONLY → label en settings refleja el cambio (revert en
- *     afterAll).
+ *   - Admin crea una categoría nueva via `/settings/library` con defaults
+ *     (writeAccessKind=OWNER_ONLY, readAccessKind=PUBLIC, kind=GENERAL).
+ *   - Admin edita el título de la categoría `tutorials` via Pencil icon
+ *     en RowActions inline.
  *   - memberA (no admin) intenta abrir `/settings/library` → 404 / sin
- *     acceso (notFound del settings layout).
+ *     acceso.
  *
  * Las mutaciones tocan el seed compartido en my-place Cloud, así que los
- * cleanups son obligatorios y defensivos: corren `try/catch` y restauran
- * el estado canónico de `E2E_LIBRARY_CATEGORIES.tutorials`.
+ * cleanups son obligatorios y defensivos. Cada describe restaura el
+ * estado canónico de `E2E_LIBRARY_CATEGORIES.tutorials`.
  *
- * Ver `docs/features/library/spec.md` § 14.3.
+ * Wizard navigation: cada step intermedio tiene botón "Siguiente"; el
+ * último step tiene "Guardar". El primer step ya viene con la validación
+ * a true para los defaults (writeAccessKind/readAccessKind/kind no
+ * requieren input), así que crear con defaults = 3 × "Siguiente" + 1 ×
+ * "Guardar".
+ *
+ * Ver `docs/features/library/spec.md` § 14.3 y
+ * `docs/plans/2026-05-12-library-permissions-redesign.md` § S3.
  */
 
 const palermoSlug = E2E_PLACES.palermo.slug
@@ -50,12 +57,10 @@ test.describe('Library admin categories — Palermo', () => {
     })
   })
 
-  test.describe('crear categoría nueva', () => {
+  test.describe('crear categoría nueva (wizard 4-step con defaults)', () => {
     test.use({ storageState: storageStateFor('admin') })
 
     test.afterAll(async () => {
-      // Borra cualquier categoría creada por el spec en cualquier corrida
-      // (matchea por título único). Defensivo: idempotente.
       const prisma = getTestPrisma()
       await prisma.libraryCategory
         .deleteMany({
@@ -65,9 +70,6 @@ test.describe('Library admin categories — Palermo', () => {
     })
 
     test('admin crea categoría desde /settings/library y aparece en /library', async ({ page }) => {
-      // Cleanup defensivo previo: si una corrida anterior dejó la
-      // categoría, eliminarla antes de empezar para garantizar
-      // idempotencia.
       const prisma = getTestPrisma()
       await prisma.libraryCategory
         .deleteMany({
@@ -78,19 +80,24 @@ test.describe('Library admin categories — Palermo', () => {
       await page.goto(placeUrl(palermoSlug, '/settings/library'))
       await expect(page.getByRole('heading', { name: /Biblioteca/i })).toBeVisible()
 
-      // Trigger del dialog: el componente lo monta como botón con
-      // aria-label="Nueva categoría".
-      await page.getByRole('button', { name: 'Nueva categoría' }).first().click()
+      // Trigger: el panel monta el dashed-border "+ Nueva categoría".
+      await page.getByRole('button', { name: /Nueva categoría/i }).click()
 
-      // Form fields del dialog.
-      await page.getByLabel('Emoji').fill(NEW_CATEGORY_EMOJI)
-      await page.getByLabel('Título').fill(NEW_CATEGORY_TITLE)
-      await page.getByLabel(/Quién puede agregar contenido/i).selectOption('MEMBERS_OPEN')
+      // Step 1: Identidad (emoji + título).
+      await page.getByLabel(/Emoji/i).fill(NEW_CATEGORY_EMOJI)
+      await page.getByLabel(/Título/i).fill(NEW_CATEGORY_TITLE)
+      await page.getByRole('button', { name: 'Siguiente' }).click()
 
-      await page.getByRole('button', { name: /^Crear categoría$/ }).click()
+      // Step 2: Escritura — default OWNER_ONLY.
+      await page.getByRole('button', { name: 'Siguiente' }).click()
 
-      // Verificación: la nueva categoría aparece en el listing del
-      // settings page (revalidate del action lo refresca).
+      // Step 3: Lectura — default PUBLIC.
+      await page.getByRole('button', { name: 'Siguiente' }).click()
+
+      // Step 4: Tipo — default GENERAL. Guardar finaliza.
+      await page.getByRole('button', { name: 'Guardar' }).click()
+
+      // La nueva categoría aparece en el listing del settings page.
       await expect(page.getByRole('heading', { name: NEW_CATEGORY_TITLE, level: 3 })).toBeVisible()
 
       // Y en la zona pública de /library también.
@@ -105,7 +112,6 @@ test.describe('Library admin categories — Palermo', () => {
     const updatedTitle = 'Tutoriales actualizados'
 
     test.afterAll(async () => {
-      // Restaurar el título canónico del seed.
       const prisma = getTestPrisma()
       await prisma.libraryCategory
         .update({
@@ -115,21 +121,20 @@ test.describe('Library admin categories — Palermo', () => {
         .catch(() => {})
     })
 
-    test('admin edita título y se refleja en /library', async ({ page }) => {
+    test('admin edita título via Pencil icon y se refleja en /library', async ({ page }) => {
       await page.goto(placeUrl(palermoSlug, '/settings/library'))
 
-      // Localizar la fila de "Tutoriales" y abrir su sheet "Editar".
-      // El listado usa <li> + heading + dropdown trigger ("Opciones para …")
-      // con menuitem "Editar" que abre el `<CategoryFormSheet>`.
-      const tutorialsRow = page.getByRole('listitem').filter({ hasText: tutorialsCat.title })
-      await tutorialsRow
-        .getByRole('button', { name: `Opciones para ${tutorialsCat.title}` })
-        .click()
-      await page.getByRole('menuitem', { name: 'Editar' }).click()
+      // RowActions (S3) usa inline icon buttons. El Pencil tiene
+      // aria-label="Editar ${title}".
+      await page.getByRole('button', { name: `Editar ${tutorialsCat.title}` }).click()
 
-      const titleInput = page.getByLabel('Título')
+      // Wizard abre en mode=edit. Step 1 ya tiene el título original.
+      const titleInput = page.getByLabel(/Título/i)
       await titleInput.fill(updatedTitle)
-      await page.getByRole('button', { name: /^Guardar cambios$/ }).click()
+      await page.getByRole('button', { name: 'Siguiente' }).click()
+      await page.getByRole('button', { name: 'Siguiente' }).click()
+      await page.getByRole('button', { name: 'Siguiente' }).click()
+      await page.getByRole('button', { name: 'Guardar' }).click()
 
       await expect(page.getByRole('heading', { name: updatedTitle, level: 3 })).toBeVisible()
 
@@ -138,26 +143,16 @@ test.describe('Library admin categories — Palermo', () => {
     })
   })
 
-  // S1b (2026-05-13): bloque "cambiar contributionPolicy" removido.
-  // El modelo contributionPolicy fue reemplazado por writeAccessKind +
-  // 3 pivots write. El flujo UI de cambiar write access vive en el
-  // wizard (sub-slice library/wizard) — los E2E nuevos se suman en S2/S3
-  // cuando el wizard tenga el step de write access.
-
   test.describe('member común no accede a /settings/library', () => {
     test.use({ storageState: storageStateFor('memberA') })
 
     test('memberA recibe 404 en /settings/library', async ({ page }) => {
       const response = await page.goto(placeUrl(palermoSlug, '/settings/library'))
-      // El layout `/settings/layout.tsx` llama `notFound()` cuando el
-      // viewer no es admin/owner. Aceptamos 404 explícito o cualquier
-      // forma de bloqueo (redirect a login si la sesión no se honra).
       const status = response?.status() ?? 0
       const url = page.url()
       const content = await page.content()
       const isBlocked = status === 404 || /\/login\?/.test(url)
       expect(isBlocked).toBe(true)
-      // Y nada del UI admin debe verse.
       expect(content).not.toContain('Nueva categoría')
     })
   })

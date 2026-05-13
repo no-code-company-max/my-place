@@ -7,7 +7,6 @@ const {
   eventFindMany,
   eventRsvpDeleteMany,
   libraryItemFindMany,
-  libraryContributorDeleteMany,
   postReadDeleteMany,
   flagFindMany,
   erasureAuditCreate,
@@ -30,7 +29,6 @@ const {
   eventFindMany: vi.fn(),
   eventRsvpDeleteMany: vi.fn(),
   libraryItemFindMany: vi.fn(),
-  libraryContributorDeleteMany: vi.fn(),
   postReadDeleteMany: vi.fn(),
   flagFindMany: vi.fn(),
   erasureAuditCreate: vi.fn(),
@@ -61,9 +59,6 @@ vi.mock('@/db/client', () => ({
     event: { findMany: (...a: unknown[]) => eventFindMany(...a) },
     eventRSVP: { deleteMany: (...a: unknown[]) => eventRsvpDeleteMany(...a) },
     libraryItem: { findMany: (...a: unknown[]) => libraryItemFindMany(...a) },
-    libraryCategoryContributor: {
-      deleteMany: (...a: unknown[]) => libraryContributorDeleteMany(...a),
-    },
     postRead: { deleteMany: (...a: unknown[]) => postReadDeleteMany(...a) },
     flag: { findMany: (...a: unknown[]) => flagFindMany(...a) },
     erasureAuditLog: { create: (...a: unknown[]) => erasureAuditCreate(...a) },
@@ -121,7 +116,6 @@ function setupTransactionPassthrough() {
       event: { findMany: eventFindMany },
       eventRSVP: { deleteMany: eventRsvpDeleteMany },
       libraryItem: { findMany: libraryItemFindMany },
-      libraryCategoryContributor: { deleteMany: libraryContributorDeleteMany },
       postRead: { deleteMany: postReadDeleteMany },
       flag: { findMany: flagFindMany },
       erasureAuditLog: { create: erasureAuditCreate },
@@ -153,7 +147,6 @@ beforeEach(() => {
   eventFindMany.mockResolvedValue([])
   eventRsvpDeleteMany.mockResolvedValue({ count: 0 })
   libraryItemFindMany.mockResolvedValue([])
-  libraryContributorDeleteMany.mockResolvedValue({ count: 0 })
   postReadDeleteMany.mockResolvedValue({ count: 0 })
   flagFindMany.mockResolvedValue([])
   postExecuteRaw.mockResolvedValue(0)
@@ -281,7 +274,6 @@ describe('runErasure', () => {
         event: { findMany: eventFindMany },
         eventRSVP: { deleteMany: eventRsvpDeleteMany },
         libraryItem: { findMany: libraryItemFindMany },
-        libraryCategoryContributor: { deleteMany: libraryContributorDeleteMany },
         postRead: { deleteMany: postReadDeleteMany },
         flag: { findMany: flagFindMany },
         erasureAuditLog: { create: erasureAuditCreate },
@@ -446,15 +438,6 @@ describe('runErasure', () => {
     expect(sqlCalled).toMatch(/UPDATE "LibraryItem"/)
     expect(sqlCalled).toMatch(/jsonb_build_object/)
     expect(sqlCalled).toMatch(/"authorUserId" = NULL/)
-  })
-
-  // S1b (2026-05-13): test "LibraryCategoryContributor rows del ex-miembro
-  // se borran" removido. La tabla `LibraryCategoryContributor` fue
-  // eliminada — write scopes (LibraryCategoryUserWriteScope) cascadean
-  // del User en ON DELETE CASCADE, así que el cleanup ocurre cuando se
-  // hace hard-delete del User (no en erasure).
-  it.skip('LibraryCategoryContributor removido del modelo (S1b)', () => {
-    expect(true).toBe(true)
   })
 
   it('cobertura: PostRead rows del ex-miembro se borran (filtro nested post.placeId)', async () => {

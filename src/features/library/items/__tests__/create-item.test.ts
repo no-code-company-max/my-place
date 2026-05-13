@@ -8,38 +8,36 @@ import {
 } from '@/shared/errors/domain-error'
 
 /**
- * Test para `createLibraryItemAction` (R.7.2 — pilot M3).
+ * Test para `createLibraryItemAction`.
  *
- * Replica el patrón de `archive-category.test.ts` + suma:
- *  1. Mock de `prisma.$transaction` con un `tx` mock que tenga
- *     `libraryItem.create` (Post.create se ejerce vía
- *     `createPostFromSystemHelper`, que mockeamos directo para no
- *     reimplementar el slug-resolver bajo tx).
- *  2. Mock de `assertPlaceOpenOrThrow` (`@/features/hours/public.server`).
- *  3. Mock de `listCategoryContributorUserIds`
- *     (`@/features/library/server/queries`).
- *  4. Mock de `createPostFromSystemHelper`
- *     (`@/features/discussions/public.server`).
+ * **S4 (2026-05-13) — Rewrite contra modelo de permisos v2:** el gate
+ * legacy `canCreateInCategory(contributionPolicy + designatedUserIds)`
+ * fue reemplazado por `findWriteScope` + `canWriteCategory` del sub-slice
+ * `library/contribution/`. Este archivo testea el nuevo flow.
  *
- * `resolveActorForPlace` corre real, igual que en archive-category, y
- * consume las primitives de Prisma + Supabase mockeadas. Eso da
- * cobertura del wiring `auth → place → membership → ownership → user`.
+ * Mocks principales:
+ *  - `prisma.libraryCategory.findUnique` con shape mínimo
+ *    `{ id, slug, placeId, archivedAt }` (sin contributionPolicy ni
+ *    groupScopes).
+ *  - `findWriteScope` desde `@/features/library/contribution/public.server`
+ *    — retorna el discriminated `{ kind, groupIds, tierIds, userIds }`.
+ *  - `prisma.$transaction` con tx que expone `libraryItem.create`.
+ *  - `createPostFromSystemHelper` mockeado para no reimplementar slug
+ *    resolution bajo tx.
+ *  - Auth chain (`getUser` + place + membership + ownership + user)
+ *    real-ish para ejercer `resolveActorForPlace`.
  *
- * Bug latente (#7) — Post huérfano por race entre check y INSERT
- * (CONTEXTO HISTÓRICO: el fix llegó, ver test de race más abajo):
- * la action lee la categoría con `prisma.libraryCategory.findUnique`
- * **fuera** del `prisma.$transaction(...)`. Si la categoría se borra o
- * se archiva entre ese read y el `tx.libraryItem.create`, el Post se
- * crea pero el LibraryItem falla con un FK error genérico — sin error
- * tipado, y dejando un Post huérfano (sin LibraryItem) salvo que el
- * rollback de la tx alcance también al Post (sí alcanza, porque la
- * tx envuelve `createPostFromSystemHelper(tx, …)` + `tx.libraryItem.create`).
+ * Cobertura:
+ *  - Happy paths: owner bypassa OWNER_ONLY; member en USERS scope crea;
+ *    member en GROUPS scope crea; coverUrl persistence.
+ *  - Autorización: member sin owner bypass + sin write scope → 401.
+ *  - Validación Zod (title, coverUrl, categoryId).
+ *  - Errores estructurales: category not found, cross-place, archived.
+ *  - Atomicidad: P2003 (FK violation) → ConflictError tipado;
+ *    P2002 slug collision propaga.
  *
- * Lo que NO prevenía el código original: que el chequeo `archivedAt: null`
- * se vuelva stale y se intente crear un item bajo una categoría archivada
- * en carrera. El fix actual wrappea el `$transaction` y convierte el
- * `P2003` crudo de Prisma en `ConflictError` tipado, así la UI puede
- * pedir reload + reintento sin exponer el código de Prisma.
+ * El RLS replica el gate a nivel SQL (defense in depth) — no testeado
+ * acá; lo cubren los tests de RLS específicos.
  */
 
 // ---------------------------------------------------------------
@@ -56,16 +54,10 @@ const txLibraryItemCreate = vi.fn()
 const getUserFn = vi.fn()
 const revalidatePathFn = vi.fn()
 const assertPlaceOpenFn = vi.fn()
-const listContributorsFn = vi.fn()
+const findWriteScopeFn = vi.fn()
 const createPostFromSystemHelperFn = vi.fn()
-// G.3: hasPermission cae a `prisma.groupMembership.findMany` cuando el
-// fallback role===ADMIN no aplica. Default [] (sin grupos).
 const groupMembershipFindMany = vi.fn(async (..._a: unknown[]) => [] as unknown[])
-// C.2: `findIsPlaceAdmin` (identity-cache) usa `findFirst` para chequear
-// membership al preset group. Default null (no admin).
 const groupMembershipFindFirst = vi.fn(async (..._a: unknown[]) => null as unknown)
-// G.4 (2026-05-04): `resolveLibraryViewer` consulta tierMembership.findMany
-// para popular `viewer.tierIds`. Default [] (sin tiers).
 const tierMembershipFindMany = vi.fn(async (..._a: unknown[]) => [] as unknown[])
 
 vi.mock('@/db/client', () => ({
@@ -114,11 +106,6 @@ vi.mock('@/features/hours/public.server', () => ({
   findPlaceHours: vi.fn(async () => ({ kind: 'always_open' })),
 }))
 
-// `createPostFromSystemHelper` se mockea desde la superficie pública
-// `public.server.ts` — la action lo consume vía ese entry. El mock
-// también re-exporta `resolveActorForPlace` para que el wiring real
-// del actor siga funcionando bajo los mocks de Prisma + Supabase ya
-// definidos arriba.
 vi.mock('@/features/discussions/public.server', async () => {
   const real = await vi.importActual<typeof import('@/features/discussions/public.server')>(
     '@/features/discussions/public.server',
@@ -129,8 +116,8 @@ vi.mock('@/features/discussions/public.server', async () => {
   }
 })
 
-vi.mock('@/features/library/contributors/server/queries', () => ({
-  listCategoryContributorUserIds: (...a: unknown[]) => listContributorsFn(...a),
+vi.mock('@/features/library/contribution/public.server', () => ({
+  findWriteScope: (...a: unknown[]) => findWriteScopeFn(...a),
 }))
 
 // ---------------------------------------------------------------
@@ -187,22 +174,14 @@ const validBody = {
 }
 
 type ActorOpts = {
-  /** Si true, mockea grupos para que `isAdmin`/`hasPermission` retornen true. */
   asAdmin?: boolean
-  /** Si true, ownership row presente — gatilla `isAdmin` aunque no sea admin. */
   isOwner?: boolean
+  /** Grupos del viewer (popula `viewer.groupIds`). */
+  groupIds?: ReadonlyArray<string>
+  /** Tiers activos del viewer (popula `viewer.tierIds`). */
+  tierIds?: ReadonlyArray<string>
 }
 
-/**
- * Setea la cadena que `resolveActorForPlace` consume:
- *   getUser → place.findUnique → membership.findFirst →
- *   placeOwnership.findUnique → user.findUnique.
- *
- * También cablea el `prisma.$transaction` mock para que invoque el
- * callback con un `tx` que expone `libraryItem.create`. El otro
- * consumer del tx (`createPostFromSystemHelper`) está mockeado
- * directamente, así que no necesita primitives bajo tx.
- */
 function mockActiveMember(opts: ActorOpts = {}): void {
   getUserFn.mockResolvedValue({ data: { user: { id: USER_ID } } })
   placeFindUnique.mockResolvedValue({
@@ -217,23 +196,56 @@ function mockActiveMember(opts: ActorOpts = {}): void {
   ownershipFindUnique.mockResolvedValue(opts.isOwner ? { userId: USER_ID } : null)
   userFindUnique.mockResolvedValue({ displayName: 'Max', avatarUrl: null })
   assertPlaceOpenFn.mockResolvedValue(undefined)
-  // C.2: si opts.asAdmin, simular membership al preset group con TODOS los
-  // permisos para que `hasPermission` retorne true y `findIsPlaceAdmin`
-  // retorne true sin depender del fallback `role === 'ADMIN'` (drop en C.3).
+  // `groupMembership.findMany` lo llama `resolveLibraryViewer` con
+  // `select: { groupId: true }` para popular `viewer.groupIds`.
+  // Si opts.asAdmin, sumamos el preset group para que `findIsPlaceAdmin`
+  // (vía `groupMembershipFindFirst`) retorne true.
+  const groupRows: Array<{ groupId: string }> = (opts.groupIds ?? []).map((id) => ({
+    groupId: id,
+  }))
   if (opts.asAdmin) {
-    groupMembershipFindMany.mockResolvedValue([
-      { group: { id: 'grp-mock-admin', permissions: PERMISSIONS_ALL, categoryScopes: [] } },
-    ])
+    groupRows.push({ groupId: 'grp-mock-admin' })
     groupMembershipFindFirst.mockResolvedValue({ id: 'gm-mock-admin' })
   } else {
-    groupMembershipFindMany.mockResolvedValue([])
     groupMembershipFindFirst.mockResolvedValue(null)
   }
+  groupMembershipFindMany.mockResolvedValue(groupRows)
+  // Suprime warning de variable no usada — PERMISSIONS_ALL queda en el
+  // import por compatibilidad histórica si volvemos a testear hasPermission.
+  void PERMISSIONS_ALL
+  tierMembershipFindMany.mockResolvedValue(
+    (opts.tierIds ?? []).map((id) => ({ tierId: id, expiresAt: null })),
+  )
   transactionFn.mockImplementation((fn: (tx: unknown) => unknown) =>
     fn({
       libraryItem: { create: txLibraryItemCreate },
     }),
   )
+}
+
+function mockCategoryHappy(overrides: Partial<{ archivedAt: Date | null; placeId: string }> = {}) {
+  libraryCategoryFindUnique.mockResolvedValue({
+    id: CATEGORY_ID,
+    slug: CATEGORY_SLUG,
+    placeId: overrides.placeId ?? PLACE_ID,
+    archivedAt: overrides.archivedAt ?? null,
+  })
+}
+
+function mockWriteScope(
+  kind: 'OWNER_ONLY' | 'GROUPS' | 'TIERS' | 'USERS',
+  opts: {
+    groupIds?: ReadonlyArray<string>
+    tierIds?: ReadonlyArray<string>
+    userIds?: ReadonlyArray<string>
+  } = {},
+): void {
+  findWriteScopeFn.mockResolvedValue({
+    kind,
+    groupIds: opts.groupIds ?? [],
+    tierIds: opts.tierIds ?? [],
+    userIds: opts.userIds ?? [],
+  })
 }
 
 beforeEach(() => {
@@ -255,17 +267,11 @@ function validInput(overrides: Record<string, unknown> = {}): Record<string, unk
 // Tests
 // ---------------------------------------------------------------
 
-describe.skip('createLibraryItemAction — happy paths', () => {
-  it('admin: categoría MEMBERS_OPEN crea Post + LibraryItem y revalida los 4 paths', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+describe('createLibraryItemAction — happy paths', () => {
+  it('owner: OWNER_ONLY pasa via owner bypass; crea Post + LibraryItem y revalida los 4 paths', async () => {
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
     createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
     txLibraryItemCreate.mockResolvedValue({ id: ITEM_ID })
 
@@ -277,11 +283,8 @@ describe.skip('createLibraryItemAction — happy paths', () => {
       postSlug: POST_SLUG,
       categorySlug: CATEGORY_SLUG,
     })
-    // El admin no necesita lookup de contributors (policy = MEMBERS_OPEN
-    // nunca consulta DESIGNATED, y aunque consultase, isAdmin gana antes).
-    expect(listContributorsFn).not.toHaveBeenCalled()
+    expect(findWriteScopeFn).toHaveBeenCalledWith(CATEGORY_ID)
     expect(createPostFromSystemHelperFn).toHaveBeenCalledTimes(1)
-    expect(txLibraryItemCreate).toHaveBeenCalledTimes(1)
     expect(txLibraryItemCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -289,8 +292,6 @@ describe.skip('createLibraryItemAction — happy paths', () => {
           categoryId: CATEGORY_ID,
           postId: POST_ID,
           authorUserId: USER_ID,
-          // Snapshot denormalizado del autor — patrón Post/Comment/Event.
-          // Erasure 365d nullifica `authorUserId` y reescribe el snapshot.
           authorSnapshot: { displayName: 'Max', avatarUrl: null },
           coverUrl: null,
         }),
@@ -304,57 +305,47 @@ describe.skip('createLibraryItemAction — happy paths', () => {
     expect(revalidatePathFn).toHaveBeenCalledWith(`/${PLACE_SLUG}/conversations`)
   })
 
-  it('member en MEMBERS_OPEN: pasa el gate sin necesitar contributors', async () => {
+  it('member en USERS scope: crea sin necesidad de owner bypass', async () => {
     mockActiveMember()
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+    mockCategoryHappy()
+    mockWriteScope('USERS', { userIds: [USER_ID, OTHER_USER_ID] })
     createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
     txLibraryItemCreate.mockResolvedValue({ id: ITEM_ID })
 
     const result = await createLibraryItemAction(validInput())
 
     expect(result.ok).toBe(true)
-    expect(listContributorsFn).not.toHaveBeenCalled()
     expect(txLibraryItemCreate).toHaveBeenCalledTimes(1)
   })
 
-  it('designated contributor (member sin ADMIN) en DESIGNATED: pasa el gate', async () => {
-    mockActiveMember()
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'DESIGNATED',
-      groupScopes: [],
-      archivedAt: null,
-    })
-    listContributorsFn.mockResolvedValue([USER_ID, OTHER_USER_ID])
+  it('member en GROUPS scope (matchea uno de sus groupIds): crea ok', async () => {
+    mockActiveMember({ groupIds: ['grp-mods'] })
+    mockCategoryHappy()
+    mockWriteScope('GROUPS', { groupIds: ['grp-mods', 'grp-otro'] })
     createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
     txLibraryItemCreate.mockResolvedValue({ id: ITEM_ID })
 
     const result = await createLibraryItemAction(validInput())
 
     expect(result.ok).toBe(true)
-    expect(listContributorsFn).toHaveBeenCalledWith(CATEGORY_ID)
-    expect(txLibraryItemCreate).toHaveBeenCalledTimes(1)
+  })
+
+  it('member en TIERS scope (con tier activo): crea ok', async () => {
+    mockActiveMember({ tierIds: ['tier-pro'] })
+    mockCategoryHappy()
+    mockWriteScope('TIERS', { tierIds: ['tier-pro'] })
+    createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
+    txLibraryItemCreate.mockResolvedValue({ id: ITEM_ID })
+
+    const result = await createLibraryItemAction(validInput())
+
+    expect(result.ok).toBe(true)
   })
 
   it('coverUrl válida (https): se persiste tal cual al LibraryItem', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
     createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
     txLibraryItemCreate.mockResolvedValue({ id: ITEM_ID })
 
@@ -370,18 +361,11 @@ describe.skip('createLibraryItemAction — happy paths', () => {
   })
 })
 
-describe.skip('createLibraryItemAction — autorización', () => {
-  it('member en DESIGNATED sin contributor row: AuthorizationError sin tocar la tx', async () => {
+describe('createLibraryItemAction — autorización', () => {
+  it('member sin owner bypass en OWNER_ONLY: AuthorizationError sin tocar la tx', async () => {
     mockActiveMember()
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'DESIGNATED',
-      groupScopes: [],
-      archivedAt: null,
-    })
-    listContributorsFn.mockResolvedValue([OTHER_USER_ID])
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(AuthorizationError)
 
@@ -391,25 +375,38 @@ describe.skip('createLibraryItemAction — autorización', () => {
     expect(revalidatePathFn).not.toHaveBeenCalled()
   })
 
-  it('member en SELECTED_GROUPS sin scope asignado: AuthorizationError (default cerrado)', async () => {
+  it('member en USERS sin estar en el set: AuthorizationError', async () => {
     mockActiveMember()
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'SELECTED_GROUPS',
-      groupScopes: [],
-      archivedAt: null,
-    })
+    mockCategoryHappy()
+    mockWriteScope('USERS', { userIds: [OTHER_USER_ID] })
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(AuthorizationError)
 
     expect(transactionFn).not.toHaveBeenCalled()
-    expect(txLibraryItemCreate).not.toHaveBeenCalled()
+  })
+
+  it('member en GROUPS sin matchear ningún grupo: AuthorizationError', async () => {
+    mockActiveMember({ groupIds: ['grp-x'] })
+    mockCategoryHappy()
+    mockWriteScope('GROUPS', { groupIds: ['grp-mods'] })
+
+    await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(AuthorizationError)
+
+    expect(transactionFn).not.toHaveBeenCalled()
+  })
+
+  it('member en TIERS sin tier activo en el set: AuthorizationError', async () => {
+    mockActiveMember({ tierIds: ['tier-basic'] })
+    mockCategoryHappy()
+    mockWriteScope('TIERS', { tierIds: ['tier-pro'] })
+
+    await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(AuthorizationError)
+
+    expect(transactionFn).not.toHaveBeenCalled()
   })
 })
 
-describe.skip('createLibraryItemAction — validación', () => {
+describe('createLibraryItemAction — validación', () => {
   it('title vacío (solo whitespace): ValidationError sin tocar Prisma de dominio', async () => {
     await expect(createLibraryItemAction(validInput({ title: '   ' }))).rejects.toBeInstanceOf(
       ValidationError,
@@ -428,15 +425,9 @@ describe.skip('createLibraryItemAction — validación', () => {
   })
 
   it('coverUrl no http(s): ValidationError después del actor pero antes de la tx', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
 
     await expect(
       createLibraryItemAction(validInput({ coverUrl: 'javascript:alert(1)' })),
@@ -455,9 +446,9 @@ describe.skip('createLibraryItemAction — validación', () => {
   })
 })
 
-describe.skip('createLibraryItemAction — errores estructurales', () => {
+describe('createLibraryItemAction — errores estructurales', () => {
   it('categoryId inexistente: NotFoundError sin entrar a la tx', async () => {
-    mockActiveMember({ asAdmin: true })
+    mockActiveMember({ isOwner: true })
     libraryCategoryFindUnique.mockResolvedValue(null)
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(NotFoundError)
@@ -468,15 +459,8 @@ describe.skip('createLibraryItemAction — errores estructurales', () => {
   })
 
   it('categoría de otro place: NotFoundError (anti cross-place)', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: 'place-OTHER',
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy({ placeId: 'place-OTHER' })
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(NotFoundError)
 
@@ -484,54 +468,41 @@ describe.skip('createLibraryItemAction — errores estructurales', () => {
   })
 
   it('categoría archivada al momento del check: NotFoundError sin entrar a la tx', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: new Date('2026-04-01T12:00:00Z'),
-    })
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy({ archivedAt: new Date('2026-04-01T12:00:00Z') })
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(NotFoundError)
 
     expect(transactionFn).not.toHaveBeenCalled()
     expect(createPostFromSystemHelperFn).not.toHaveBeenCalled()
   })
+
+  it('findWriteScope retorna null (category race): NotFoundError defensivo', async () => {
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    findWriteScopeFn.mockResolvedValue(null)
+
+    await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(NotFoundError)
+
+    expect(transactionFn).not.toHaveBeenCalled()
+  })
 })
 
-describe.skip('createLibraryItemAction — atomicidad y errores en tx', () => {
+describe('createLibraryItemAction — atomicidad y errores en tx', () => {
   /**
    * Bug histórico (cerrado): si la categoría se archiva/borra **entre** el
-   * `findUnique` (línea 57 de la action) y el `tx.libraryItem.create`,
-   * el read del check se vuelve stale. La tx envuelve Post + LibraryItem,
-   * así que un fallo del segundo INSERT rollbackea el primero — no hay
-   * Post huérfano físicamente. Antes del fix, la action propagaba el
-   * error crudo de Prisma (P2003 FK violation), y la UI lo mostraba como
-   * friendly genérico sin contexto.
-   *
-   * Fix: el `$transaction` se wrappea en try/catch y convierte el
-   * `Prisma.PrismaClientKnownRequestError` con código `P2003` en
-   * `ConflictError` tipado, con `categoryId` + `placeId` en el contexto.
-   * Esto deja a la UI pedir reload + reintento de manera consistente
-   * con el resto del slice.
-   *
-   * Mitigación SQL adicional: el RLS + CHECK constraints de la
-   * migration 20260430000000 también cortan a nivel Postgres.
+   * `findUnique` y el `tx.libraryItem.create`, el Post se intentaría crear
+   * con un categoryId obsoleto. La tx envuelve ambos INSERTs, así que un
+   * fallo del segundo rollbackea el primero (no hay Post huérfano). La
+   * action convierte `Prisma.PrismaClientKnownRequestError` con código
+   * `P2003` (FK violation) en `ConflictError` tipado para que la UI pueda
+   * pedir reload + reintento.
    */
-  it('race condition: categoría borrada entre check y create — convierte P2003 en ConflictError tipado', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
+  it('race condition: P2003 al insertar item → ConflictError tipado, sin revalidate', async () => {
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
     createPostFromSystemHelperFn.mockResolvedValue({ id: POST_ID, slug: POST_SLUG })
-    // FK violation: categoryId ya no existe al momento del INSERT.
     txLibraryItemCreate.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError('FK constraint failed', {
         code: 'P2003',
@@ -540,24 +511,13 @@ describe.skip('createLibraryItemAction — atomicidad y errores en tx', () => {
     )
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(ConflictError)
-    // Confirmá que el revalidate NO se llama: la tx falló y la action
-    // no llega al final. El Post se intentó crear (no hay Post huérfano
-    // porque la tx rollbackea), pero un read del DB diría que falló todo.
     expect(revalidatePathFn).not.toHaveBeenCalled()
   })
 
   it('P2002 colisión de slug en post: createPostFromSystemHelper lanza ConflictError y la action lo propaga', async () => {
-    mockActiveMember({ asAdmin: true })
-    libraryCategoryFindUnique.mockResolvedValue({
-      id: CATEGORY_ID,
-      slug: CATEGORY_SLUG,
-      placeId: PLACE_ID,
-      contributionPolicy: 'MEMBERS_OPEN',
-      groupScopes: [],
-      archivedAt: null,
-    })
-    // El helper ya hace un retry interno; tras dos colisiones, tira
-    // `ConflictError`. La action no lo wrappea — lo propaga tal cual.
+    mockActiveMember({ isOwner: true })
+    mockCategoryHappy()
+    mockWriteScope('OWNER_ONLY')
     createPostFromSystemHelperFn.mockRejectedValue(
       new ConflictError('No pudimos asignar una URL única para el thread del evento.', {
         placeId: PLACE_ID,
@@ -569,7 +529,6 @@ describe.skip('createLibraryItemAction — atomicidad y errores en tx', () => {
 
     await expect(createLibraryItemAction(validInput())).rejects.toBeInstanceOf(ConflictError)
 
-    // El INSERT del LibraryItem nunca corre porque el Post falló primero.
     expect(txLibraryItemCreate).not.toHaveBeenCalled()
     expect(revalidatePathFn).not.toHaveBeenCalled()
   })

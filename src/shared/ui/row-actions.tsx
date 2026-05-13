@@ -86,6 +86,13 @@ type Props = {
    * para que el chip se vea idéntico en ambos viewports.
    */
   chipClassName?: string
+  /**
+   * Forzar kebab (overflow mode) aunque haya 1-3 acciones. Útil cuando la
+   * row entera ya es clickeable (tap → detalle) y los iconos inline
+   * compiten con el tap principal. Patrón canónico para listados
+   * settings con `tap-to-detail` (ver ux-patterns.md § "Detail-from-list").
+   */
+  forceOverflow?: boolean
 }
 
 /**
@@ -95,7 +102,13 @@ type Props = {
  */
 const OVERFLOW_THRESHOLD = 3
 
-export function RowActions({ actions, triggerLabel, children, chipClassName = '' }: Props) {
+export function RowActions({
+  actions,
+  triggerLabel,
+  children,
+  chipClassName = '',
+  forceOverflow = false,
+}: Props) {
   // Action pendiente de confirmación. null = no hay dialog abierto.
   // El dispatch al confirm dialog ocurre acá (en el root) para que un solo
   // Dialog cubra ambos modes (Inline + Overflow) sin duplicar state.
@@ -122,7 +135,7 @@ export function RowActions({ actions, triggerLabel, children, chipClassName = ''
     setPendingAction(null)
   }
 
-  const isOverflow = actions.length > OVERFLOW_THRESHOLD
+  const isOverflow = forceOverflow || actions.length > OVERFLOW_THRESHOLD
 
   return (
     <>

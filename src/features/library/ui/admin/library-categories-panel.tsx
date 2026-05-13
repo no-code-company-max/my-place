@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/ui/toaster'
 import { RowActions } from '@/shared/ui/row-actions'
@@ -10,6 +10,7 @@ import {
   friendlyLibraryErrorMessage,
   MAX_CATEGORIES_PER_PLACE,
   type LibraryCategory,
+  type LibraryReadAccessKind,
   type WriteAccessKind,
 } from '@/features/library/public'
 import {
@@ -18,29 +19,24 @@ import {
   type MemberOption,
   type TierOption,
 } from '@/features/library/wizard/public'
+import { CategoryDetailPanel } from './category-detail-panel'
 
 /**
- * Panel admin de categorías de biblioteca (S3, 2026-05-13).
+ * Panel admin de categorías de biblioteca (S5, 2026-05-13).
  *
- * Patrón canónico EditPanel + lista plana (consistente con
- * `/settings/access` y `/settings/hours`). Reemplaza al master-detail
- * deployado en S3.1.
+ * **Patrón canónico `detail-from-list`** (ver `docs/ux-patterns.md`):
+ *  - Row entera tappable → abre `<CategoryDetailPanel>` (EditPanel:
+ *    sidebar desktop / bottomsheet mobile).
+ *  - Kebab 3-dots (RowActions con `forceOverflow`) ofrece atajos
+ *    Editar (abre wizard) + Archivar (destructive con confirm).
+ *  - Dashed-border "+ Nueva categoría" abajo del listado.
  *
- * Estructura:
- *  - Header con count + "+ Nueva categoría" dashed-border si bajo cap.
- *  - Lista plana de rows. Cada row: emoji + título + chip write +
- *    chip read + RowActions (Editar pencil, Archivar trash destructive).
- *  - Editar abre el wizard de S2 en mode=edit, prefilled con write +
- *    read scopes desde el `scopesByCategoryId` precargado.
- *  - Archivar dispara confirm dialog (auto via RowActions destructive).
- *
- * El panel es Client Component porque mantiene state del sheet abierto.
- * El page padre es Server Component que carga categories + catalogs +
- * scopes batch.
+ * El detalle es read-only — muestra emoji, slug, write/read access
+ * desglosado con nombres legibles (groups + tiers + users), count
+ * items, fechas. Los botones Editar/Archivar viven adentro del panel.
  *
  * Decisión user 2026-05-12: items NO se gestionan desde este admin
- * (viven en zona gated `/library/[cat]/[item]`). Por eso no hay sección
- * "items" en el detail — el detail completo cabe en el wizard.
+ * (viven en zona gated `/library/[cat]/[item]`).
  */
 
 type CategoryScope = {
@@ -51,7 +47,7 @@ type CategoryScope = {
     userIds: ReadonlyArray<string>
   }
   read: {
-    kind: 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
+    kind: LibraryReadAccessKind
     groupIds: ReadonlyArray<string>
     tierIds: ReadonlyArray<string>
     userIds: ReadonlyArray<string>
@@ -67,7 +63,11 @@ type Props = {
   tiers: ReadonlyArray<TierOption>
 }
 
-type SheetState = { kind: 'closed' } | { kind: 'create' } | { kind: 'edit'; categoryId: string }
+type SheetState =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'detail'; categoryId: string }
+  | { kind: 'edit'; categoryId: string }
 
 export function LibraryCategoriesPanel({
   placeId,
@@ -81,6 +81,20 @@ export function LibraryCategoriesPanel({
   const [pendingArchive, startArchive] = useTransition()
 
   const canCreateMore = categories.length < MAX_CATEGORIES_PER_PLACE
+
+  // Lookup maps para resolver IDs a nombres legibles en el detalle.
+  const groupsById = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups])
+  const tiersById = useMemo(() => new Map(tiers.map((t) => [t.id, t.name])), [tiers])
+  const membersById = useMemo(
+    () =>
+      new Map(
+        members.map((m) => [
+          m.userId,
+          m.handle ? `${m.displayName} · @${m.handle}` : m.displayName,
+        ]),
+      ),
+    [members],
+  )
 
   function close(): void {
     setSheet({ kind: 'closed' })
@@ -96,6 +110,11 @@ export function LibraryCategoriesPanel({
       }
     })
   }
+
+  const detailCategory =
+    sheet.kind === 'detail' ? categories.find((c) => c.id === sheet.categoryId) : null
+  const detailScope =
+    sheet.kind === 'detail' ? (scopesByCategoryId.get(sheet.categoryId) ?? null) : null
 
   const editingCategory =
     sheet.kind === 'edit' ? categories.find((c) => c.id === sheet.categoryId) : null
@@ -128,29 +147,41 @@ export function LibraryCategoriesPanel({
             {categories.map((c) => {
               const scope = scopesByCategoryId.get(c.id)
               return (
-                <li key={c.id} className="flex min-h-[56px] flex-wrap items-center gap-2 px-3 py-3">
-                  <span aria-hidden className="text-2xl leading-none">
-                    {c.emoji}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate font-serif text-base">{c.title}</h3>
-                    <p className="truncate text-xs text-neutral-600">
-                      <span>/library/{c.slug}</span>
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                <li key={c.id} className="flex min-h-[56px] items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSheet({ kind: 'detail', categoryId: c.id })}
+                    className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left hover:bg-neutral-50"
+                    aria-label={`Ver detalle de ${c.title}`}
+                  >
+                    <span aria-hidden className="text-2xl leading-none">
+                      {c.emoji}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate font-serif text-base">{c.title}</h3>
+                      <p className="truncate text-xs text-neutral-600">
+                        <span>{writeAccessChipLabel(scope?.write.kind ?? 'OWNER_ONLY')}</span>
+                        <span aria-hidden className="mx-1.5 text-neutral-300">
+                          ·
+                        </span>
+                        <span>{readAccessChipLabel(scope?.read.kind ?? 'PUBLIC')}</span>
+                      </p>
+                    </div>
+                  </button>
+                  <div className="shrink-0 pr-2">
                     <RowActions
                       triggerLabel={`Acciones para ${c.title}`}
-                      chipClassName="inline-flex items-center gap-1 rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-700"
+                      chipClassName="hidden"
+                      forceOverflow={true}
                       actions={[
                         {
                           icon: <Pencil aria-hidden="true" className="h-4 w-4" />,
-                          label: `Editar ${c.title}`,
+                          label: 'Editar',
                           onSelect: () => setSheet({ kind: 'edit', categoryId: c.id }),
                         },
                         {
                           icon: <Trash2 aria-hidden="true" className="h-4 w-4" />,
-                          label: `Archivar ${c.title}`,
+                          label: 'Archivar',
                           destructive: true,
                           confirmTitle: `¿Archivar "${c.title}"?`,
                           confirmDescription:
@@ -160,11 +191,7 @@ export function LibraryCategoriesPanel({
                         },
                       ]}
                     >
-                      <span>{writeAccessChipLabel(scope?.write.kind ?? 'OWNER_ONLY')}</span>
-                      <span aria-hidden className="text-neutral-300">
-                        ·
-                      </span>
-                      <span>{readAccessChipLabel(scope?.read.kind ?? 'PUBLIC')}</span>
+                      <span aria-hidden />
                     </RowActions>
                   </div>
                 </li>
@@ -200,6 +227,22 @@ export function LibraryCategoriesPanel({
         members={members}
         tiers={tiers}
       />
+
+      {detailCategory && detailScope ? (
+        <CategoryDetailPanel
+          open={true}
+          onOpenChange={(next) => {
+            if (!next) close()
+          }}
+          category={detailCategory}
+          scope={detailScope}
+          groupsById={groupsById}
+          tiersById={tiersById}
+          membersById={membersById}
+          onEdit={() => setSheet({ kind: 'edit', categoryId: detailCategory.id })}
+          onArchive={() => handleArchive(detailCategory)}
+        />
+      ) : null}
 
       {editingCategory && editingScope ? (
         <CategoryFormSheet
@@ -244,7 +287,7 @@ function writeAccessChipLabel(kind: WriteAccessKind): string {
   }
 }
 
-function readAccessChipLabel(kind: 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'): string {
+function readAccessChipLabel(kind: LibraryReadAccessKind): string {
   switch (kind) {
     case 'PUBLIC':
       return 'Lee: todos'

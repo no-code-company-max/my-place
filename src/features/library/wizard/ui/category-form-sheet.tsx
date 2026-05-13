@@ -2,11 +2,11 @@
 
 import { useMemo } from 'react'
 import {
-  BottomSheet,
-  BottomSheetContent,
-  BottomSheetDescription,
-  BottomSheetTitle,
-} from '@/shared/ui/bottom-sheet'
+  EditPanel,
+  EditPanelContent,
+  EditPanelDescription,
+  EditPanelTitle,
+} from '@/shared/ui/edit-panel'
 import { toast } from '@/shared/ui/toaster'
 import { Wizard, type WizardStep } from '@/shared/ui/wizard'
 import {
@@ -105,7 +105,13 @@ const STEPS: ReadonlyArray<WizardStep<CategoryFormValue>> = [
 ]
 
 /**
- * BottomSheet con wizard 4-step para crear o editar una categoría de library.
+ * Wizard 4-step responsive para crear o editar una categoría de library.
+ *
+ * **Migración a `<EditPanel>` (S5, 2026-05-13):** antes usaba
+ * `<BottomSheet>` plano (mobile-only). Ahora el primitive `<EditPanel>`
+ * responsive lo extiende a desktop como side drawer derecho 520px,
+ * mismo patrón que `/settings/hours`. Drop-in API (sin cambios en steps
+ * ni Wizard primitive).
  *
  * Steps (S2, 2026-05-13):
  *  1. Identidad — emoji + título.
@@ -226,16 +232,15 @@ export function CategoryFormSheet({
   const titleText = mode.kind === 'create' ? 'Nueva categoría' : 'Editar categoría'
 
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange}>
-      <BottomSheetContent aria-describedby={undefined}>
-        {/* `BottomSheetTitle` y `BottomSheetDescription` requeridos por
-            Radix para `aria-labelledby/describedby`. Visualmente los
-            ocultamos — el wizard.Header los reemplaza con su propio
-            chrome. */}
-        <BottomSheetTitle className="sr-only">{titleText}</BottomSheetTitle>
-        <BottomSheetDescription className="sr-only">
+    <EditPanel open={open} onOpenChange={onOpenChange}>
+      <EditPanelContent aria-describedby={undefined}>
+        {/* `EditPanelTitle` y `EditPanelDescription` requeridos por Radix
+            para `aria-labelledby/describedby`. Visualmente los ocultamos —
+            el wizard.Header los reemplaza con su propio chrome. */}
+        <EditPanelTitle className="sr-only">{titleText}</EditPanelTitle>
+        <EditPanelDescription className="sr-only">
           Configurá la categoría en 4 pasos.
-        </BottomSheetDescription>
+        </EditPanelDescription>
 
         {open ? (
           <CategoryFormCatalogContext.Provider value={catalogs}>
@@ -251,7 +256,7 @@ export function CategoryFormSheet({
             </Wizard>
           </CategoryFormCatalogContext.Provider>
         ) : null}
-      </BottomSheetContent>
-    </BottomSheet>
+      </EditPanelContent>
+    </EditPanel>
   )
 }

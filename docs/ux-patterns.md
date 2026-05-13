@@ -406,7 +406,7 @@ md:data-[state=open]:slide-in-from-right md:data-[state=closed]:slide-out-to-rig
 **Behavior.**
 
 - **1-3 actions (InlineMode)**: chip display-only span + `actions[].icon` rendered as `<button aria-label={label}>` next to the chip. Same layout en ambos viewports.
-- **Overflow** (`actions.length > 3`): chip + kebab `...` dropdown. 4+ icons inline pierden claridad y fuerzan wrap denso.
+- **Overflow** (`actions.length > 3` o `forceOverflow={true}`): chip + kebab `...` dropdown. 4+ icons inline pierden claridad y fuerzan wrap denso. Forzar kebab con 1-3 acciones (`forceOverflow`) es el patrón canónico cuando el row entero es tappable (ver § "Detail-from-list pattern") — los iconos inline compiten con el tap principal.
 - **Destructive ⇒ confirm dialog automático**: cualquier action con `destructive: true` abre un Dialog modal en lugar de ejecutar `onSelect` directo. Cancelar (focus default) o "Sí, eliminar". Customizable vía `confirmTitle`, `confirmDescription`, `confirmActionLabel`.
 
 **Why.** Descubrimiento de acciones > densidad horizontal. Los iconos visibles inline en mobile permiten 1-tap edit/eliminar sin pasar por dropdown. El trade de width adicional se asume — `flex-wrap` cubre el case de múltiples chips.
@@ -428,6 +428,72 @@ md:data-[state=open]:slide-in-from-right md:data-[state=closed]:slide-out-to-rig
 - Touch targets: cada icon button es `min-h-11 min-w-11` (44px). Don't override.
 - Customize confirm copy con `confirmTitle`, `confirmDescription`, `confirmActionLabel` cuando el contexto importa (e.g. "¿Eliminar ventana 09:00→17:00?" en lugar del default "¿Eliminar?").
 - ESC / click outside del confirm dialog se trata como Cancel — nunca como Confirm.
+
+## Detail-from-list pattern (tap-row → `<EditPanel>` detalle read-only)
+
+**What.** En listados de `/settings/*` donde cada item tiene **identidad propia** (categoría library, grupo de permisos, tier, día con ventanas), el row entero es tappable y abre un panel de **detalle read-only** dentro de `<EditPanel>` (side drawer 520px desktop / bottom sheet mobile). El detalle muestra el resumen completo del item + botones inline "Editar" + "Archivar/Eliminar" (destructive con confirm). Las mutaciones nunca ocurren inline en el detalle — el botón "Editar" cierra el detalle y abre el wizard/form en mode `edit`.
+
+```
+┌─ Listado settings/* ─────────────────────────┐
+│  [emoji] Categoría 1 · chips access      ⋮   │  ← row tappable + kebab
+│  [emoji] Categoría 2 · chips access      ⋮   │
+│  [emoji] Categoría 3 · chips access      ⋮   │
+│  + Nueva                                     │
+└──────────────────────────────────────────────┘
+       ↓ tap row
+┌─ <EditPanel> sidebar (desktop) / sheet (mobile) ─┐
+│  ✕                                                │
+│  [emoji big] Categoría 1                          │
+│  /library/categoria-1                             │
+│  ───────────────────────────                      │
+│  Quién puede escribir: Solo el owner              │
+│  hint corto                                       │
+│  ───────────────────────────                      │
+│  Quién puede leer: Cualquier miembro              │
+│  hint corto                                       │
+│  ───────────────────────────                      │
+│  Detalles · 3 items · creado 2026-05-01           │
+│                                                   │
+│  [ ✎ Editar ]                                     │
+│  [ 🗑 Archivar ]  ← destructive: confirm dialog   │
+└───────────────────────────────────────────────────┘
+```
+
+**Why.** En desktop, master-detail con click-row-en-lista vs panel-detalle es el patrón Settings (Apple/Linear/Notion) más esperado por el user. El sidebar derecho 520px mantiene la lista visible al fondo — el user no pierde contexto. En mobile, el bottom sheet ocupa 85vh con back gesture nativo. Tap-to-detail es discoverable (toda la row indica clickability via cursor + hover) y separa **navegación** (tap row) de **acción rápida** (kebab para edit/delete sin pasar por el detalle).
+
+**Why NOT split entre detalle + edit** (es decir, ¿por qué no abrir directo el wizard?):
+
+- Editar es high-friction: 4 steps en library; el user no siempre quiere editar — a veces solo verificar.
+- El detalle resume las decisiones del modelo (write/read access desglosado con names legibles) — útil para reconocer "qué le di acceso a quién".
+
+**When to use.** Listados de settings donde el item tiene:
+
+1. Múltiples atributos no triviales que vale la pena resumir (≥3 fields).
+2. Una acción destructiva (archive/delete) que debe verse en contexto.
+3. Una acción de edit que justifica un form/wizard separado.
+
+**When NOT to use.**
+
+- Items con UN solo atributo editable (e.g. toggle on/off de un día) — el inline edit es suficiente.
+- Items efímeros (e.g. invitaciones pendientes) — usar inline RowActions sin detalle.
+- Items con detalle que crece (e.g. categorías de library con items dentro) — eso se gestiona en una page propia, no en panel.
+
+**How.**
+
+1. **Row**: usar `<button>` para la región tappable (emoji + título + chips). El kebab vive en un `<div>` adyacente con `stopPropagation` implícito (RowActions ya lo maneja).
+2. **`<RowActions forceOverflow={true}>`**: forzar kebab dropdown aunque haya 1-3 acciones. Los iconos inline compiten con el tap del row.
+3. **`<DetailPanel>` propio del slice**: read-only summary + 2 botones full-width en el footer (Editar primary outline + Archivar destructive con confirm dialog interno).
+4. **State del listado**: discriminated union `'closed' | 'create' | 'detail' | 'edit'`. Click row → `detail`. Editar dentro del detalle → cierra detail + abre `edit` (cierra el panel actual ANTES de abrir el siguiente para no superponer dos EditPanels).
+5. **Resolver IDs a nombres legibles**: el detalle muestra "Grupo Mods" en lugar de `grp-mods-abc123`. Pasar `Map<id, label>` desde el page server al panel.
+
+**Reference implementation.** `features/library/ui/admin/category-detail-panel.tsx` + `library-categories-panel.tsx`. Patrón análogo aplicable a `/settings/groups/*` y `/settings/tiers/*` cuando se rediseñen.
+
+**Pitfalls.**
+
+- **NO uses `<RowActions>` con iconos inline si el row es tappable.** Los iconos individuales tienen su propio handler de click — si el padre `<button>` los engloba, el evento burbujea y ambos disparan. Forzá kebab (`forceOverflow={true}`) en este caso.
+- **NO superpongas dos EditPanels** abriendo edit mientras detail está abierto. Cerrá el detail primero (`onOpenChange(false)`) y el caller decide cuándo abrir el edit. La animation de cierre dura 200ms — el wizard que abre después aparece tras esa transición sin solape visible.
+- **NO duplicar acciones**: si el kebab ya tiene Editar/Archivar y el detalle también, asegurarse de que ambos invocan el mismo handler (no duplicar logic).
+- **`chipClassName="hidden"`** para casos donde el chip de RowActions no se renderiza (solo querés el kebab puro). El primitive requiere `children` no-vacío — pasar `<span aria-hidden />` como placeholder.
 
 ## Save model — todo manual (consistente)
 

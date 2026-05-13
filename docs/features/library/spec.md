@@ -1,5 +1,14 @@
 # Biblioteca — Especificación
 
+> **Actualización v2.1 (2026-05-12)**: modelo de permisos rediseñado a
+> `ReadAccessKind` + `WriteAccessKind` simétricos con 6 tablas pivote.
+> Reemplaza el modelo `ContributionPolicy + LibraryCategoryContributor`.
+> Decisión documentada en ADR `2026-05-12-library-permissions-model`.
+> Implementación en `docs/plans/2026-05-12-library-permissions-redesign.md`.
+> Las secciones 10 (modelo) y 11 (matriz) están actualizadas;
+> sub-fase 14.4 (designated contributors UI) queda **obsoleta** —
+> reemplazada por el wizard unificado con write access step.
+
 > **Alcance v1 (R.5, 2026-04-30)**: UI scaffold sin backend. Empty
 > state production-ready en `/library`; componentes UI listos para
 > recibir data real.
@@ -90,10 +99,15 @@ NO es:
   para futura UI desktop. Decisión user 2026-04-30 (Place se
   consume mayoritariamente desde mobile; cover en mobile suma
   ruido sin valor).
-- **Contribution policy**: quién puede crear items en una
-  categoría — `admin_only | designated | members_open`. Default
-  `admin_only`. `designated` requiere lista de `userId`s
-  habilitados via tabla `LibraryCategoryContributor`.
+- **Write access kind** (~~contribution policy~~): quién puede crear
+  items en una categoría — `OWNER_ONLY | GROUPS | TIERS | USERS`.
+  Default `OWNER_ONLY`. Cada opción no-owner tiene su pivot table
+  (`LibraryCategoryGroupWriteScope`, `LibraryCategoryTierWriteScope`,
+  `LibraryCategoryUserWriteScope`). Modelo unificado con read access —
+  ver ADR `2026-05-12-library-permissions-model`. **Reemplaza el modelo
+  legado** (`ContributionPolicy { ADMIN_ONLY | DESIGNATED |
+MEMBERS_OPEN | SELECTED_GROUPS }`) que mezclaba dimensiones; el
+  caso "cualquier miembro escribe" (`MEMBERS_OPEN`) **se elimina**.
 - **Recientes**: top-N items globales del place ordenados por
   `Post.lastActivityAt DESC` (no por `createdAt` — refleja
   actividad real, mismo criterio que en discusiones).
@@ -464,6 +478,13 @@ entrega los siguientes:
 
 ### 10.1 Tablas nuevas
 
+> **Modelo v2 (2026-05-12)** — `ReadAccessKind` + `WriteAccessKind`
+> simétricos con 6 tablas pivote. Reemplaza el modelo legado
+> (`ContributionPolicy` + `LibraryCategoryContributor` +
+> `GroupCategoryScope`). Decisión documentada en ADR
+> `2026-05-12-library-permissions-model`. Implementación en
+> `docs/plans/2026-05-12-library-permissions-redesign.md` (S1).
+
 ```prisma
 model LibraryCategory {
   id                  String   @id @default(cuid())
@@ -472,35 +493,53 @@ model LibraryCategory {
   emoji               String                            // 1 char emoji
   title               String                            // 1..60 chars
   position            Int                               // orden manual; default = max+1
-  contributionPolicy  ContributionPolicy @default(ADMIN_ONLY)
+  kind                LibraryCategoryKind @default(GENERAL)
+  readAccessKind      ReadAccessKind  @default(PUBLIC)
+  writeAccessKind     WriteAccessKind @default(OWNER_ONLY)
   archivedAt          DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   place               Place    @relation(fields: [placeId], references: [id], onDelete: Cascade)
-  contributors        LibraryCategoryContributor[]
   items               LibraryItem[]
+
+  // 3 pivots de read (sumados en 2026-05-04, ADR library-courses-and-read-access)
+  groupReadScopes     LibraryCategoryGroupReadScope[]
+  tierReadScopes      LibraryCategoryTierReadScope[]
+  userReadScopes      LibraryCategoryUserReadScope[]
+
+  // 3 pivots de write (sumados en 2026-05-12, ADR library-permissions-model)
+  groupWriteScopes    LibraryCategoryGroupWriteScope[]  // rename de GroupCategoryScope
+  tierWriteScopes     LibraryCategoryTierWriteScope[]   // NEW
+  userWriteScopes     LibraryCategoryUserWriteScope[]   // rename de LibraryCategoryContributor
 
   @@unique([placeId, slug])
   @@index([placeId, archivedAt])
   @@index([placeId, position])
 }
 
-enum ContributionPolicy {
-  ADMIN_ONLY
-  DESIGNATED
-  MEMBERS_OPEN
+enum ReadAccessKind {
+  PUBLIC      // todos los miembros activos del place
+  GROUPS      // restringido a N groups
+  TIERS       // restringido a N tiers
+  USERS       // restringido a N users
 }
 
-model LibraryCategoryContributor {
-  categoryId       String
-  userId           String
-  invitedByUserId  String
-  invitedAt        DateTime @default(now())
+enum WriteAccessKind {
+  OWNER_ONLY  // solo owner del place — default restrictivo
+  GROUPS      // N groups
+  TIERS       // N tiers
+  USERS       // N users
+}
 
-  category         LibraryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  user             User            @relation("LibraryContributor",     fields: [userId],          references: [id], onDelete: Cascade)
-  invitedBy        User            @relation("LibraryContributorInvitedBy", fields: [invitedByUserId], references: [id])
+// Las 6 pivots tienen shape idéntico: { categoryId, subjectId } con PRIMARY KEY
+// composite y FK cascade. Ejemplo (los otros 5 son análogos):
+model LibraryCategoryUserWriteScope {
+  categoryId  String
+  userId      String
+
+  category    LibraryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId],     references: [id], onDelete: Cascade)
 
   @@id([categoryId, userId])
   @@index([userId])
@@ -574,26 +613,34 @@ Post ES el item).
 
 ### 10.4 RLS — políticas resumidas
 
+> **Modelo v2 (2026-05-12)** — RLS coordinada con el nuevo
+> `ReadAccessKind` + `WriteAccessKind`. Helpers SQL
+> `is_in_category_read_scope(category_id, user_id)` y
+> `is_in_category_write_scope(category_id, user_id)` evitan duplicar
+> lógica en cada policy.
+
 - **`LibraryCategory` SELECT**: cualquier miembro del place ve las
-  categorías no archivadas.
-- **`LibraryCategory` INSERT/UPDATE/DELETE**: solo admin/owner del
-  place (vía claim `is_admin_in_place`).
-- **`LibraryCategoryContributor` SELECT**: cualquier miembro del
-  place ve la lista (transparente).
-- **`LibraryCategoryContributor` INSERT/DELETE**: solo admin/owner.
-- **`LibraryItem` SELECT**: cualquier miembro del place ve los
-  items no archivados (la membership al place ya garantiza
-  acceso al contenido — no hay items "privados" dentro de un
-  place).
-- **`LibraryItem` INSERT**: el viewer puede crear si
-  `canCreateInCategory(category, viewer)` retorna true (admin u
-  owner; o policy=members_open; o policy=designated y el viewer
-  está en la tabla contributors).
-- **`LibraryItem` UPDATE**: admin/owner del place o author del
-  Post asociado.
-- **`LibraryItem` DELETE**: nunca — solo soft delete via
-  `archivedAt`. La política bloquea DELETE físico salvo cron de
-  erasure por place archive.
+  categorías no archivadas (la lista de categorías es transparente —
+  el gate de acceso es a nivel item dentro de la categoría).
+- **`LibraryCategory` INSERT/UPDATE/DELETE**: solo owner del place
+  (vía claim `is_owner_in_place`).
+- **6 pivots** (`LibraryCategory{Group,Tier,User}{Read,Write}Scope`)
+  **SELECT**: cualquier miembro del place ve las listas (transparente).
+- **6 pivots INSERT/DELETE**: solo owner del place.
+- **`LibraryItem` SELECT**: el viewer puede ver si:
+  - Es owner del place (bypass), o
+  - `is_in_category_read_scope(item.categoryId, viewer)` es true (que
+    incluye PUBLIC | groups | tiers | users), o
+  - `is_in_category_write_scope(item.categoryId, viewer)` es true
+    (write implica read).
+- **`LibraryItem` INSERT**: el viewer puede crear si:
+  - Es owner del place (bypass), o
+  - `is_in_category_write_scope(item.categoryId, viewer)` es true
+    (que incluye OWNER_ONLY = solo owner | groups | tiers | users).
+- **`LibraryItem` UPDATE**: owner del place o author del Post asociado.
+- **`LibraryItem` DELETE**: nunca — solo soft delete via `archivedAt`.
+  La política bloquea DELETE físico salvo cron de erasure por place
+  archive.
 
 Tests RLS en `tests/rls/library-*.test.ts` cubren al menos: 5
 casos de SELECT (member ve, no-member no ve, archivada oculta,
@@ -603,47 +650,55 @@ sí, designated en otra categoría no), y matrices de archivar.
 
 ## 11. Permisos (matriz canónica)
 
+> **Modelo v2 (2026-05-12)** — la matriz refleja el nuevo
+> `WriteAccessKind` + read access scopes. ADR
+> `2026-05-12-library-permissions-model`.
+
 Vocabulario:
 
-- **place admin/owner**: rol del miembro en el place
-  (`Member.role IN ('OWNER', 'ADMIN')`). El owner tiene un poder
-  adicional para transferir ownership; en términos de library,
-  owner y admin son equivalentes.
+- **place owner**: rol del miembro en el place
+  (`PlaceOwnership`). En el modelo v2, **owner** es el único rol con
+  poderes administrativos sobre library — admin del place ya no
+  tiene poderes especiales acá (decisión user 2026-05-12).
 - **author del item**: el `Post.authorUserId` del Post asociado al
-  `LibraryItem`. La palabra "owner" NO se usa para esto en
-  library — se usa "author" para evitar choque con el rol de
-  place.
-- **designated**: miembro listado en
-  `LibraryCategoryContributor` para una categoría específica. Se
-  habilita solo cuando `category.contributionPolicy = DESIGNATED`.
-- **miembro común**: cualquier miembro del place sin rol
-  especial.
+  `LibraryItem`. La palabra "owner" NO se usa para esto en library —
+  se usa "author" para evitar choque con el rol de place.
+- **read-scoped**: viewer matchea el `readAccessKind` de la categoría
+  según el scope (PUBLIC = cualquier miembro; GROUPS/TIERS/USERS = en
+  la pivot correspondiente).
+- **write-scoped**: viewer matchea el `writeAccessKind` de la
+  categoría según el scope (OWNER_ONLY = solo owner; GROUPS/TIERS/
+  USERS = en la pivot correspondiente). **Write implica read**: si
+  estás write-scoped, automáticamente sos read-scoped.
 
-| Acción                          | place admin/owner | author del item | designated (en su categoría) | miembro común          |
-| ------------------------------- | ----------------- | --------------- | ---------------------------- | ---------------------- |
-| Crear categoría                 | ✓                 | —               | —                            | —                      |
-| Editar categoría (emoji+título) | ✓                 | —               | —                            | —                      |
-| Archivar categoría              | ✓                 | —               | —                            | —                      |
-| Configurar policy + designados  | ✓                 | —               | —                            | —                      |
-| Reordenar categorías            | ✓                 | —               | —                            | —                      |
-| Crear item en `admin_only`      | ✓                 | —               | —                            | —                      |
-| Crear item en `designated`      | ✓                 | —               | ✓                            | —                      |
-| Crear item en `members_open`    | ✓                 | —               | —                            | ✓                      |
-| Editar body/cover/título item   | ✓                 | ✓               | —                            | —                      |
-| Archivar item                   | ✓                 | ✓               | —                            | —                      |
-| Comentar / reaccionar / leer    | ✓                 | ✓               | ✓                            | ✓ (todos los miembros) |
+| Acción                                | place owner | author del item | write-scoped | read-scoped (sin write) | miembro común sin scope |
+| ------------------------------------- | ----------- | --------------- | ------------ | ----------------------- | ----------------------- |
+| Crear categoría                       | ✓           | —               | —            | —                       | —                       |
+| Editar categoría (emoji + título)     | ✓           | —               | —            | —                       | —                       |
+| Archivar categoría                    | ✓           | —               | —            | —                       | —                       |
+| Configurar `readAccessKind` + scopes  | ✓           | —               | —            | —                       | —                       |
+| Configurar `writeAccessKind` + scopes | ✓           | —               | —            | —                       | —                       |
+| Reordenar categorías                  | ✓           | —               | —            | —                       | —                       |
+| Crear item en categoría               | ✓           | —               | ✓            | —                       | —                       |
+| Editar body/cover/título item         | ✓           | ✓               | —            | —                       | —                       |
+| Archivar item                         | ✓           | ✓               | —            | —                       | —                       |
+| Comentar / reaccionar                 | ✓           | ✓               | ✓            | ✓                       | —                       |
+| Leer item                             | ✓           | ✓               | ✓            | ✓                       | —                       |
 
-Función pura `canCreateInCategory(category, viewer): boolean` vive
-en `src/features/library/domain/permissions.ts`. Se usa en:
+Funciones puras en `src/features/library/domain/permissions.ts`:
 
-- Server-side (page, action) para gate de creación.
-- RLS policy a nivel SQL (replica la lógica como CTE en la
-  policy de INSERT, ver § 10.4).
+- `canRead(category, viewer): boolean` — owner bypass | write-scoped
+  (write implies read) | read-scoped.
+- `canWrite(category, viewer): boolean` — owner bypass | write-scoped.
+- `canEditItem(item, post, viewer): boolean` — owner | author.
+- `canArchiveItem(item, post, viewer): boolean` — owner | author.
+
+Cada función se usa en:
+
+- Server-side (page, action) para gate.
+- RLS policy a nivel SQL (replica la lógica vía helpers
+  `is_in_category_read_scope` / `is_in_category_write_scope`, ver § 10.4).
 - UI condicional (botón "Crear" visible/oculto).
-
-`canEditItem(item, post, viewer): boolean` y
-`canArchiveItem(item, post, viewer): boolean` siguen el mismo
-patrón.
 
 ## 12. Editor + embed custom node (TipTap)
 
@@ -871,24 +926,19 @@ test verde.
 
 **Commit**: `feat(library): admin CRUD de categorías en /settings/library (R.7.3)`.
 
-### 14.4 — Designated contributors UI
+### 14.4 — ~~Designated contributors UI~~ (OBSOLETO 2026-05-12)
 
-**Deliverable**:
-
-- `<ContributorsManager>` (Client) montado dentro del
-  `<CategoryFormDialog>` cuando `policy === DESIGNATED`.
-- Server actions: `inviteContributorAction`,
-  `removeContributorAction`.
-- Member picker: input de búsqueda con autocomplete sobre
-  members del place (reuse helper `searchMembers` si existe en
-  members slice; si no, sumar query `searchMembersByName`).
-- UI: lista de invitados con avatar + nombre + botón "Quitar".
-- Tests unit + E2E smoke.
-
-**Verificación**: usual + boundary test (library importa de
-members/public.server para searchMembersByName).
-
-**Commit**: `feat(library): designated contributors por categoría (R.7.4)`.
+> Esta sub-fase queda **obsoleta** por el rediseño del modelo de
+> permisos v2 (ADR `2026-05-12-library-permissions-model`). El
+> concepto "designated contributors" (`ContributionPolicy.DESIGNATED`
+>
+> - tabla `LibraryCategoryContributor`) se reemplaza por
+>   `WriteAccessKind.USERS` con pivot `LibraryCategoryUserWriteScope`.
+>
+> La UI de seleccionar users-que-pueden-escribir vive ahora dentro del
+> **wizard unificado de categoría** (step "Escritura"), no en un
+> sub-dialog separado. Plan de implementación en
+> `docs/plans/2026-05-12-library-permissions-redesign.md` § S2.
 
 ### 14.5 — Schema + RLS de items
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/ui/toaster'
 import { RowActions } from '@/shared/ui/row-actions'
@@ -123,6 +123,44 @@ export function LibraryCategoriesPanel({
     sheet.kind === 'edit' ? categories.find((c) => c.id === sheet.categoryId) : null
   const editingScope =
     sheet.kind === 'edit' ? (scopesByCategoryId.get(sheet.categoryId) ?? null) : null
+
+  // Latch del último edit mode: mantiene `<CategoryFormSheet>` montado
+  // (con el mode anterior) durante la animation de cierre para que Radix
+  // Presence anime el exit. Mismo patrón que `<CategoryDetailPanel>`.
+  const [latchedEditMode, setLatchedEditMode] = useState<{
+    kind: 'edit'
+    categoryId: string
+    initialEmoji: string
+    initialTitle: string
+    initialKind: LibraryCategory['kind']
+    initialWriteAccessKind: WriteAccessKind
+    initialWriteGroupIds: ReadonlyArray<string>
+    initialWriteTierIds: ReadonlyArray<string>
+    initialWriteUserIds: ReadonlyArray<string>
+    initialReadAccessKind: LibraryReadAccessKind
+    initialReadGroupIds: ReadonlyArray<string>
+    initialReadTierIds: ReadonlyArray<string>
+    initialReadUserIds: ReadonlyArray<string>
+  } | null>(null)
+  useEffect(() => {
+    if (editingCategory && editingScope) {
+      setLatchedEditMode({
+        kind: 'edit',
+        categoryId: editingCategory.id,
+        initialEmoji: editingCategory.emoji,
+        initialTitle: editingCategory.title,
+        initialKind: editingCategory.kind,
+        initialWriteAccessKind: editingScope.write.kind,
+        initialWriteGroupIds: editingScope.write.groupIds,
+        initialWriteTierIds: editingScope.write.tierIds,
+        initialWriteUserIds: editingScope.write.userIds,
+        initialReadAccessKind: editingScope.read.kind,
+        initialReadGroupIds: editingScope.read.groupIds,
+        initialReadTierIds: editingScope.read.tierIds,
+        initialReadUserIds: editingScope.read.userIds,
+      })
+    }
+  }, [editingCategory, editingScope])
 
   return (
     <>
@@ -249,27 +287,16 @@ export function LibraryCategoriesPanel({
         }}
       />
 
-      {editingCategory && editingScope ? (
+      {/* Edit wizard — siempre montado una vez que el user abrió un edit,
+          con `mode` latcheado para que Radix Presence anime el exit
+          cuando `open` flipea a false. */}
+      {latchedEditMode ? (
         <CategoryFormSheet
-          open={true}
+          open={sheet.kind === 'edit'}
           onOpenChange={(next) => {
             if (!next) close()
           }}
-          mode={{
-            kind: 'edit',
-            categoryId: editingCategory.id,
-            initialEmoji: editingCategory.emoji,
-            initialTitle: editingCategory.title,
-            initialKind: editingCategory.kind,
-            initialWriteAccessKind: editingScope.write.kind,
-            initialWriteGroupIds: editingScope.write.groupIds,
-            initialWriteTierIds: editingScope.write.tierIds,
-            initialWriteUserIds: editingScope.write.userIds,
-            initialReadAccessKind: editingScope.read.kind,
-            initialReadGroupIds: editingScope.read.groupIds,
-            initialReadTierIds: editingScope.read.tierIds,
-            initialReadUserIds: editingScope.read.userIds,
-          }}
+          mode={latchedEditMode}
           groups={groups}
           members={members}
           tiers={tiers}

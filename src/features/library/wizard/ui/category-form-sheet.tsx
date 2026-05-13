@@ -242,20 +242,27 @@ export function CategoryFormSheet({
           Configurá la categoría en 4 pasos.
         </EditPanelDescription>
 
-        {open ? (
-          <CategoryFormCatalogContext.Provider value={catalogs}>
-            <Wizard
-              steps={STEPS}
-              initialValue={initialValue}
-              onComplete={handleComplete}
-              onClose={() => onOpenChange(false)}
-            >
-              <Wizard.Header />
-              <Wizard.Body />
-              <Wizard.Footer />
-            </Wizard>
-          </CategoryFormCatalogContext.Provider>
-        ) : null}
+        {/* El Wizard primitive no aporta padding horizontal — debe vivir
+            dentro de un contenedor con el mismo padding canónico que
+            `EditPanelHeader/Body/Footer` (px-4 mobile, px-6 desktop).
+            Flex column full-height para que el Wizard.Footer ancle abajo
+            como sticky CTA. */}
+        <div className="flex h-full min-h-0 flex-1 flex-col px-4 pb-4 pt-4 md:px-6 md:pb-6 md:pt-6">
+          {open ? (
+            <CategoryFormCatalogContext.Provider value={catalogs}>
+              <Wizard
+                steps={STEPS}
+                initialValue={initialValue}
+                onComplete={handleComplete}
+                onClose={() => onOpenChange(false)}
+              >
+                <Wizard.Header />
+                <Wizard.Body />
+                <Wizard.Footer />
+              </Wizard>
+            </CategoryFormCatalogContext.Provider>
+          ) : null}
+        </div>
       </EditPanelContent>
     </EditPanel>
   )

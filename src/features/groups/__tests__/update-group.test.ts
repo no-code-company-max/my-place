@@ -7,9 +7,6 @@ const loadPlaceByIdFn = vi.fn()
 const permissionGroupFindUnique = vi.fn()
 const permissionGroupFindFirst = vi.fn()
 const permissionGroupUpdate = vi.fn()
-const groupCategoryScopeDeleteMany = vi.fn()
-const groupCategoryScopeCreateMany = vi.fn()
-const txFn = vi.fn()
 const revalidatePathFn = vi.fn()
 
 vi.mock('@/db/client', () => ({
@@ -18,21 +15,6 @@ vi.mock('@/db/client', () => ({
       findUnique: (...a: unknown[]) => permissionGroupFindUnique(...a),
       findFirst: (...a: unknown[]) => permissionGroupFindFirst(...a),
       update: (...a: unknown[]) => permissionGroupUpdate(...a),
-    },
-    groupCategoryScope: {
-      deleteMany: (...a: unknown[]) => groupCategoryScopeDeleteMany(...a),
-      createMany: (...a: unknown[]) => groupCategoryScopeCreateMany(...a),
-    },
-    $transaction: (fn: (tx: unknown) => Promise<unknown>) => {
-      txFn(fn)
-      const tx = {
-        permissionGroup: { update: permissionGroupUpdate },
-        groupCategoryScope: {
-          deleteMany: groupCategoryScopeDeleteMany,
-          createMany: groupCategoryScopeCreateMany,
-        },
-      }
-      return fn(tx)
     },
   },
 }))
@@ -77,7 +59,6 @@ const NORMAL_GROUP = {
   name: 'Mods',
   isPreset: false,
   permissions: ['flags:review'],
-  categoryScopes: [],
 }
 
 const PRESET_GROUP = {
@@ -86,7 +67,6 @@ const PRESET_GROUP = {
   name: 'Administradores',
   isPreset: true,
   permissions: ['flags:review', 'discussions:hide-post'],
-  categoryScopes: [],
 }
 
 const VALID_INPUT = {
@@ -104,37 +84,19 @@ beforeEach(() => {
   permissionGroupFindUnique.mockResolvedValue(NORMAL_GROUP)
   permissionGroupFindFirst.mockResolvedValue(null)
   permissionGroupUpdate.mockResolvedValue(undefined)
-  groupCategoryScopeDeleteMany.mockResolvedValue({ count: 0 })
-  groupCategoryScopeCreateMany.mockResolvedValue({ count: 0 })
 })
 
 describe('updateGroupAction — happy path', () => {
-  it('actualiza name, description, permissions y limpia scope', async () => {
+  it('actualiza name, description, permissions', async () => {
     const result = await updateGroupAction(VALID_INPUT)
 
     expect(result).toEqual({ ok: true })
     expect(permissionGroupUpdate).toHaveBeenCalledTimes(1)
-    expect(groupCategoryScopeDeleteMany).toHaveBeenCalledWith({
-      where: { groupId: GROUP_ID },
-    })
-    expect(groupCategoryScopeCreateMany).not.toHaveBeenCalled()
     expect(revalidatePathFn).toHaveBeenCalledWith(`/${PLACE_SLUG}/settings/groups`)
   })
 
-  it('persiste nuevos categoryScopeIds', async () => {
-    await updateGroupAction({
-      ...VALID_INPUT,
-      categoryScopeIds: ['cat-1', 'cat-2'],
-    })
-    expect(groupCategoryScopeCreateMany).toHaveBeenCalledTimes(1)
-    const call = groupCategoryScopeCreateMany.mock.calls[0]?.[0] as {
-      data: Array<{ groupId: string; categoryId: string }>
-    }
-    expect(call.data).toEqual([
-      { groupId: GROUP_ID, categoryId: 'cat-1' },
-      { groupId: GROUP_ID, categoryId: 'cat-2' },
-    ])
-  })
+  // S1b: tests "persiste nuevos categoryScopeIds" removidos —
+  // GroupCategoryScope se eliminó.
 })
 
 describe('updateGroupAction — preset', () => {
@@ -165,18 +127,7 @@ describe('updateGroupAction — preset', () => {
     expect(permissionGroupUpdate).not.toHaveBeenCalled()
   })
 
-  it('agregar scope al preset → cannot_modify_preset', async () => {
-    permissionGroupFindUnique.mockResolvedValue(PRESET_GROUP)
-
-    const result = await updateGroupAction({
-      groupId: PRESET_GROUP_ID,
-      name: PRESET_GROUP.name,
-      permissions: PRESET_GROUP.permissions,
-      categoryScopeIds: ['cat-1'],
-    })
-
-    expect(result).toEqual({ ok: false, error: 'cannot_modify_preset' })
-  })
+  // S1b: test "agregar scope al preset" removido — GroupCategoryScope eliminado.
 })
 
 describe('updateGroupAction — discriminated union', () => {

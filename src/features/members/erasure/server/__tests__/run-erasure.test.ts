@@ -448,22 +448,13 @@ describe('runErasure', () => {
     expect(sqlCalled).toMatch(/"authorUserId" = NULL/)
   })
 
-  it('cobertura: LibraryCategoryContributor rows del ex-miembro se borran (filtro nested category.placeId)', async () => {
-    membershipFindMany.mockResolvedValue([eligibleMembership])
-    libraryContributorDeleteMany.mockResolvedValue({ count: 3 })
-
-    const result = await runErasure({ dryRun: false, now: NOW })
-
-    expect(result.libraryContributorsRemoved).toBe(3)
-    expect(libraryContributorDeleteMany).toHaveBeenCalledWith({
-      where: {
-        userId: 'user-1',
-        // CRÍTICO: el filtro nested category.placeId asegura que sólo se
-        // borra el contributor del place que dejó. Si sigue activo en otro
-        // place como contributor, esa permission se preserva.
-        category: { placeId: 'place-1' },
-      },
-    })
+  // S1b (2026-05-13): test "LibraryCategoryContributor rows del ex-miembro
+  // se borran" removido. La tabla `LibraryCategoryContributor` fue
+  // eliminada — write scopes (LibraryCategoryUserWriteScope) cascadean
+  // del User en ON DELETE CASCADE, así que el cleanup ocurre cuando se
+  // hace hard-delete del User (no en erasure).
+  it.skip('LibraryCategoryContributor removido del modelo (S1b)', () => {
+    expect(true).toBe(true)
   })
 
   it('cobertura: PostRead rows del ex-miembro se borran (filtro nested post.placeId)', async () => {

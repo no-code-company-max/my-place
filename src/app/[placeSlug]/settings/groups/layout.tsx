@@ -5,7 +5,6 @@ import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { findMemberPermissions } from '@/features/members/public.server'
 import { listGroupsByPlace } from '@/features/groups/public.server'
 import { ADMIN_PRESET_NAME, GroupsListAdmin } from '@/features/groups/public'
-import { listLibraryCategories } from '@/features/library/public.server'
 import { PageHeader } from '@/shared/ui/page-header'
 import { MasterDetailLayout } from '@/shared/ui/master-detail-layout'
 
@@ -64,16 +63,7 @@ export default async function GroupsMasterDetailLayout({ children, params }: Pro
     notFound()
   }
 
-  const [groups, categories] = await Promise.all([
-    listGroupsByPlace(place.id),
-    listLibraryCategories(place.id),
-  ])
-
-  const categoryOptions = categories.map((c) => ({
-    id: c.id,
-    emoji: c.emoji,
-    title: c.title,
-  }))
+  const groups = await listGroupsByPlace(place.id)
 
   const customGroups = groups.filter((g) => !g.isPreset)
   const hasCustomGroups = customGroups.length > 0
@@ -108,7 +98,7 @@ export default async function GroupsMasterDetailLayout({ children, params }: Pro
           {groups.length} {groups.length === 1 ? 'grupo' : 'grupos'}. El preset &quot;
           {ADMIN_PRESET_NAME}&quot; tiene todos los permisos por defecto.
         </p>
-        <GroupsListAdmin placeSlug={place.slug} groups={groups} categories={categoryOptions} />
+        <GroupsListAdmin placeSlug={place.slug} groups={groups} />
         {!hasCustomGroups && (
           <p className="text-sm italic text-neutral-500">
             Todavía no creaste grupos custom. Crealos para delegar moderación a miembros sin darles

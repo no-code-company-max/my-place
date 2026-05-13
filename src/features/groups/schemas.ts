@@ -6,6 +6,11 @@
  * las propias actions — Zod cubre estructura.
  *
  * Ver `docs/features/groups/spec.md` § 10.
+ *
+ * **S1b (2026-05-13):** removidos `categoryScopeIds` (group-level scope
+ * por categoría library) — la table `GroupCategoryScope` se eliminó.
+ * Los permisos `library:*` aplican ahora globalmente al place. Ver ADR
+ * `docs/decisions/2026-05-12-library-permissions-model.md`.
  */
 
 import { z } from 'zod'
@@ -19,7 +24,6 @@ import { PERMISSIONS_ALL } from './domain/permissions'
 const placeSlugSchema = z.string().min(1).max(80)
 const userIdSchema = z.string().min(1)
 const groupIdSchema = z.string().min(1)
-const categoryIdSchema = z.string().min(1)
 
 /**
  * Enum Zod del set hardcoded de permisos. Se construye con `z.enum` a
@@ -40,14 +44,12 @@ const descriptionSchema = z
   .transform((v) => (v && v.length > 0 ? v : undefined))
 
 const permissionsSchema = z.array(permissionEnumSchema).max(PERMISSIONS_ALL.length)
-const categoryScopeIdsSchema = z.array(categoryIdSchema).optional()
 
 export const createGroupInputSchema = z.object({
   placeSlug: placeSlugSchema,
   name: nameSchema,
   description: descriptionSchema,
   permissions: permissionsSchema,
-  categoryScopeIds: categoryScopeIdsSchema,
 })
 export type CreateGroupInput = z.infer<typeof createGroupInputSchema>
 
@@ -56,7 +58,6 @@ export const updateGroupInputSchema = z.object({
   name: nameSchema,
   description: descriptionSchema,
   permissions: permissionsSchema,
-  categoryScopeIds: categoryScopeIdsSchema,
 })
 export type UpdateGroupInput = z.infer<typeof updateGroupInputSchema>
 
@@ -76,13 +77,3 @@ export const removeMemberFromGroupInputSchema = z.object({
   userId: userIdSchema,
 })
 export type RemoveMemberFromGroupInput = z.infer<typeof removeMemberFromGroupInputSchema>
-
-export const setGroupCategoryScopeInputSchema = z.object({
-  groupId: groupIdSchema,
-  /**
-   * Lista completa que reemplaza el scope. Pasar `[]` deja al grupo en
-   * scope global (sin entries en `GroupCategoryScope`).
-   */
-  categoryIds: z.array(categoryIdSchema),
-})
-export type SetGroupCategoryScopeInput = z.infer<typeof setGroupCategoryScopeInputSchema>

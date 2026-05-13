@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { canCreateInAnyCategoryForViewer } from '@/features/library/public.server'
+import { canWriteInAnyCategory } from '@/features/library/contribution/public.server'
 import { ZoneFabClient } from './zone-fab-client'
 
 /**
@@ -37,6 +37,8 @@ import { ZoneFabClient } from './zone-fab-client'
 type Props = {
   placeId: string
   userId: string
+  /** Mantenido por compatibilidad con el call site del layout — no se
+   *  usa post-S1b (sólo owner bypassa write access, no admin). */
   isAdmin: boolean
 }
 
@@ -48,11 +50,7 @@ export function ZoneFab(props: Props): React.ReactNode {
   )
 }
 
-async function ZoneFabResolver({ placeId, userId, isAdmin }: Props) {
-  const canCreateLibraryResource = await canCreateInAnyCategoryForViewer({
-    placeId,
-    userId,
-    isAdmin,
-  })
+async function ZoneFabResolver({ placeId, userId }: Props) {
+  const canCreateLibraryResource = await canWriteInAnyCategory({ placeId, userId })
   return <ZoneFabClient canCreateLibraryResource={canCreateLibraryResource} />
 }

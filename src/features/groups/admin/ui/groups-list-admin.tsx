@@ -5,12 +5,6 @@ import { useState } from 'react'
 import type { PermissionGroup } from '@/features/groups/domain/types'
 import { GroupFormSheet } from './group-form-sheet'
 
-type CategoryOption = {
-  id: string
-  emoji: string
-  title: string
-}
-
 type Props = {
   /** Slug del place — alimenta el Link a `/settings/groups/[groupId]`
    *  (URL pública subdominio: el path NO incluye placeSlug — vive en el
@@ -20,10 +14,6 @@ type Props = {
   /** Grupos del place — preset arriba, después por createdAt asc.
    *  Cada uno se renderea como row minimalista enlazada a su detalle. */
   groups: ReadonlyArray<PermissionGroup>
-  /** Categorías del place — alimentan el `<CategoryScopeSelector>` del
-   *  `<GroupFormSheet>` en modo create cuando un permiso `library:*` se
-   *  activa. */
-  categories: ReadonlyArray<CategoryOption>
 }
 
 /**
@@ -48,7 +38,7 @@ type Props = {
  * Empty state secundario (cuando sólo está el preset) lo agrega la page
  * padre debajo — este componente no lo renderiza para no acoplar.
  */
-export function GroupsListAdmin({ placeSlug, groups, categories }: Props): React.ReactNode {
+export function GroupsListAdmin({ placeSlug, groups }: Props): React.ReactNode {
   const [sheetOpen, setSheetOpen] = useState(false)
 
   // `placeSlug` viaja al `GroupFormSheet` en modo create. Reusamos el
@@ -111,7 +101,6 @@ export function GroupsListAdmin({ placeSlug, groups, categories }: Props): React
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         mode={{ kind: 'create', placeSlug }}
-        categories={categories}
       />
     </div>
   )

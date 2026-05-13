@@ -1,11 +1,7 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type {
-  ContributionPolicy,
-  LibraryCategoryKind,
-  LibraryReadAccessKind,
-} from '@/features/library/public'
+import type { LibraryCategoryKind, LibraryReadAccessKind } from '@/features/library/public'
 
 /**
  * Tipos compartidos del wizard de creación/edición de categoría library.
@@ -46,20 +42,12 @@ export type CategoryFormValue = {
   // Step 1 — identidad
   emoji: string
   title: string
-  // Step 2 — contribución
-  contributionPolicy: ContributionPolicy
-  /** Sub-set para SELECTED_GROUPS. Vacío para otras policies (preservado
-   *  si el owner switchea policy temporalmente — sólo se persiste al
-   *  submit final si la policy final lo requiere). */
-  contributionGroupIds: ReadonlyArray<string>
-  /** Sub-set para DESIGNATED. Mismo pattern que contributionGroupIds. */
-  contributionUserIds: ReadonlyArray<string>
-  // Step 3 — acceso de lectura
+  // Step 2 — acceso de lectura (S2 sumará step write access)
   readAccessKind: LibraryReadAccessKind
   readAccessGroupIds: ReadonlyArray<string>
   readAccessTierIds: ReadonlyArray<string>
   readAccessUserIds: ReadonlyArray<string>
-  // Step 4 — tipo de categoría
+  // Step 3 — tipo de categoría
   kind: LibraryCategoryKind
 }
 

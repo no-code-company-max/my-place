@@ -30,7 +30,6 @@ type RawGroupRow = {
   isPreset: boolean
   createdAt: Date
   updatedAt: Date
-  categoryScopes: { categoryId: string }[]
   _count: { groupMemberships: number }
 }
 
@@ -43,7 +42,6 @@ const GROUP_SELECT = {
   isPreset: true,
   createdAt: true,
   updatedAt: true,
-  categoryScopes: { select: { categoryId: true } },
   _count: { select: { groupMemberships: true } },
 } as const
 
@@ -67,7 +65,6 @@ function mapGroupRow(row: RawGroupRow): PermissionGroup {
     permissions: coercePermissions(row.permissions),
     isPreset: row.isPreset,
     memberCount: row._count.groupMemberships,
-    categoryScopeIds: row.categoryScopes.map((s) => s.categoryId),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }

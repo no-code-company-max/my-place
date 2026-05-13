@@ -1,17 +1,13 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import {
-  CategoryHeaderBar,
-  EmptyItemList,
-  ItemList,
-  canCreateInCategory,
-} from '@/features/library/public'
+import { CategoryHeaderBar, EmptyItemList, ItemList } from '@/features/library/public'
 import {
   findLibraryCategoryBySlug,
-  listCategoryContributorUserIds,
   listItemsByCategory,
   resolveLibraryViewer,
 } from '@/features/library/public.server'
+import { canWriteCategory } from '@/features/library/contribution/public'
+import { findWriteScope } from '@/features/library/contribution/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string }>
@@ -42,17 +38,18 @@ export default async function LibraryCategoryPage({ params }: Props) {
   if (!category) notFound()
   if (category.archivedAt && !viewer.isAdmin) notFound()
 
-  const designatedUserIds =
-    category.contributionPolicy === 'DESIGNATED'
-      ? await listCategoryContributorUserIds(category.id)
-      : []
-  const canCreate = canCreateInCategory(
-    {
-      contributionPolicy: category.contributionPolicy,
-      designatedUserIds,
-    },
-    viewer,
-  )
+  const writeScope = await findWriteScope(category.id)
+  const canCreate = writeScope
+    ? canWriteCategory(
+        {
+          writeAccessKind: writeScope.kind,
+          groupWriteIds: writeScope.groupIds,
+          tierWriteIds: writeScope.tierIds,
+          userWriteIds: writeScope.userIds,
+        },
+        viewer,
+      )
+    : false
 
   const items = await listItemsByCategory(category.id)
 

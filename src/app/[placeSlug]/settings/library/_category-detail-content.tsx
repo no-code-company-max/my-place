@@ -1,13 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { listActiveMembers } from '@/features/members/public.server'
-import {
-  ArchiveCategoryButton,
-  CategoryFormDialog,
-  ContributorsDialog,
-} from '@/features/library/public'
-import { findLibraryCategoryById, listCategoryContributors } from '@/features/library/public.server'
+import { ArchiveCategoryButton, type WriteAccessKind } from '@/features/library/public'
+import { findLibraryCategoryById } from '@/features/library/public.server'
 import { PageHeader } from '@/shared/ui/page-header'
 
 type Props = {
@@ -20,16 +15,19 @@ type Props = {
  * consumer hoy: `[categoryId]/page.tsx`, renderizado como `{children}` del
  * layout master-detail.
  *
- * Estructura del detail:
+ * **S1b cleanup (2026-05-13):** removida la sección "Contribuidores"
+ * legacy (`LibraryCategoryContributor` reemplazado por
+ * `WriteAccessKind`). El botón "Editar información" del dialog viejo
+ * también se removió — S2 sumará el wizard nuevo con write access step.
+ *
+ * Estructura actual del detail:
  *  - Back link "← Volver a Biblioteca" (`md:hidden`, solo mobile).
  *  - `<PageHeader>` con emoji + título de la categoría.
- *  - Section "Información": metadatos + botón Editar (abre CategoryFormDialog).
- *  - Section "Contribuidores" (solo si policy=DESIGNATED): list de
- *    contributors + botón "Gestionar" (abre ContributorsDialog).
+ *  - Section "Información": metadatos (emoji, título, slug, write access).
  *  - Section "Archivar": copy + ArchiveCategoryButton (amber recoverable).
  *
- * Futuro (R.7.5+): sección "Items" con lista de items de la categoría +
- * crear/editar inline. Section "Permisos de lectura" (G.1) con scope picker.
+ * **S2 pendiente:** sumar botón "Editar información" que abre el wizard.
+ * **S3 pendiente:** decidir layout final (master-detail vs EditPanel).
  *
  * Gate de visibilidad heredado del layout padre `/settings/layout.tsx`
  * (admin/owner). El layout master-detail también gateá. No re-validamos
@@ -48,18 +46,6 @@ export async function CategoryDetailContent({
   if (!category || category.placeId !== place.id || category.archivedAt) {
     notFound()
   }
-
-  const [contributors, activeMembers] = await Promise.all([
-    listCategoryContributors(category.id),
-    listActiveMembers(place.id),
-  ])
-
-  const memberOptions = activeMembers.map((m) => ({
-    userId: m.userId,
-    displayName: m.user.displayName,
-    avatarUrl: m.user.avatarUrl,
-    handle: m.user.handle,
-  }))
 
   return (
     <div className="space-y-6 px-3 py-6 md:px-4 md:py-8">
@@ -102,66 +88,12 @@ export async function CategoryDetailContent({
               </dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-neutral-600">Quién puede contribuir</dt>
-              <dd className="text-neutral-900">
-                {category.contributionPolicy === 'DESIGNATED'
-                  ? 'Designados'
-                  : category.contributionPolicy === 'MEMBERS_OPEN'
-                    ? 'Cualquier miembro'
-                    : 'Grupos seleccionados'}
-              </dd>
+              <dt className="text-neutral-600">Quién puede escribir</dt>
+              <dd className="text-neutral-900">{writeAccessLabel(category.writeAccessKind)}</dd>
             </div>
           </dl>
         </div>
-        <CategoryFormDialog
-          mode={{
-            kind: 'edit',
-            categoryId: category.id,
-            initialEmoji: category.emoji,
-            initialTitle: category.title,
-            initialPolicy: category.contributionPolicy,
-          }}
-          trigger={
-            <button
-              type="button"
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium hover:bg-neutral-50"
-            >
-              Editar información
-            </button>
-          }
-        />
       </section>
-
-      {category.contributionPolicy === 'DESIGNATED' ? (
-        <section aria-labelledby="category-contributors-heading" className="space-y-3">
-          <h2
-            id="category-contributors-heading"
-            className="border-b pb-2 font-serif text-xl"
-            style={{ borderColor: 'var(--border)' }}
-          >
-            Contribuidores
-          </h2>
-          <p className="text-xs text-neutral-600">
-            {contributors.length === 0
-              ? 'Esta categoría todavía no tiene contribuidores designados.'
-              : `${contributors.length} ${contributors.length === 1 ? 'miembro puede contribuir' : 'miembros pueden contribuir'}.`}
-          </p>
-          <ContributorsDialog
-            categoryId={category.id}
-            categoryTitle={category.title}
-            initialContributors={contributors}
-            members={memberOptions}
-            trigger={
-              <button
-                type="button"
-                className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium hover:bg-neutral-50"
-              >
-                Gestionar contribuidores
-              </button>
-            }
-          />
-        </section>
-      ) : null}
 
       <section aria-labelledby="category-archive-heading" className="space-y-3">
         <h2
@@ -179,4 +111,17 @@ export async function CategoryDetailContent({
       </section>
     </div>
   )
+}
+
+function writeAccessLabel(kind: WriteAccessKind): string {
+  switch (kind) {
+    case 'OWNER_ONLY':
+      return 'Solo owner'
+    case 'GROUPS':
+      return 'Grupos seleccionados'
+    case 'TIERS':
+      return 'Tiers seleccionados'
+    case 'USERS':
+      return 'Usuarios seleccionados'
+  }
 }

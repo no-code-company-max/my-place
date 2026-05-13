@@ -274,14 +274,14 @@ async function processOneMembership(
         WHERE "authorUserId" = ${m.userId} AND "placeId" = ${m.placeId}
       `)
 
-      // LibraryCategoryContributor: DELETE rows del ex-miembro en categorías
-      // del place. Es permission, no historia.
-      const deletedContributors = await tx.libraryCategoryContributor.deleteMany({
-        where: {
-          userId: m.userId,
-          category: { placeId: m.placeId },
-        },
-      })
+      // S1b (2026-05-13): LibraryCategoryContributor fue eliminado. Las
+      // nuevas tablas write scope (LibraryCategoryUserWriteScope) tienen
+      // ON DELETE CASCADE desde User, así que erasure no necesita
+      // limpiarlas explícitamente — cuando el User se elimine físicamente,
+      // las pivots se van con él. Mientras el User exista (post-erasure
+      // pero antes de hard-delete), las pivots persisten — los permisos
+      // de write quedan colgados pero sin efecto (el user ya no tiene
+      // membership al place).
 
       // PostRead: DELETE tracking del ex-miembro en posts del place.
       // Tracking de lectura sin valor histórico.
@@ -320,7 +320,7 @@ async function processOneMembership(
         events: events.length,
         rsvpsDeleted: deletedRsvps.count,
         libraryItemsAnonymized: libraryItems.length,
-        libraryContributorsRemoved: deletedContributors.count,
+        libraryContributorsRemoved: 0,
         postReadsRemoved: deletedReads.count,
         flagsAsReporterAnonymized: flagsReporter.length,
         flagsAsReviewerAnonymized: updatedFlagsAsReviewer,

@@ -18,7 +18,7 @@ import {
   CATEGORY_TITLE_MIN_LENGTH,
   ITEM_COVER_URL_MAX_LENGTH,
 } from './domain/invariants'
-import { CONTRIBUTION_POLICY_VALUES, LIBRARY_CATEGORY_KIND_VALUES } from './domain/types'
+import { LIBRARY_CATEGORY_KIND_VALUES } from './domain/types'
 
 // ---------------------------------------------------------------
 // Building blocks
@@ -34,12 +34,6 @@ const titleSchema = z
 
 const emojiSchema = z.string().min(CATEGORY_EMOJI_MIN_LENGTH).max(CATEGORY_EMOJI_MAX_LENGTH)
 
-const contributionPolicySchema = z.enum([
-  'DESIGNATED',
-  'MEMBERS_OPEN',
-  'SELECTED_GROUPS',
-] as const satisfies readonly (typeof CONTRIBUTION_POLICY_VALUES)[number][])
-
 const categoryKindSchema = z.enum([
   'GENERAL',
   'COURSE',
@@ -53,7 +47,6 @@ export const createCategoryInputSchema = z.object({
   placeId: z.string().min(1),
   emoji: emojiSchema,
   title: titleSchema,
-  contributionPolicy: contributionPolicySchema.optional().default('MEMBERS_OPEN'),
   /** G.5+6.b (2026-05-04): GENERAL = lista plana, COURSE = wizard prereqs. */
   kind: categoryKindSchema.optional().default('GENERAL'),
 })
@@ -63,7 +56,6 @@ export const updateCategoryInputSchema = z.object({
   categoryId: z.string().min(1),
   emoji: emojiSchema,
   title: titleSchema,
-  contributionPolicy: contributionPolicySchema,
   kind: categoryKindSchema.optional(),
 })
 export type UpdateCategoryInput = z.infer<typeof updateCategoryInputSchema>
@@ -81,55 +73,6 @@ export const reorderCategoriesInputSchema = z.object({
   orderedCategoryIds: z.array(z.string().min(1)).min(1).max(50),
 })
 export type ReorderCategoriesInput = z.infer<typeof reorderCategoriesInputSchema>
-
-// ---------------------------------------------------------------
-// Contributors (R.7.4)
-// ---------------------------------------------------------------
-
-export const inviteContributorInputSchema = z.object({
-  categoryId: z.string().min(1),
-  userId: z.string().min(1),
-})
-export type InviteContributorInput = z.infer<typeof inviteContributorInputSchema>
-
-export const removeContributorInputSchema = z.object({
-  categoryId: z.string().min(1),
-  userId: z.string().min(1),
-})
-export type RemoveContributorInput = z.infer<typeof removeContributorInputSchema>
-
-/**
- * Override completo del scope de grupos de una categoría library.
- * Pasar `groupIds: []` deja la categoría sin grupos asignados.
- *
- * Cap `.max(50)` consistente con `reorderCategoriesInputSchema` —
- * 50 grupos es muy por encima del uso esperado (un place típico
- * tiene 2-5 grupos) y protege contra payloads abusivos. La validación
- * de pertenencia al place se hace en la action.
- */
-export const setLibraryCategoryGroupScopeInputSchema = z.object({
-  categoryId: z.string().min(1),
-  groupIds: z.array(z.string().min(1)).max(50),
-})
-export type SetLibraryCategoryGroupScopeInput = z.infer<
-  typeof setLibraryCategoryGroupScopeInputSchema
->
-
-/**
- * Override completo de la lista de contribuidores designados de una
- * categoría. Pasar `userIds: []` deja la categoría sin contribuidores.
- *
- * Cap `.max(150)` alineado con el invariante `MAX_MEMBERS_PER_PLACE`:
- * jamás puede haber más users designados que miembros activos del
- * place. La validación de membership se hace en la action.
- */
-export const setLibraryCategoryDesignatedContributorsInputSchema = z.object({
-  categoryId: z.string().min(1),
-  userIds: z.array(z.string().min(1)).max(150),
-})
-export type SetLibraryCategoryDesignatedContributorsInput = z.infer<
-  typeof setLibraryCategoryDesignatedContributorsInputSchema
->
 
 // ---------------------------------------------------------------
 // Items (R.7.6)

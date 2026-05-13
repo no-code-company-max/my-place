@@ -22,18 +22,6 @@ export {
   type ListLibraryCategoriesOptions,
 } from './server/queries'
 
-// Re-export desde sub-slice `contributors/`. El consumer canónico es
-// `<ZoneFab>` en `features/shell/`, que necesita este lookup vía la
-// public surface del slice library (no del sub-slice) — el test de
-// boundaries de la versión actual sólo whitelistea `<feature>/public`
-// y `<feature>/public.server` como entry-point.
-export {
-  canCreateInAnyCategoryForViewer,
-  listCategoryContributorUserIds,
-  listCategoryContributors,
-  listContributorsByCategoryIds,
-} from './contributors/public.server'
-
 // Helpers de revalidate y resolución de viewer — usados por Server
 // Components y server actions cross-slice (ej: features/shell/).
 export { revalidateLibraryCategoryPaths, revalidateLibraryItemPaths } from './server/actions/shared'

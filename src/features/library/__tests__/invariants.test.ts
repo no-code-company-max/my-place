@@ -8,7 +8,6 @@ import {
   validateCategoryEmoji,
   validateCategorySlug,
   validateCategoryTitle,
-  validateContributionPolicy,
   validateItemCoverUrl,
 } from '../domain/invariants'
 import { CategoryLimitReachedError } from '../domain/errors'
@@ -72,22 +71,6 @@ describe('library invariants — categoría', () => {
 
     it('rechaza vacío', () => {
       expect(() => validateCategorySlug('')).toThrow(ValidationError)
-    })
-  })
-
-  describe('validateContributionPolicy', () => {
-    it('acepta los 3 valores válidos', () => {
-      expect(() => validateContributionPolicy('DESIGNATED')).not.toThrow()
-      expect(() => validateContributionPolicy('MEMBERS_OPEN')).not.toThrow()
-      expect(() => validateContributionPolicy('SELECTED_GROUPS')).not.toThrow()
-    })
-
-    it('rechaza valor inventado', () => {
-      expect(() => validateContributionPolicy('PUBLIC')).toThrow(ValidationError)
-    })
-
-    it('rechaza ADMIN_ONLY (eliminado en migration 20260504010000)', () => {
-      expect(() => validateContributionPolicy('ADMIN_ONLY')).toThrow(ValidationError)
     })
   })
 

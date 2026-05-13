@@ -138,41 +138,11 @@ test.describe('Library admin categories — Palermo', () => {
     })
   })
 
-  test.describe('cambiar contributionPolicy', () => {
-    test.use({ storageState: storageStateFor('admin') })
-
-    test.afterAll(async () => {
-      // Restaurar policy canónica del seed.
-      const prisma = getTestPrisma()
-      await prisma.libraryCategory
-        .update({
-          where: { id: tutorialsCat.id },
-          data: { contributionPolicy: tutorialsCat.policy },
-        })
-        .catch(() => {})
-    })
-
-    test('admin cambia policy de MEMBERS_OPEN a DESIGNATED y label refleja el cambio', async ({
-      page,
-    }) => {
-      await page.goto(placeUrl(palermoSlug, '/settings/library'))
-
-      const tutorialsRow = page.getByRole('listitem').filter({ hasText: tutorialsCat.title })
-      await tutorialsRow
-        .getByRole('button', { name: `Opciones para ${tutorialsCat.title}` })
-        .click()
-      await page.getByRole('menuitem', { name: 'Editar' }).click()
-
-      await page.getByLabel(/Quién puede agregar contenido/i).selectOption('DESIGNATED')
-      await page.getByRole('button', { name: /^Guardar cambios$/ }).click()
-
-      // El label en el row se computa con `contributionPolicyLabel` →
-      // "Personas designadas" para DESIGNATED. Esperamos que esa fila lo
-      // muestre tras la revalidación.
-      const updatedRow = page.getByRole('listitem').filter({ hasText: tutorialsCat.title })
-      await expect(updatedRow.getByText('Personas designadas')).toBeVisible()
-    })
-  })
+  // S1b (2026-05-13): bloque "cambiar contributionPolicy" removido.
+  // El modelo contributionPolicy fue reemplazado por writeAccessKind +
+  // 3 pivots write. El flujo UI de cambiar write access vive en el
+  // wizard (sub-slice library/wizard) — los E2E nuevos se suman en S2/S3
+  // cuando el wizard tenga el step de write access.
 
   test.describe('member común no accede a /settings/library', () => {
     test.use({ storageState: storageStateFor('memberA') })

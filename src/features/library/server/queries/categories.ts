@@ -1,7 +1,7 @@
 import 'server-only'
 import { unstable_cache } from 'next/cache'
 import { prisma } from '@/db/client'
-import type { ContributionPolicy, LibraryCategory } from '@/features/library/domain/types'
+import type { LibraryCategory } from '@/features/library/domain/types'
 
 /**
  * Queries de categorías. Solo este archivo + hermanos en server/* tocan
@@ -31,7 +31,6 @@ type CategoryRow = {
   emoji: string
   title: string
   position: number | null
-  contributionPolicy: ContributionPolicy
   kind: 'GENERAL' | 'COURSE'
   readAccessKind: 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
   writeAccessKind: 'OWNER_ONLY' | 'GROUPS' | 'TIERS' | 'USERS'
@@ -39,8 +38,6 @@ type CategoryRow = {
   createdAt: Date
   updatedAt: Date
   _count?: { items: number }
-  /** LEGACY: JOIN con GroupCategoryScope. Vacío salvo policy=SELECTED_GROUPS. */
-  groupScopes?: ReadonlyArray<{ groupId: string }>
 }
 
 function mapCategoryRow(row: CategoryRow, docCount: number): LibraryCategory {
@@ -51,7 +48,6 @@ function mapCategoryRow(row: CategoryRow, docCount: number): LibraryCategory {
     emoji: row.emoji,
     title: row.title,
     position: row.position,
-    contributionPolicy: row.contributionPolicy,
     kind: row.kind,
     readAccessKind: row.readAccessKind,
     writeAccessKind: row.writeAccessKind,
@@ -59,7 +55,6 @@ function mapCategoryRow(row: CategoryRow, docCount: number): LibraryCategory {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     docCount,
-    groupScopeIds: (row.groupScopes ?? []).map((g) => g.groupId),
   }
 }
 
@@ -71,7 +66,6 @@ const CATEGORY_SELECT = {
   emoji: true,
   title: true,
   position: true,
-  contributionPolicy: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -79,8 +73,6 @@ const CATEGORY_SELECT = {
   readAccessKind: true,
   writeAccessKind: true,
   _count: { select: { items: { where: { archivedAt: null } } } },
-  /** LEGACY: JOIN inline con GroupCategoryScope (cap ≤ 50 entries). */
-  groupScopes: { select: { groupId: true } },
 } as const
 
 // ---------------------------------------------------------------

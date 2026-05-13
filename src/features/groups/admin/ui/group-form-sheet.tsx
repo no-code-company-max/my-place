@@ -16,17 +16,10 @@ import {
   GROUP_DESCRIPTION_MAX_LENGTH,
   GROUP_NAME_MAX_LENGTH,
 } from '@/features/groups/domain/invariants'
-import { isLibraryScopedPermission, type Permission } from '@/features/groups/domain/permissions'
+import type { Permission } from '@/features/groups/domain/permissions'
 import { createGroupAction, updateGroupAction } from '@/features/groups/public'
-import { CategoryScopeSelector } from '@/features/groups/category-scope/public'
 import { friendlyGroupErrorMessage } from '@/features/groups/ui/errors'
 import { PermissionCheckboxList } from '@/features/groups/ui/permission-checkbox-list'
-
-type CategoryOption = {
-  id: string
-  emoji: string
-  title: string
-}
 
 type CreateMode = {
   kind: 'create'
@@ -39,10 +32,9 @@ type EditMode = {
   initialName: string
   initialDescription: string | null
   initialPermissions: ReadonlyArray<Permission>
-  initialCategoryScopeIds: ReadonlyArray<string>
   /**
    * Si `true`, el grupo es el preset "Administradores": el form bloquea
-   * cambios a permisos y scope (UI los muestra disabled), permite cambios
+   * cambios a permisos (UI los muestra disabled), permite cambios
    * a name y description.
    */
   isPreset: boolean
@@ -52,7 +44,6 @@ type Props = {
   open: boolean
   onOpenChange: (next: boolean) => void
   mode: CreateMode | EditMode
-  categories: ReadonlyArray<CategoryOption>
 }
 
 /**
@@ -71,19 +62,17 @@ type Props = {
  * Touch targets: inputs `min-h-[44px] text-base` (16px → evita iOS
  * auto-zoom al focusar). Submit `min-h-12`, cancel `min-h-11`.
  */
-export function GroupFormSheet({ open, onOpenChange, mode, categories }: Props): React.ReactNode {
+export function GroupFormSheet({ open, onOpenChange, mode }: Props): React.ReactNode {
   const [pending, startTransition] = useTransition()
 
   const initialName = mode.kind === 'create' ? '' : mode.initialName
   const initialDescription = mode.kind === 'create' ? '' : (mode.initialDescription ?? '')
   const initialPermissions = mode.kind === 'create' ? [] : [...mode.initialPermissions]
-  const initialScope = mode.kind === 'create' ? [] : [...mode.initialCategoryScopeIds]
   const isPreset = mode.kind === 'edit' && mode.isPreset
 
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
   const [permissions, setPermissions] = useState<Permission[]>(initialPermissions)
-  const [scopeIds, setScopeIds] = useState<string[]>(initialScope)
 
   // Reset al abrir el sheet — sin esto, abrir en `edit` después de un
   // `create` (o viceversa) muestra los valores del modo previo. Mismo
@@ -93,14 +82,11 @@ export function GroupFormSheet({ open, onOpenChange, mode, categories }: Props):
       setName(initialName)
       setDescription(initialDescription)
       setPermissions(initialPermissions)
-      setScopeIds(initialScope)
     }
     // `mode` es estable durante una apertura — el padre sólo lo cambia
     // mientras `open=false`. Listamos `open` como dep principal.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
-
-  const hasLibraryPermission = permissions.some(isLibraryScopedPermission)
 
   function handleCreateSubmit(): void {
     if (mode.kind !== 'create') return
@@ -111,7 +97,6 @@ export function GroupFormSheet({ open, onOpenChange, mode, categories }: Props):
           name,
           description: description.trim().length > 0 ? description : undefined,
           permissions,
-          categoryScopeIds: hasLibraryPermission ? scopeIds : [],
         })
         if (!result.ok) {
           if (result.error === 'group_name_taken') {
@@ -138,7 +123,6 @@ export function GroupFormSheet({ open, onOpenChange, mode, categories }: Props):
           name,
           description: description.trim().length > 0 ? description : undefined,
           permissions,
-          categoryScopeIds: hasLibraryPermission ? scopeIds : [],
         })
         if (!result.ok) {
           if (result.error === 'group_name_taken') {
@@ -236,16 +220,6 @@ export function GroupFormSheet({ open, onOpenChange, mode, categories }: Props):
                     El preset Administradores tiene todos los permisos por defecto.
                   </p>
                 )}
-              </div>
-
-              <div>
-                <span className="mb-1 block text-sm text-neutral-600">Scope de biblioteca</span>
-                <CategoryScopeSelector
-                  value={scopeIds}
-                  categories={categories}
-                  onChange={setScopeIds}
-                  enabled={hasLibraryPermission && !isPreset}
-                />
               </div>
             </div>
           </BottomSheetBody>

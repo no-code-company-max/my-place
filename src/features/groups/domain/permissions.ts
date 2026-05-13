@@ -50,15 +50,6 @@ export function isValidPermission(value: string): value is Permission {
 }
 
 /**
- * Permisos library:* son scopables por categoría. Si el grupo tiene
- * entries en `GroupCategoryScope`, sus permisos library:* aplican
- * SOLO a esas categorías. Otros permisos son siempre globales.
- */
-export function isLibraryScopedPermission(p: Permission): boolean {
-  return p === 'library:moderate-items' || p === 'library:moderate-categories'
-}
-
-/**
  * Label user-facing en español de cada permiso. Usado en
  * `<PermissionLabel>` y `<PermissionCheckboxList>`.
  */

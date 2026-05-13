@@ -99,13 +99,6 @@ export async function createGroupAction(input: unknown): Promise<CreateGroupResu
         description: data.description ?? null,
         permissions,
         isPreset: false,
-        ...(data.categoryScopeIds && data.categoryScopeIds.length > 0
-          ? {
-              categoryScopes: {
-                create: data.categoryScopeIds.map((categoryId) => ({ categoryId })),
-              },
-            }
-          : {}),
       },
       select: { id: true },
     })
@@ -116,7 +109,6 @@ export async function createGroupAction(input: unknown): Promise<CreateGroupResu
         placeId: place.id,
         groupId: created.id,
         permissionsCount: permissions.length,
-        scopeCount: data.categoryScopeIds?.length ?? 0,
         actorId,
       },
       'permission group created',

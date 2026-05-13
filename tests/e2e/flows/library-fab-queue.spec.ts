@@ -1,14 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { storageStateFor } from '../../helpers/playwright-auth'
 import { placeUrl } from '../../helpers/subdomain'
-import {
-  E2E_DISPLAY_NAMES,
-  E2E_EMAILS,
-  E2E_LIBRARY_CATEGORIES,
-  E2E_PLACES,
-} from '../../fixtures/e2e-data'
-import { findUserIdByEmail } from '../../helpers/db'
-import { getTestPrisma } from '../../helpers/prisma'
+import { E2E_PLACES } from '../../fixtures/e2e-data'
 
 /**
  * Flow R.7 — FAB visibility por rol/policy + admin contributors queue.
@@ -32,10 +25,7 @@ import { getTestPrisma } from '../../helpers/prisma'
 
 const palermoSlug = E2E_PLACES.palermo.slug
 
-const tutorialsCat = E2E_LIBRARY_CATEGORIES.tutorials
-const resourcesCat = E2E_LIBRARY_CATEGORIES.resources
-
-test.describe('Library FAB visibility + admin contributors queue — Palermo', () => {
+test.describe('Library FAB visibility — Palermo', () => {
   test.describe('FAB visibility por rol y categoría en /library', () => {
     test.describe('admin', () => {
       test.use({ storageState: storageStateFor('admin') })
@@ -75,29 +65,10 @@ test.describe('Library FAB visibility + admin contributors queue — Palermo', (
     test.describe('memberB sin categorías elegibles (todas restringidas)', () => {
       test.use({ storageState: storageStateFor('memberB') })
 
-      test.beforeAll(async () => {
-        // Cambiar tutorials a DESIGNATED (sin contributors) deja al place
-        // sin ninguna categoría elegible para memberB (resources DESIGNATED
-        // sin designation + presetOnly DESIGNATED + tutorials DESIGNATED).
-        // Post-2026-05-04 ADR drop ADMIN_ONLY, DESIGNATED con lista vacía
-        // produce el mismo efecto comportamental que el viejo ADMIN_ONLY.
-        const prisma = getTestPrisma()
-        await prisma.libraryCategory.update({
-          where: { id: tutorialsCat.id },
-          data: { contributionPolicy: 'DESIGNATED' },
-        })
-      })
-
-      test.afterAll(async () => {
-        // Restaurar policy canónica del seed: MEMBERS_OPEN.
-        const prisma = getTestPrisma()
-        await prisma.libraryCategory
-          .update({
-            where: { id: tutorialsCat.id },
-            data: { contributionPolicy: tutorialsCat.policy },
-          })
-          .catch(() => {})
-      })
+      // S1b (2026-05-13): el modelo nuevo writeAccessKind hace que las 3
+      // categorías baseline (tutorials/resources/presetOnly) ya bloqueen
+      // a memberB por default (OWNER_ONLY o USERS sin él en el scope).
+      // No hace falta mutar nada con beforeAll.
 
       test('memberB NO ve "Nuevo recurso", pero sí "Nueva discusión" y "Proponer evento"', async ({
         page,
@@ -116,105 +87,9 @@ test.describe('Library FAB visibility + admin contributors queue — Palermo', (
     })
   })
 
-  test.describe('Admin contributors queue (resources DESIGNATED)', () => {
-    test.use({ storageState: storageStateFor('admin') })
-
-    test.afterAll(async () => {
-      // Restaurar el set canónico del seed: solo memberA es contributor
-      // de resources. Borramos cualquier otra fila y nos aseguramos
-      // de que memberA esté presente.
-      const prisma = getTestPrisma()
-      const adminUserId = await findUserIdByEmail(E2E_EMAILS.admin).catch(() => null)
-      const memberAUserId = await findUserIdByEmail(E2E_EMAILS.memberA).catch(() => null)
-
-      await prisma.libraryCategoryContributor
-        .deleteMany({ where: { categoryId: resourcesCat.id } })
-        .catch(() => {})
-
-      if (memberAUserId && adminUserId) {
-        await prisma.libraryCategoryContributor
-          .create({
-            data: {
-              categoryId: resourcesCat.id,
-              userId: memberAUserId,
-              invitedByUserId: adminUserId,
-            },
-          })
-          .catch(() => {})
-      }
-    })
-
-    test('admin lista contributors actuales de resources (memberA presente)', async ({ page }) => {
-      await page.goto(placeUrl(palermoSlug, '/settings/library'))
-
-      // Localizar la fila de "Recursos" (DESIGNATED) y abrir el dialog
-      // con el affordance accesible "Gestionar contribuidores de Recursos".
-      const resourcesRow = page.getByRole('listitem').filter({ hasText: resourcesCat.title })
-      await resourcesRow
-        .getByRole('button', { name: `Gestionar contribuidores de ${resourcesCat.title}` })
-        .click()
-
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible()
-      await expect(dialog.getByText(E2E_DISPLAY_NAMES.memberA)).toBeVisible()
-    })
-
-    test('admin invita a memberB como contributor de resources', async ({ page }) => {
-      await page.goto(placeUrl(palermoSlug, '/settings/library'))
-
-      const resourcesRow = page.getByRole('listitem').filter({ hasText: resourcesCat.title })
-      await resourcesRow
-        .getByRole('button', { name: `Gestionar contribuidores de ${resourcesCat.title}` })
-        .click()
-
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible()
-
-      // El picker filtra por displayName/handle. Tipear el displayName
-      // de memberB acota la lista al candidato esperado.
-      const search = dialog.getByLabel('Agregar contribuidor')
-      await search.fill(E2E_DISPLAY_NAMES.memberB)
-
-      // Click en el botón "Invitar" del candidato — el botón engloba
-      // displayName + el span "Invitar". Buscamos por nombre del row.
-      await dialog.getByRole('button', { name: new RegExp(E2E_DISPLAY_NAMES.memberB) }).click()
-
-      // Optimistic update: memberB aparece inmediatamente en la lista
-      // de contributors del dialog.
-      await expect(dialog.getByText(E2E_DISPLAY_NAMES.memberB)).toBeVisible()
-    })
-
-    test('admin remueve memberA y luego lo re-invita (idempotencia)', async ({ page }) => {
-      await page.goto(placeUrl(palermoSlug, '/settings/library'))
-
-      const resourcesRow = page.getByRole('listitem').filter({ hasText: resourcesCat.title })
-      await resourcesRow
-        .getByRole('button', { name: `Gestionar contribuidores de ${resourcesCat.title}` })
-        .click()
-
-      const dialog = page.getByRole('dialog')
-      await expect(dialog).toBeVisible()
-
-      // Localizar la fila de memberA dentro de la lista de contributors
-      // y click en "Quitar".
-      const memberARow = dialog.getByRole('listitem').filter({ hasText: E2E_DISPLAY_NAMES.memberA })
-      await expect(memberARow).toBeVisible()
-      await memberARow.getByRole('button', { name: /^Quitar$/ }).click()
-
-      // memberA desaparece de la lista (optimistic).
-      await expect(
-        dialog.getByRole('listitem').filter({ hasText: E2E_DISPLAY_NAMES.memberA }),
-      ).toHaveCount(0)
-
-      // Re-invitar a memberA via el buscador.
-      const search = dialog.getByLabel('Agregar contribuidor')
-      await search.fill(E2E_DISPLAY_NAMES.memberA)
-      await dialog.getByRole('button', { name: new RegExp(E2E_DISPLAY_NAMES.memberA) }).click()
-
-      // memberA reaparece en la lista de contributors.
-      await expect(
-        dialog.getByRole('listitem').filter({ hasText: E2E_DISPLAY_NAMES.memberA }),
-      ).toBeVisible()
-    })
-  })
+  // S1b (2026-05-13): bloque "Admin contributors queue" removido.
+  // El dialog legacy "Gestionar contribuidores" se eliminó junto con
+  // la tabla `LibraryCategoryContributor`. La gestión de write access
+  // (incluyendo elegir usuarios designados) vive ahora en el wizard
+  // unificado de categoría — los E2E nuevos se suman en S2/S3.
 })

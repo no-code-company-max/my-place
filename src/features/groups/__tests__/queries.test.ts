@@ -47,7 +47,6 @@ const RAW_GROUP_ROW = {
   isPreset: false,
   createdAt: new Date('2026-05-02T10:00:00Z'),
   updatedAt: new Date('2026-05-02T10:00:00Z'),
-  categoryScopes: [{ categoryId: 'cat-1' }],
   _count: { groupMemberships: 3 },
 }
 
@@ -78,7 +77,6 @@ describe('listGroupsByPlace', () => {
     expect(grp?.id).toBe(GROUP_ID)
     expect(grp?.permissions).toEqual(['flags:review', 'discussions:hide-post'])
     expect(grp?.memberCount).toBe(3)
-    expect(grp?.categoryScopeIds).toEqual(['cat-1'])
   })
 
   it('lista vacía si no hay grupos', async () => {

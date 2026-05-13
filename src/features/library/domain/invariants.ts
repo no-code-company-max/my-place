@@ -14,7 +14,6 @@
 
 import { ValidationError } from '@/shared/errors/domain-error'
 import { CategoryLimitReachedError } from './errors'
-import { CONTRIBUTION_POLICY_VALUES, type ContributionPolicy } from './types'
 
 // ---------------------------------------------------------------
 // Constantes del dominio
@@ -99,16 +98,6 @@ export function validateCategorySlug(slug: string): void {
     throw new ValidationError('El slug solo puede contener minúsculas, dígitos y guiones.', {
       slug,
     })
-  }
-}
-
-// ---------------------------------------------------------------
-// Contribution policy
-// ---------------------------------------------------------------
-
-export function validateContributionPolicy(policy: string): asserts policy is ContributionPolicy {
-  if (!CONTRIBUTION_POLICY_VALUES.includes(policy as ContributionPolicy)) {
-    throw new ValidationError('Política de contribución inválida.', { policy })
   }
 }
 

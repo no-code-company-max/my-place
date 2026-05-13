@@ -11,17 +11,13 @@ import { toast } from '@/shared/ui/toaster'
 import { Wizard, type WizardStep } from '@/shared/ui/wizard'
 import {
   createLibraryCategoryAction,
-  setLibraryCategoryDesignatedContributorsAction,
-  setLibraryCategoryGroupScopeAction,
   updateLibraryCategoryAction,
-  type ContributionPolicy,
   type LibraryCategoryKind,
   type LibraryReadAccessKind,
 } from '@/features/library/public'
 import { setLibraryCategoryReadScopeAction } from '@/features/library/access/public'
 import { friendlyLibraryErrorMessage } from '@/features/library/public'
 import { CategoryFormStepIdentity } from './wizard/category-form-step-identity'
-import { CategoryFormStepContribution } from './wizard/category-form-step-contribution'
 import { CategoryFormStepReadAccess } from './wizard/category-form-step-read-access'
 import { CategoryFormStepCourse } from './wizard/category-form-step-course'
 import {
@@ -33,7 +29,7 @@ import {
   type TierOption,
 } from './wizard/category-form-types'
 
-// Re-export para que CategoryListAdmin siga importando desde acá (API
+// Re-export para que consumers sigan importando desde acá (API
 // pública estable del slice).
 export type { GroupOption, MemberOption, TierOption } from './wizard/category-form-types'
 
@@ -47,11 +43,8 @@ type EditMode = {
   categoryId: string
   initialEmoji: string
   initialTitle: string
-  initialPolicy: ContributionPolicy
   initialKind: LibraryCategoryKind
   initialReadAccessKind: LibraryReadAccessKind
-  initialGroupScopeIds: ReadonlyArray<string>
-  initialContributorUserIds: ReadonlyArray<string>
   initialReadGroupIds: ReadonlyArray<string>
   initialReadTierIds: ReadonlyArray<string>
   initialReadUserIds: ReadonlyArray<string>
@@ -71,9 +64,6 @@ function initialFormValueFor(mode: CreateMode | EditMode): CategoryFormValue {
     return {
       emoji: '',
       title: '',
-      contributionPolicy: 'MEMBERS_OPEN',
-      contributionGroupIds: [],
-      contributionUserIds: [],
       readAccessKind: 'PUBLIC',
       readAccessGroupIds: [],
       readAccessTierIds: [],
@@ -84,9 +74,6 @@ function initialFormValueFor(mode: CreateMode | EditMode): CategoryFormValue {
   return {
     emoji: mode.initialEmoji,
     title: mode.initialTitle,
-    contributionPolicy: mode.initialPolicy,
-    contributionGroupIds: mode.initialGroupScopeIds,
-    contributionUserIds: mode.initialContributorUserIds,
     readAccessKind: mode.initialReadAccessKind,
     readAccessGroupIds: mode.initialReadGroupIds,
     readAccessTierIds: mode.initialReadTierIds,
@@ -97,28 +84,29 @@ function initialFormValueFor(mode: CreateMode | EditMode): CategoryFormValue {
 
 const STEPS: ReadonlyArray<WizardStep<CategoryFormValue>> = [
   { id: 'identity', label: 'Identidad', Component: CategoryFormStepIdentity },
-  { id: 'contribution', label: 'Aporte', Component: CategoryFormStepContribution },
   { id: 'read-access', label: 'Lectura', Component: CategoryFormStepReadAccess },
   { id: 'course', label: 'Tipo', Component: CategoryFormStepCourse },
 ]
 
 /**
- * BottomSheet con wizard 4-step para crear o editar una categoría
- * de library (G.5+6.b — 2026-05-04). Reemplaza el form lineal previo.
+ * BottomSheet con wizard 3-step para crear o editar una categoría
+ * de library.
  *
  * Steps:
- *  1. Identidad — emoji (picker push interno mobile) + título.
- *  2. Aporte — contribution policy + sub-picker condicional (groups/users).
- *  3. Lectura — read access discriminator + sub-picker (groups/tiers/users).
- *  4. Tipo — toggle GENERAL/COURSE.
+ *  1. Identidad — emoji + título.
+ *  2. Lectura — read access discriminator + sub-picker (groups/tiers/users).
+ *  3. Tipo — toggle GENERAL/COURSE.
  *
- * Submit final atomic (decisión #D8): create/update categoría → set group
- * scope (si SELECTED_GROUPS) → set designated contributors (si DESIGNATED)
- * → set read scope (si readAccessKind ≠ PUBLIC). Si algún paso intermedio
- * post-create falla, toast con motivo + categoría queda creada (consistente
- * con patrón F.5).
+ * **S2 (pendiente):** sumar step "Escritura" con write access
+ * discriminator (OWNER_ONLY/GROUPS/TIERS/USERS). El action
+ * `setLibraryCategoryWriteScopeAction` ya está disponible en el
+ * sub-slice `library/contribution`.
  *
- * Cierre = pierde progreso (sin draft persistence) — decisión #D8.
+ * Submit final atomic: create/update categoría → set read scope (si
+ * readAccessKind ≠ PUBLIC). Si algún paso intermedio post-create falla,
+ * toast con motivo + categoría queda creada (consistente con patrón F.5).
+ *
+ * Cierre = pierde progreso (sin draft persistence).
  */
 export function CategoryFormSheet({
   open,
@@ -144,7 +132,6 @@ export function CategoryFormSheet({
                 placeId: mode.placeId,
                 emoji: value.emoji,
                 title: value.title.trim(),
-                contributionPolicy: value.contributionPolicy,
                 kind: value.kind,
               })
             ).categoryId
@@ -152,38 +139,10 @@ export function CategoryFormSheet({
               categoryId: mode.categoryId,
               emoji: value.emoji,
               title: value.title.trim(),
-              contributionPolicy: value.contributionPolicy,
               kind: value.kind,
             }).then(() => mode.categoryId)
 
-      // Step 2: persistir scope de contribución según policy.
-      if (value.contributionPolicy === 'SELECTED_GROUPS') {
-        const r = await setLibraryCategoryGroupScopeAction({
-          categoryId: targetCategoryId,
-          groupIds: [...value.contributionGroupIds],
-        })
-        if (!r.ok) {
-          toast.error(
-            'Categoría guardada pero la asignación de grupos de aporte falló. Probá desde "Grupos asignados".',
-          )
-          onOpenChange(false)
-          return
-        }
-      } else if (value.contributionPolicy === 'DESIGNATED') {
-        const r = await setLibraryCategoryDesignatedContributorsAction({
-          categoryId: targetCategoryId,
-          userIds: [...value.contributionUserIds],
-        })
-        if (!r.ok) {
-          toast.error(
-            'Categoría guardada pero la asignación de contribuidores falló. Probá desde "Contribuidores".',
-          )
-          onOpenChange(false)
-          return
-        }
-      }
-
-      // Step 3: persistir scope de lectura. Discriminated input.
+      // Step 2: persistir scope de lectura. Discriminated input.
       const readScopeInput =
         value.readAccessKind === 'PUBLIC'
           ? { categoryId: targetCategoryId, kind: 'PUBLIC' as const }
@@ -231,7 +190,7 @@ export function CategoryFormSheet({
             chrome. */}
         <BottomSheetTitle className="sr-only">{titleText}</BottomSheetTitle>
         <BottomSheetDescription className="sr-only">
-          Configurá la categoría en 4 pasos.
+          Configurá la categoría en 3 pasos.
         </BottomSheetDescription>
 
         {open ? (

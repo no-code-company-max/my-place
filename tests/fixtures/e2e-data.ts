@@ -198,11 +198,13 @@ export const E2E_LIBRARY_CATEGORIES: Record<
     slug: string
     title: string
     emoji: string
-    policy: 'MEMBERS_OPEN' | 'DESIGNATED' | 'SELECTED_GROUPS'
     kind: 'GENERAL' | 'COURSE'
     readAccessKind: 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
-    /** Roles fixture que el seed crea como contributors (vacío = ninguno). */
-    contributorRoles: readonly E2ERole[]
+    /** S1b (2026-05-13): reemplaza el legacy `policy`. */
+    writeAccessKind: 'OWNER_ONLY' | 'GROUPS' | 'TIERS' | 'USERS'
+    /** Roles fixture que el seed agrega al `LibraryCategoryUserWriteScope`
+     *  (sólo aplica si writeAccessKind === 'USERS'). */
+    writeUserRoles: readonly E2ERole[]
     /** Posición manual fija para orden estable entre runs. */
     position: number
   }
@@ -213,10 +215,10 @@ export const E2E_LIBRARY_CATEGORIES: Record<
     slug: 'tutorials',
     title: 'Tutoriales',
     emoji: '📚',
-    policy: 'MEMBERS_OPEN',
     kind: 'GENERAL',
     readAccessKind: 'PUBLIC',
-    contributorRoles: [],
+    writeAccessKind: 'OWNER_ONLY',
+    writeUserRoles: [],
     position: 0,
   },
   resources: {
@@ -225,10 +227,10 @@ export const E2E_LIBRARY_CATEGORIES: Record<
     slug: 'resources',
     title: 'Recursos',
     emoji: '🗂️',
-    policy: 'DESIGNATED',
     kind: 'GENERAL',
     readAccessKind: 'PUBLIC',
-    contributorRoles: ['memberA'],
+    writeAccessKind: 'USERS',
+    writeUserRoles: ['memberA'],
     position: 1,
   },
   presetOnly: {
@@ -237,10 +239,10 @@ export const E2E_LIBRARY_CATEGORIES: Record<
     slug: 'preset-only',
     title: 'Restringida',
     emoji: '🔒',
-    policy: 'DESIGNATED',
     kind: 'GENERAL',
     readAccessKind: 'PUBLIC',
-    contributorRoles: [],
+    writeAccessKind: 'OWNER_ONLY',
+    writeUserRoles: [],
     position: 2,
   },
 }

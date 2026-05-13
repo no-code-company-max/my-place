@@ -18,4 +18,8 @@ import 'server-only'
 // Queries (server-only)
 // ---------------------------------------------------------------
 
-export { findWriteScope, type LibraryCategoryWriteScope } from './server/queries'
+export {
+  findWriteScope,
+  canWriteInAnyCategory,
+  type LibraryCategoryWriteScope,
+} from './server/queries'

@@ -68,3 +68,83 @@ export const findWriteScope = cache(
     }
   },
 )
+
+/**
+ * ¿Puede el viewer crear contenido en al menos UNA categoría del place?
+ *
+ * Útil para gate de visibilidad del `<ZoneFab>` "+ Crear" en library.
+ * Resuelve internamente owner + scope matches (sin requerir un viewer
+ * pre-resuelto desde el caller).
+ *
+ * Reemplaza al legacy `canCreateInAnyCategoryForViewer` (sub-slice
+ * `contributors/` eliminado en S1b).
+ *
+ * Flow:
+ *  1. Owner del place: bypass instantáneo.
+ *  2. Check directo en `LibraryCategoryUserWriteScope` (kind=USERS).
+ *  3. Resolver grupos del user + check en `LibraryCategoryGroupWriteScope`.
+ *  4. Resolver tiers activos del user + check en `LibraryCategoryTierWriteScope`.
+ *
+ * Las 3 sub-queries son `findFirst` (early-exit en cada nivel) — el
+ * costo agregado es ≤ 4 round-trips al pooler. No es cacheable por
+ * request (depende del user) pero el shell lo invoca 1 vez por render
+ * en `<Suspense>`.
+ */
+export async function canWriteInAnyCategory(args: {
+  placeId: string
+  userId: string
+}): Promise<boolean> {
+  const { placeId, userId } = args
+
+  const isOwner = await prisma.placeOwnership.findUnique({
+    where: { userId_placeId: { userId, placeId } },
+    select: { id: true },
+  })
+  if (isOwner) return true
+
+  const userScope = await prisma.libraryCategoryUserWriteScope.findFirst({
+    where: {
+      userId,
+      category: { placeId, archivedAt: null, writeAccessKind: 'USERS' },
+    },
+    select: { categoryId: true },
+  })
+  if (userScope) return true
+
+  const groupMemberships = await prisma.groupMembership.findMany({
+    where: { userId, placeId },
+    select: { groupId: true },
+  })
+  if (groupMemberships.length > 0) {
+    const groupScope = await prisma.libraryCategoryGroupWriteScope.findFirst({
+      where: {
+        groupId: { in: groupMemberships.map((g) => g.groupId) },
+        category: { placeId, archivedAt: null, writeAccessKind: 'GROUPS' },
+      },
+      select: { categoryId: true },
+    })
+    if (groupScope) return true
+  }
+
+  const now = new Date()
+  const tierMemberships = await prisma.tierMembership.findMany({
+    where: {
+      userId,
+      placeId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    select: { tierId: true },
+  })
+  if (tierMemberships.length > 0) {
+    const tierScope = await prisma.libraryCategoryTierWriteScope.findFirst({
+      where: {
+        tierId: { in: tierMemberships.map((t) => t.tierId) },
+        category: { placeId, archivedAt: null, writeAccessKind: 'TIERS' },
+      },
+      select: { categoryId: true },
+    })
+    if (tierScope) return true
+  }
+
+  return false
+}

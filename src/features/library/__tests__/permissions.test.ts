@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   canArchiveItem,
-  canCreateInCategory,
   canEditCategory,
   canEditItem,
-  type CategoryForPermissions,
   type LibraryViewer,
 } from '../domain/permissions'
+
+/**
+ * Tests del slice raíz `library/` para permisos de category/item edit.
+ * El gate de creación (canWriteCategory) vive en
+ * `library/contribution/__tests__/permissions.test.ts` desde S1b.
+ */
 
 const adminViewer: LibraryViewer = {
   userId: 'admin-1',
@@ -22,48 +26,6 @@ const memberViewer: LibraryViewer = {
   groupIds: [],
   tierIds: [],
 }
-const memberB: LibraryViewer = {
-  userId: 'member-2',
-  isAdmin: false,
-  isOwner: false,
-  groupIds: [],
-  tierIds: [],
-}
-
-const adminOnlyCat: CategoryForPermissions = {
-  contributionPolicy: 'DESIGNATED',
-  designatedUserIds: [],
-}
-const designatedCat: CategoryForPermissions = {
-  contributionPolicy: 'DESIGNATED',
-  designatedUserIds: ['member-1'],
-}
-const openCat: CategoryForPermissions = {
-  contributionPolicy: 'MEMBERS_OPEN',
-  designatedUserIds: [],
-}
-
-describe('canCreateInCategory', () => {
-  it('admin: siempre true (admin_only / designated / members_open)', () => {
-    expect(canCreateInCategory(adminOnlyCat, adminViewer)).toBe(true)
-    expect(canCreateInCategory(designatedCat, adminViewer)).toBe(true)
-    expect(canCreateInCategory(openCat, adminViewer)).toBe(true)
-  })
-
-  it('admin_only: member común NO', () => {
-    expect(canCreateInCategory(adminOnlyCat, memberViewer)).toBe(false)
-  })
-
-  it('designated: solo el listado puede', () => {
-    expect(canCreateInCategory(designatedCat, memberViewer)).toBe(true)
-    expect(canCreateInCategory(designatedCat, memberB)).toBe(false)
-  })
-
-  it('members_open: cualquier miembro puede', () => {
-    expect(canCreateInCategory(openCat, memberViewer)).toBe(true)
-    expect(canCreateInCategory(openCat, memberB)).toBe(true)
-  })
-})
 
 describe('canEditCategory', () => {
   it('solo admin/owner', () => {

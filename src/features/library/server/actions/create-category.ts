@@ -87,7 +87,9 @@ export async function createLibraryCategoryAction(
       slug,
       emoji: data.emoji,
       title: trimmedTitle,
-      contributionPolicy: data.contributionPolicy,
+      // S1b: default writeAccessKind = OWNER_ONLY (restrictivo). El owner
+      // amplía el scope vía `setLibraryCategoryWriteScopeAction` después
+      // de crear.
     },
     select: { id: true, slug: true },
   })
@@ -98,7 +100,6 @@ export async function createLibraryCategoryAction(
       placeId: actor.placeId,
       categoryId: created.id,
       slug: created.slug,
-      contributionPolicy: data.contributionPolicy,
       actorId: actor.actorId,
     },
     'library category created',

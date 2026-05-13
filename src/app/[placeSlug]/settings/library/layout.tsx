@@ -3,13 +3,13 @@ import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import {
   CategoryListAdmin,
-  CategoryFormDialog,
   MAX_CATEGORIES_PER_PLACE,
+  NewCategoryTrigger,
 } from '@/features/library/public'
-import {
-  listContributorsByCategoryIds,
-  listLibraryCategories,
-} from '@/features/library/public.server'
+import { listLibraryCategories } from '@/features/library/public.server'
+import { listGroupsByPlace } from '@/features/groups/public.server'
+import { listActiveMembers } from '@/features/members/public.server'
+import { listTiersByPlace } from '@/features/tiers/public.server'
 import { PageHeader } from '@/shared/ui/page-header'
 import { MasterDetailLayout } from '@/shared/ui/master-detail-layout'
 
@@ -25,22 +25,23 @@ type Props = {
  * layout" — mismo approach que `/settings/groups`:
  *
  *  - **Master pane (lista)** vive ACÁ, server-rendered una vez. Persiste
- *    al navegar entre `/settings/library` y `/settings/library/[categoryId]`
- *    (Next 15 reusa layouts entre routes hermanas → sin re-fetch).
+ *    al navegar entre `/settings/library` y `/settings/library/[categoryId]`.
  *  - **Detail pane (`{children}`)**:
  *     - `/settings/library` → `page.tsx` (placeholder "Elegí una categoría").
  *     - `/settings/library/[categoryId]` → `[categoryId]/page.tsx` (detail).
  *  - **Mobile**: `<MasterDetailLayout hasDetail>` esconde el master cuando
- *    hay detail (full-screen). El detail incluye back link `md:hidden`.
+ *    hay detail (full-screen).
  *  - **Desktop**: split view (master 360px + detail).
  *
- * Gate admin/owner heredado del layout padre `/settings/layout.tsx` (no
- * re-validamos acá). Esta sub-page NO es owner-only — admin con permiso
- * `library:moderate-categories` puede gestionar.
+ * **S1b cleanup (2026-05-13):** se eliminó el listado de contributors
+ * legacy (model viejo `LibraryCategoryContributor` reemplazado por
+ * `WriteAccessKind` + 3 pivots write). El trigger "+ Nueva categoría"
+ * ahora usa el wizard `CategoryFormSheet` vía `<NewCategoryTrigger>`.
+ * Los catalogs (groups/members/tiers) se cargan acá para alimentar el
+ * wizard.
  *
- * Decisión 2026-05-12: migrar a master-detail AHORA (no esperar R.7.5
- * items). Cuando lleguen items + permisos de read access, el detail page
- * sumará secciones — la estructura ya está lista.
+ * **S3 pendiente:** revertir master-detail a EditPanel + lista plana
+ * (consistente con `/settings/hours` y `/settings/access`).
  */
 export default async function LibraryMasterDetailLayout({
   children,
@@ -53,14 +54,24 @@ export default async function LibraryMasterDetailLayout({
     notFound()
   }
 
-  const categories = await listLibraryCategories(place.id)
+  const [categories, groups, members, tiers] = await Promise.all([
+    listLibraryCategories(place.id),
+    listGroupsByPlace(place.id),
+    listActiveMembers(place.id),
+    listTiersByPlace(place.id, true),
+  ])
 
-  // Contributors batch query — solo para categorías DESIGNATED. Las que no
-  // figuran en el Map no tienen contributors (policy distinta).
-  const designatedIds = categories
-    .filter((c) => c.contributionPolicy === 'DESIGNATED')
-    .map((c) => c.id)
-  const contributorsByCategory = await listContributorsByCategoryIds(designatedIds)
+  const groupOptions = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    isPreset: g.isPreset,
+  }))
+  const memberOptions = members.map((m) => ({
+    userId: m.userId,
+    displayName: m.user.displayName,
+    handle: m.user.handle,
+  }))
+  const tierOptions = tiers.map((t) => ({ id: t.id, name: t.name }))
 
   const remaining = MAX_CATEGORIES_PER_PLACE - categories.length
   const canCreateMore = remaining > 0
@@ -75,7 +86,7 @@ export default async function LibraryMasterDetailLayout({
     <div className="space-y-6 px-3 py-6 md:px-4 md:py-8">
       <PageHeader
         title="Biblioteca"
-        description="Las categorías agrupan los recursos de la biblioteca. Definí emoji, título y quién puede agregar contenido."
+        description="Las categorías agrupan los recursos de la biblioteca. Definí emoji, título y quién puede leer/escribir contenido."
       />
 
       <section aria-labelledby="library-categories-heading" className="space-y-3">
@@ -93,19 +104,14 @@ export default async function LibraryMasterDetailLayout({
           </span>
         </div>
 
-        <CategoryListAdmin
-          categories={categories}
-          contributorsByCategory={contributorsByCategory}
-        />
+        <CategoryListAdmin categories={categories} />
 
         {canCreateMore ? (
-          <CategoryFormDialog
-            mode={{ kind: 'create', placeId: place.id }}
-            trigger={
-              <span className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-neutral-300 px-4 text-sm font-medium text-neutral-600 hover:border-neutral-500">
-                <span aria-hidden="true">+</span> Nueva categoría
-              </span>
-            }
+          <NewCategoryTrigger
+            placeId={place.id}
+            groups={groupOptions}
+            members={memberOptions}
+            tiers={tierOptions}
           />
         ) : (
           <p className="text-xs italic text-neutral-500">

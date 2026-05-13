@@ -20,7 +20,6 @@
 export {
   ADMIN_PRESET_NAME,
   PERMISSIONS_ALL,
-  isLibraryScopedPermission,
   isValidPermission,
   permissionLabel,
   type Permission,
@@ -54,13 +53,11 @@ export {
   deleteGroupInputSchema,
   permissionEnumSchema,
   removeMemberFromGroupInputSchema,
-  setGroupCategoryScopeInputSchema,
   updateGroupInputSchema,
   type AddMemberToGroupInput,
   type CreateGroupInput,
   type DeleteGroupInput,
   type RemoveMemberFromGroupInput,
-  type SetGroupCategoryScopeInput,
   type UpdateGroupInput,
 } from './schemas'
 
@@ -79,9 +76,6 @@ export {
   addMemberToGroupAction,
   removeMemberFromGroupAction,
 } from './memberships/public'
-
-// Sub-slice category-scope/
-export { CategoryScopeSelector, setGroupCategoryScopeAction } from './category-scope/public'
 
 // Sub-slice admin/
 export {

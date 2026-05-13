@@ -6,13 +6,13 @@
  *   - UI condicional (botones visibles/ocultos según viewer).
  *   - Tests unit.
  *
- * La RLS (migration 20260430000000) replica la lógica a nivel SQL —
- * estas funciones son la fuente canónica del lado app.
+ * **2026-05-13 (S1b):** `canCreateInCategory` se removió. El gate de
+ * creación vive ahora en `canWriteCategory` del sub-slice
+ * `library/contribution/`. Ver ADR
+ * `2026-05-12-library-permissions-model.md`.
  *
  * Ver `docs/features/library/spec.md` § 11.
  */
-
-import type { ContributionPolicy } from './types'
 
 /**
  * Viewer mínimo para evaluar permisos. Lo provee `resolveLibraryViewer`
@@ -25,10 +25,11 @@ import type { ContributionPolicy } from './types'
  * - `isOwner`: `PlaceOwnership` activa para este user en el place. Owner
  *   bypassa la mayoría de gates (ver ADR `2026-05-04-library-courses-and-read-access.md` § decisión #C).
  * - `groupIds`: ids de `PermissionGroup` del que el user es miembro en el
- *   place (incluye preset + grupos custom). Usado por `canCreateInCategory`
- *   con policy=SELECTED_GROUPS y por `canReadCategory` con kind=GROUPS.
+ *   place (incluye preset + grupos custom). Usado por `canWriteCategory`
+ *   con kind=GROUPS y por `canReadCategory` con kind=GROUPS.
  * - `tierIds`: ids de `Tier` con `TierMembership` activa (no expirada) del
- *   user en el place. Usado por `canReadCategory` con kind=TIERS.
+ *   user en el place. Usado por `canReadCategory`/`canWriteCategory` con
+ *   kind=TIERS.
  *
  * `ReadonlyArray` para evitar mutación accidental que invalide invariantes.
  */
@@ -38,49 +39,6 @@ export type LibraryViewer = {
   isOwner: boolean
   groupIds: ReadonlyArray<string>
   tierIds: ReadonlyArray<string>
-}
-
-export type CategoryForPermissions = {
-  contributionPolicy: ContributionPolicy
-  /** Lista de userIds designated. Se popula solo cuando policy=DESIGNATED;
-   *  para otras policies el caller puede pasar [] sin importar. */
-  designatedUserIds: ReadonlyArray<string>
-  /** Lista de groupIds asignados al scope SELECTED_GROUPS. Se popula sólo
-   *  cuando policy=SELECTED_GROUPS; para otras policies el caller puede
-   *  pasar [] sin importar. Match con `viewer.groupIds` en `canCreateInCategory`. */
-  groupScopeIds?: ReadonlyArray<string>
-}
-
-/**
- * ¿Puede el viewer crear un item en esta categoría?
- *
- * - admin/owner: siempre
- * - policy=DESIGNATED: admin o miembro listado
- * - policy=MEMBERS_OPEN: cualquier miembro activo (asumido por el
- *   caller — la membership ya fue verificada por `resolveActorForPlace`)
- * - policy=SELECTED_GROUPS: la evaluación NO se hace acá — vive en los
- *   sub-slices `library/contributors/` (group scope check). Default
- *   cerrado: si el caller no pasó la lógica de grupos, este helper
- *   retorna false.
- *
- * `ADMIN_ONLY` fue eliminado (migration 20260504010000) — ver ADR
- * `2026-05-04-library-contribution-policy-groups.md`.
- */
-export function canCreateInCategory(
-  category: CategoryForPermissions,
-  viewer: LibraryViewer,
-): boolean {
-  if (viewer.isAdmin) return true
-  switch (category.contributionPolicy) {
-    case 'DESIGNATED':
-      return category.designatedUserIds.includes(viewer.userId)
-    case 'MEMBERS_OPEN':
-      return true
-    case 'SELECTED_GROUPS':
-      // Evaluado en `library/contributors/` con el group scope. Default
-      // cerrado acá si el caller no enriqueció la decisión.
-      return false
-  }
 }
 
 /**

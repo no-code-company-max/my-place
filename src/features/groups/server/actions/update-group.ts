@@ -19,8 +19,8 @@ import { updateGroupInputSchema } from '@/features/groups/schemas'
  * - `permission_invalid`: el array `permissions` contiene strings que no
  *   están en el enum hardcoded.
  * - `cannot_modify_preset`: el grupo es el preset "Administradores" y se
- *   intentó cambiar `permissions` o `categoryScopeIds`. Se permite cambiar
- *   `name` y `description` del preset.
+ *   intentó cambiar `permissions`. Se permite cambiar `name` y
+ *   `description` del preset.
  */
 export type UpdateGroupResult =
   | { ok: true }
@@ -40,20 +40,20 @@ function arraysEqualAsSet<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean 
  * Edita un grupo. Owner-only.
  *
  * Reglas del preset hardcoded ("Administradores"):
- *  - Permite cambiar `name` y `description` (decisión: el owner puede
- *    preferir "Equipo de moderación" u otro label).
- *  - NO permite cambiar `permissions` ni `categoryScopeIds` →
- *    `cannot_modify_preset`.
+ *  - Permite cambiar `name` y `description`.
+ *  - NO permite cambiar `permissions` → `cannot_modify_preset`.
+ *
+ * **S1b (2026-05-13):** removida la sincronización de `categoryScopes`.
+ * La tabla `GroupCategoryScope` se eliminó — permisos `library:*`
+ * aplican globalmente al place.
  *
  * Flow:
  *  1. Parse Zod.
  *  2. Auth + load grupo + load place + owner gate.
- *  3. Si preset y se intenta cambiar permissions o categoryScopeIds →
- *     `cannot_modify_preset`.
+ *  3. Si preset y se intenta cambiar permissions → `cannot_modify_preset`.
  *  4. Valida permissions enum.
  *  5. Pre-check name unique (excluye el propio grupo del WHERE).
- *  6. UPDATE + sync de `categoryScopes` (delete + create) en tx para
- *     evitar estado intermedio inconsistente.
+ *  6. UPDATE atómico.
  */
 export async function updateGroupAction(input: unknown): Promise<UpdateGroupResult> {
   const parsed = updateGroupInputSchema.safeParse(input)
@@ -74,7 +74,6 @@ export async function updateGroupAction(input: unknown): Promise<UpdateGroupResu
       name: true,
       isPreset: true,
       permissions: true,
-      categoryScopes: { select: { categoryId: true } },
     },
   })
   if (!group) {
@@ -95,15 +94,11 @@ export async function updateGroupAction(input: unknown): Promise<UpdateGroupResu
     })
   }
 
-  // Preset hardcoded: bloquear cambios a permissions y scope.
+  // Preset hardcoded: bloquear cambios a permissions.
   if (isAdminPreset({ isPreset: group.isPreset, name: group.name })) {
     const requestedPermissions = normalizePermissions(data.permissions)
     const currentPermissions = group.permissions
-    const requestedScope = data.categoryScopeIds ?? []
-    const currentScope = group.categoryScopes.map((s) => s.categoryId)
-    const permissionsChanged = !arraysEqualAsSet(currentPermissions, requestedPermissions)
-    const scopeChanged = !arraysEqualAsSet(currentScope, requestedScope)
-    if (permissionsChanged || scopeChanged) {
+    if (!arraysEqualAsSet(currentPermissions, requestedPermissions)) {
       return { ok: false, error: 'cannot_modify_preset' }
     }
   }
@@ -125,28 +120,13 @@ export async function updateGroupAction(input: unknown): Promise<UpdateGroupResu
     return { ok: false, error: 'group_name_taken' }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.permissionGroup.update({
-      where: { id: group.id },
-      data: {
-        name: data.name,
-        description: data.description ?? null,
-        permissions,
-      },
-    })
-    // Sync de scope: simple delete + create. El `groupId, categoryId` está
-    // en pk compuesta; un UPSERT por entry queda más complejo y para los
-    // ~5-10 categories esperados es bottleneck inexistente.
-    await tx.groupCategoryScope.deleteMany({ where: { groupId: group.id } })
-    if (data.categoryScopeIds && data.categoryScopeIds.length > 0) {
-      await tx.groupCategoryScope.createMany({
-        data: data.categoryScopeIds.map((categoryId) => ({
-          groupId: group.id,
-          categoryId,
-        })),
-        skipDuplicates: true,
-      })
-    }
+  await prisma.permissionGroup.update({
+    where: { id: group.id },
+    data: {
+      name: data.name,
+      description: data.description ?? null,
+      permissions,
+    },
   })
 
   logger.info(
@@ -155,7 +135,6 @@ export async function updateGroupAction(input: unknown): Promise<UpdateGroupResu
       placeId: place.id,
       groupId: group.id,
       permissionsCount: permissions.length,
-      scopeCount: data.categoryScopeIds?.length ?? 0,
       actorId,
     },
     'permission group updated',

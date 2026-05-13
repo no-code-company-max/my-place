@@ -12,28 +12,6 @@
  */
 
 /**
- * Política de contribución por categoría.
- *
- * - `DESIGNATED`: admin + miembros listados en
- *   `LibraryCategoryContributor`.
- * - `MEMBERS_OPEN`: cualquier miembro activo del place (default).
- * - `SELECTED_GROUPS`: miembros que pertenezcan a alguno de los
- *   `PermissionGroup` con scope a esta categoría (via `GroupCategoryScope`).
- *
- * `ADMIN_ONLY` fue eliminado (migration 20260504010000) — ver
- * `docs/decisions/2026-05-04-library-contribution-policy-groups.md`.
- *
- * Mapea 1:1 al enum Postgres `ContributionPolicy`.
- */
-export type ContributionPolicy = 'DESIGNATED' | 'MEMBERS_OPEN' | 'SELECTED_GROUPS'
-
-export const CONTRIBUTION_POLICY_VALUES: ReadonlyArray<ContributionPolicy> = [
-  'DESIGNATED',
-  'MEMBERS_OPEN',
-  'SELECTED_GROUPS',
-]
-
-/**
  * Tipo de categoría (G.1, 2026-05-04).
  *
  * - `GENERAL`: contenido regular (default).
@@ -120,14 +98,12 @@ export type LibraryCategory = {
   /** Posición manual. NULL hasta que admin reordena. La query ordena
    *  COALESCE(position, +Infinity) → createdAt como fallback. */
   position: number | null
-  /** LEGACY (a eliminar en S1b): reemplazado por `writeAccessKind`. */
-  contributionPolicy: ContributionPolicy
   /** G.1 (2026-05-04): tipo de categoría. Default GENERAL. */
   kind: LibraryCategoryKind
   /** G.1 (2026-05-04): discriminator del scope de lectura. Default PUBLIC. */
   readAccessKind: LibraryReadAccessKind
   /** S1a (2026-05-12): discriminator del scope de escritura. Default
-   *  OWNER_ONLY. Reemplaza a `contributionPolicy`. */
+   *  OWNER_ONLY. */
   writeAccessKind: WriteAccessKind
   archivedAt: Date | null
   createdAt: Date
@@ -135,26 +111,6 @@ export type LibraryCategory = {
   /** Cantidad de items activos. Calculado por la query (sub-count).
    *  R.7.2 retorna 0; cuando R.7.5+ sume LibraryItem, refleja el real. */
   docCount: number
-  /** LEGACY (a eliminar en S1b): group ids con scope a esta categoría
-   *  (via `GroupCategoryScope`). Vacío salvo cuando
-   *  `contributionPolicy === 'SELECTED_GROUPS'`. */
-  groupScopeIds: string[]
-}
-
-/**
- * Vista de un contribuidor designado para una categoría.
- *
- * `displayName` y `avatarUrl` se resuelven via JOIN a `User` para
- * renderizar la lista en el admin sin queries N+1.
- */
-export type LibraryCategoryContributor = {
-  categoryId: string
-  userId: string
-  displayName: string
-  avatarUrl: string | null
-  invitedAt: Date
-  invitedByUserId: string
-  invitedByDisplayName: string
 }
 
 // ---------------------------------------------------------------

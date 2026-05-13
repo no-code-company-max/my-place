@@ -5,7 +5,6 @@ import { loadPlaceBySlug } from '@/shared/lib/place-loader'
 import { findMemberPermissions, listActiveMembers } from '@/features/members/public.server'
 import { GroupDetailView } from '@/features/groups/public'
 import { findGroupById, listMembershipsByGroup } from '@/features/groups/public.server'
-import { listLibraryCategories } from '@/features/library/public.server'
 import { PageHeader } from '@/shared/ui/page-header'
 
 /**
@@ -44,17 +43,10 @@ export async function GroupDetailContent({ placeSlug, groupId }: Props): Promise
     notFound()
   }
 
-  const [members, categories, activeMembers] = await Promise.all([
+  const [members, activeMembers] = await Promise.all([
     listMembershipsByGroup(group.id),
-    listLibraryCategories(place.id),
     listActiveMembers(place.id),
   ])
-
-  const categoryOptions = categories.map((c) => ({
-    id: c.id,
-    emoji: c.emoji,
-    title: c.title,
-  }))
 
   const memberIds = new Set(members.map((m) => m.userId))
   const availableMembers = activeMembers
@@ -85,7 +77,6 @@ export async function GroupDetailContent({ placeSlug, groupId }: Props): Promise
       <GroupDetailView
         placeSlug={place.slug}
         group={group}
-        categories={categoryOptions}
         members={members}
         availableMembers={availableMembers}
       />

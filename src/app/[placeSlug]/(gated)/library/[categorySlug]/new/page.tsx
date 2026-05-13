@@ -1,11 +1,9 @@
 import { notFound } from 'next/navigation'
 import { loadPlaceBySlug } from '@/shared/lib/place-loader'
-import { canCreateInCategory, createLibraryItemAction } from '@/features/library/public'
-import {
-  findLibraryCategoryBySlug,
-  listCategoryContributorUserIds,
-  resolveLibraryViewer,
-} from '@/features/library/public.server'
+import { createLibraryItemAction } from '@/features/library/public'
+import { findLibraryCategoryBySlug, resolveLibraryViewer } from '@/features/library/public.server'
+import { canWriteCategory } from '@/features/library/contribution/public'
+import { findWriteScope } from '@/features/library/contribution/public.server'
 import { LibraryItemComposerForm } from '@/features/discussions/composers/public'
 import { getEditorConfigForPlace } from '@/features/editor-config/public.server'
 
@@ -38,15 +36,14 @@ export default async function NewLibraryItemPage({ params }: Props) {
   const category = await findLibraryCategoryBySlug(place.id, categorySlug)
   if (!category) notFound()
 
-  const designatedUserIds =
-    category.contributionPolicy === 'DESIGNATED'
-      ? await listCategoryContributorUserIds(category.id)
-      : []
-
-  const canCreate = canCreateInCategory(
+  const writeScope = await findWriteScope(category.id)
+  if (!writeScope) notFound()
+  const canCreate = canWriteCategory(
     {
-      contributionPolicy: category.contributionPolicy,
-      designatedUserIds,
+      writeAccessKind: writeScope.kind,
+      groupWriteIds: writeScope.groupIds,
+      tierWriteIds: writeScope.tierIds,
+      userWriteIds: writeScope.userIds,
     },
     viewer,
   )

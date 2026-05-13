@@ -15,10 +15,8 @@
 // ---------------------------------------------------------------
 
 export type {
-  ContributionPolicy,
   ItemAuthorSnapshot,
   LibraryCategory,
-  LibraryCategoryContributor,
   LibraryCategoryKind,
   LibraryItemDetailView,
   LibraryItemListView,
@@ -27,7 +25,6 @@ export type {
 } from './domain/types'
 
 export {
-  CONTRIBUTION_POLICY_VALUES,
   LIBRARY_CATEGORY_KIND_VALUES,
   LIBRARY_READ_ACCESS_KIND_VALUES,
   WRITE_ACCESS_KIND_VALUES,
@@ -46,10 +43,8 @@ export { EMBED_PROVIDERS, parseEmbedUrl } from './domain/embed-parser'
 
 export {
   canArchiveItem,
-  canCreateInCategory,
   canEditCategory,
   canEditItem,
-  type CategoryForPermissions,
   type LibraryViewer,
 } from './domain/permissions'
 
@@ -77,11 +72,7 @@ export { archiveLibraryCategoryAction } from './server/actions/archive-category'
 export { archiveLibraryItemAction } from './items/server/actions/archive-item'
 export { createLibraryCategoryAction } from './server/actions/create-category'
 export { createLibraryItemAction } from './items/server/actions/create-item'
-export { inviteContributorAction } from './server/actions/invite-contributor'
-export { removeContributorAction } from './server/actions/remove-contributor'
 export { reorderLibraryCategoriesAction } from './server/actions/reorder-categories'
-export { setLibraryCategoryDesignatedContributorsAction } from './contributors/server/actions/set-designated-contributors'
-export { setLibraryCategoryGroupScopeAction } from './contributors/server/actions/set-category-group-scope'
 export { updateLibraryCategoryAction } from './server/actions/update-category'
 export { updateLibraryItemAction } from './items/server/actions/update-item'
 
@@ -92,30 +83,12 @@ export {
 } from './server/actions/mention-search'
 
 // ---------------------------------------------------------------
-// Zod schemas + inferred types — input shapes para server actions
-// ---------------------------------------------------------------
-
-export {
-  setLibraryCategoryDesignatedContributorsInputSchema,
-  setLibraryCategoryGroupScopeInputSchema,
-} from './schemas'
-export type {
-  SetLibraryCategoryDesignatedContributorsInput,
-  SetLibraryCategoryGroupScopeInput,
-} from './schemas'
-
-// ---------------------------------------------------------------
 // UI admin (R.7.3) — settings/library
 // ---------------------------------------------------------------
 
 export { ArchiveCategoryButton } from './ui/admin/archive-category-button'
-export { CategoryFormDialog } from './ui/admin/category-form-dialog'
 export { CategoryListAdmin } from './ui/admin/category-list-admin'
-export { ContributorsDialog } from './ui/admin/contributors-dialog'
-export {
-  contributionPolicyDescription,
-  contributionPolicyLabel,
-} from './ui/admin/contribution-policy-label'
+export { NewCategoryTrigger } from './ui/admin/new-category-trigger'
 export { friendlyLibraryErrorMessage } from './ui/admin/errors'
 
 // ---------------------------------------------------------------

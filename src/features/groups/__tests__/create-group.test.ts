@@ -91,20 +91,8 @@ describe('createGroupAction — happy path', () => {
     expect(revalidatePathFn).toHaveBeenCalledWith(`/${PLACE_SLUG}/settings/groups`)
   })
 
-  it('persiste categoryScopes cuando se pasan', async () => {
-    await createGroupAction({
-      ...VALID_INPUT,
-      permissions: ['library:moderate-items'],
-      categoryScopeIds: ['cat-1', 'cat-2'],
-    })
-    const call = permissionGroupCreate.mock.calls[0]?.[0] as {
-      data: { categoryScopes?: { create: Array<{ categoryId: string }> } }
-    }
-    expect(call.data.categoryScopes?.create).toEqual([
-      { categoryId: 'cat-1' },
-      { categoryId: 'cat-2' },
-    ])
-  })
+  // S1b: test "persiste categoryScopes" removido — `GroupCategoryScope`
+  // se eliminó del schema; los permisos library:* aplican globalmente.
 
   it('description vacío se persiste como null', async () => {
     await createGroupAction({ ...VALID_INPUT, description: '   ' })

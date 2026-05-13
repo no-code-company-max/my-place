@@ -91,9 +91,6 @@ async function wipeE2EContent(placeIds: string[]): Promise<void> {
     where: { item: { placeId: { in: placeIds } } },
   })
   await prisma.libraryItem.deleteMany({ where: { placeId: { in: placeIds } } })
-  await prisma.libraryCategoryContributor.deleteMany({
-    where: { category: { placeId: { in: placeIds } } },
-  })
   await prisma.libraryCategoryGroupReadScope.deleteMany({
     where: { category: { placeId: { in: placeIds } } },
   })
@@ -103,19 +100,26 @@ async function wipeE2EContent(placeIds: string[]): Promise<void> {
   await prisma.libraryCategoryUserReadScope.deleteMany({
     where: { category: { placeId: { in: placeIds } } },
   })
+  // S1b: write scope pivots cascadean al borrar category — defensivo.
+  await prisma.libraryCategoryGroupWriteScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryCategoryTierWriteScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
+  await prisma.libraryCategoryUserWriteScope.deleteMany({
+    where: { category: { placeId: { in: placeIds } } },
+  })
   await prisma.post.deleteMany({ where: { placeId: { in: placeIds } } })
   // Library categories ya sin items (Restrict de LibraryItem.categoryId
-  // satisfecho). Cascadea contributors/readScopes/groupCategoryScope.
+  // satisfecho). Cascadea readScopes/writeScopes.
   await prisma.libraryCategory.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.placeOpening.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.invitation.deleteMany({ where: { placeId: { in: placeIds } } })
-  // Groups: orden FK-safe (scopes → memberships → groups). El delete de
+  // Groups: orden FK-safe (memberships → groups). El delete de
   // `permissionGroup` cubre tanto los baseline (con id estable) como
   // cualquier temp group que un spec mutativo haya dejado huérfano por
   // un afterAll que falló — defensivo.
-  await prisma.groupCategoryScope.deleteMany({
-    where: { group: { placeId: { in: placeIds } } },
-  })
   await prisma.groupMembership.deleteMany({ where: { placeId: { in: placeIds } } })
   await prisma.permissionGroup.deleteMany({ where: { placeId: { in: placeIds } } })
   // Tiers: tierMembership Restrict desde Tier → borrar memberships antes
@@ -312,26 +316,24 @@ async function main(): Promise<void> {
         title: c.title,
         emoji: c.emoji,
         position: c.position,
-        contributionPolicy: c.policy,
         kind: c.kind,
         readAccessKind: c.readAccessKind,
+        writeAccessKind: c.writeAccessKind,
       },
     })
-    // Contributors designados por la fixture.
-    for (const role of c.contributorRoles) {
-      await prisma.libraryCategoryContributor.create({
+    // S1b: write scope USERS pivot — si la fixture declara usuarios con
+    // permiso de escritura (reemplaza al legacy "designated contributors").
+    for (const role of c.writeUserRoles) {
+      await prisma.libraryCategoryUserWriteScope.create({
         data: {
           categoryId: c.id,
           userId: userIds[role],
-          // Inviter por convención: owner del place. Sólo se usa para
-          // audit log; los specs no lo testean.
-          invitedByUserId: userIds.owner,
         },
       })
     }
     console.log(
       `[e2e-seed] library category ${catKey} (${c.slug}) → ${c.id} ` +
-        `contributors=${c.contributorRoles.length}`,
+        `writeUsers=${c.writeUserRoles.length}`,
     )
   }
 

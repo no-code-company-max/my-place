@@ -13,13 +13,11 @@ import { assertPlaceOpenOrThrow } from '@/features/hours/public.server'
 import { assertRichTextSize } from '@/features/rich-text/public'
 import { buildAuthorSnapshot } from '@/features/discussions/public'
 import { createPostFromSystemHelper } from '@/features/discussions/public.server'
-import { canCreateInCategory, validateItemCoverUrl } from '@/features/library/public'
+import { validateItemCoverUrl } from '@/features/library/public'
+import { canWriteCategory } from '@/features/library/contribution/public'
+import { findWriteScope } from '@/features/library/contribution/public.server'
 import { createItemInputSchema } from '@/features/library/schemas'
-import {
-  listCategoryContributorUserIds,
-  resolveLibraryViewer,
-  revalidateLibraryItemPaths,
-} from '@/features/library/public.server'
+import { resolveLibraryViewer, revalidateLibraryItemPaths } from '@/features/library/public.server'
 
 /**
  * Crea un item de biblioteca: thread documento (Post) + LibraryItem
@@ -66,10 +64,7 @@ export async function createLibraryItemAction(
       id: true,
       slug: true,
       placeId: true,
-      contributionPolicy: true,
       archivedAt: true,
-      // G.4 (2026-05-04): JOIN para popular groupScopeIds (SELECTED_GROUPS).
-      groupScopes: { select: { groupId: true } },
     },
   })
   if (!category) {
@@ -84,21 +79,20 @@ export async function createLibraryItemAction(
     throw new NotFoundError('La categoría está archivada.', { categoryId: category.id })
   }
 
-  // Permission gate. G.3 (decisión ADR #2): NO existe permiso atómico
-  // "library:create-item". El branch fallback `role===ADMIN || isOwner`
-  // se dropea cuando se cierre el plan permission-groups cleanup
-  // (`docs/plans/2026-05-02-permission-groups-and-member-controls.md` G.7).
-  // Owner siempre bypassea por `isOwner`.
-  const designatedUserIds =
-    category.contributionPolicy === 'DESIGNATED'
-      ? await listCategoryContributorUserIds(category.id)
-      : []
+  // S1b: gate de creación vía `canWriteCategory` del sub-slice
+  // contribution. Owner siempre bypassea. El RLS de INSERT replica esta
+  // lógica como defensa en profundidad.
+  const writeScope = await findWriteScope(category.id)
+  if (!writeScope) {
+    throw new NotFoundError('Categoría sin write scope resuelto.', { categoryId: category.id })
+  }
   if (
-    !canCreateInCategory(
+    !canWriteCategory(
       {
-        contributionPolicy: category.contributionPolicy,
-        designatedUserIds,
-        groupScopeIds: category.groupScopes.map((g) => g.groupId),
+        writeAccessKind: writeScope.kind,
+        groupWriteIds: writeScope.groupIds,
+        tierWriteIds: writeScope.tierIds,
+        userWriteIds: writeScope.userIds,
       },
       viewer,
     )

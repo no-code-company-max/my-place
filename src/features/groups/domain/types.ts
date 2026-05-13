@@ -25,11 +25,6 @@ export type PermissionGroup = {
   isPreset: boolean
   /** Total de miembros activos en el grupo (precomputado por la query). */
   memberCount: number
-  /**
-   * IDs de categorías de library scopadas. Lista vacía → permisos
-   * library:* del grupo aplican a TODAS las categorías del place.
-   */
-  categoryScopeIds: string[]
   createdAt: Date
   updatedAt: Date
 }

@@ -5,25 +5,20 @@ import { AuthorizationError, NotFoundError, ValidationError } from '@/shared/err
 import { logger } from '@/shared/lib/logger'
 import { resolveActorForPlace } from '@/features/discussions/public.server'
 import { hasPermission } from '@/features/members/public.server'
-import {
-  validateCategoryEmoji,
-  validateCategoryTitle,
-  validateContributionPolicy,
-} from '@/features/library/domain/invariants'
+import { validateCategoryEmoji, validateCategoryTitle } from '@/features/library/domain/invariants'
 import { updateCategoryInputSchema } from '@/features/library/schemas'
 import { revalidateLibraryCategoryPaths } from './shared'
 
 /**
- * Actualiza emoji + título + contributionPolicy de una categoría.
+ * Actualiza emoji + título de una categoría.
  *
  * El slug NO se actualiza — es inmutable post-create (mismo principio
  * que Place.slug y Post.slug). Si el admin quiere "renombrar" en
  * términos de URL, archiva y recrea.
  *
- * Si el cambio de policy reduce el set permitido (ej.
- * MEMBERS_OPEN → ADMIN_ONLY), los items ya existentes NO se afectan
- * — siguen vivos. La policy solo gobierna NEW INSERTS, no items
- * históricos.
+ * El `writeAccessKind` se setea con `setLibraryCategoryWriteScopeAction`
+ * del sub-slice `library/contribution`. El `readAccessKind` con
+ * `setLibraryCategoryReadScopeAction` del sub-slice `library/access`.
  *
  * Ver `docs/features/library/spec.md` § 14.2.
  */
@@ -61,14 +56,12 @@ export async function updateLibraryCategoryAction(
 
   validateCategoryTitle(data.title)
   validateCategoryEmoji(data.emoji)
-  validateContributionPolicy(data.contributionPolicy)
 
   await prisma.libraryCategory.update({
     where: { id: category.id },
     data: {
       title: data.title.trim(),
       emoji: data.emoji,
-      contributionPolicy: data.contributionPolicy,
     },
   })
 
@@ -77,7 +70,6 @@ export async function updateLibraryCategoryAction(
       event: 'libraryCategoryUpdated',
       placeId: actor.placeId,
       categoryId: category.id,
-      contributionPolicy: data.contributionPolicy,
       actorId: actor.actorId,
     },
     'library category updated',

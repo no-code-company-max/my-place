@@ -8,12 +8,6 @@ import { DeleteGroupConfirm } from './delete-group-confirm'
 import { GroupFormSheet } from './group-form-sheet'
 import { GroupMembersSheet } from './group-members-sheet'
 
-type CategoryOption = {
-  id: string
-  emoji: string
-  title: string
-}
-
 type AvailableMember = {
   userId: string
   displayName: string
@@ -26,9 +20,6 @@ type Props = {
    *  post-delete. */
   placeSlug: string
   group: PermissionGroup
-  /** Categorías del place — alimentan el sheet de edit + el render del
-   *  scope library. */
-  categories: ReadonlyArray<CategoryOption>
   /** Miembros actuales del grupo — render de la lista + sheet de
    *  miembros. */
   members: ReadonlyArray<GroupMembership>
@@ -66,7 +57,6 @@ type SheetState = { kind: 'closed' } | { kind: 'edit' } | { kind: 'members' } | 
 export function GroupDetailView({
   placeSlug,
   group,
-  categories,
   members,
   availableMembers,
 }: Props): React.ReactNode {
@@ -75,11 +65,6 @@ export function GroupDetailView({
   function close(): void {
     setSheet({ kind: 'closed' })
   }
-
-  const categoryById = new Map(categories.map((c) => [c.id, c]))
-  const scopedCategories = group.categoryScopeIds
-    .map((id) => categoryById.get(id))
-    .filter((c): c is CategoryOption => Boolean(c))
 
   // Bloqueos del delete (defense in depth con el server action).
   const deleteBlockedReason = group.isPreset
@@ -97,7 +82,6 @@ export function GroupDetailView({
     initialName: group.name,
     initialDescription: group.description,
     initialPermissions: group.permissions,
-    initialCategoryScopeIds: group.categoryScopeIds,
     isPreset: group.isPreset,
   }
 
@@ -115,33 +99,6 @@ export function GroupDetailView({
           Permisos
         </h2>
         <PermissionChips permissions={group.permissions} />
-      </section>
-
-      <section aria-labelledby="group-scope-heading" className="space-y-3">
-        <h2
-          id="group-scope-heading"
-          className="border-b pb-2 font-serif text-xl"
-          style={{ borderColor: 'var(--border)' }}
-        >
-          Scope de biblioteca
-        </h2>
-        {scopedCategories.length === 0 ? (
-          <p className="text-sm italic text-neutral-500">
-            Sin scope: los permisos library del grupo aplican a TODAS las categorías del place (o no
-            hay permisos library en el grupo).
-          </p>
-        ) : (
-          <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
-            {scopedCategories.map((c) => (
-              <li key={c.id} className="flex min-h-[56px] items-center gap-3 py-2">
-                <span aria-hidden className="text-2xl leading-none">
-                  {c.emoji}
-                </span>
-                <span className="truncate text-sm font-medium">{c.title}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       <section aria-labelledby="group-members-heading" className="space-y-3">
@@ -231,7 +188,6 @@ export function GroupDetailView({
           if (!next) close()
         }}
         mode={formMode}
-        categories={categories}
       />
 
       <GroupMembersSheet

@@ -18,7 +18,7 @@ type Props = {
 
 /**
  * Lista admin de grupos. Client Component porque cablea el sheet "Nuevo
- * grupo" inline (mismo patrón que `<CategoryListAdmin>` del slice
+ * grupo" inline (mismo patrón que `<LibraryCategoriesPanel>` del slice
  * `library`).
  *
  * Cada row muestra SÓLO:

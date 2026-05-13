@@ -31,7 +31,7 @@ type Props = {
 /**
  * Vista detalle de un grupo. Client Component porque orquesta los 3
  * overlays (form sheet, members sheet, delete confirm) con un
- * discriminated union de estado — mismo patrón que `<CategoryListAdmin>`
+ * discriminated union de estado — mismo patrón que `<LibraryCategoriesPanel>`
  * del slice `library`.
  *
  * Estructura visual:

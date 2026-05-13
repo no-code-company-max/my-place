@@ -70,6 +70,66 @@ export const findWriteScope = cache(
 )
 
 /**
+ * Pre-load batch de write+read scopes de todas las categorías de un place.
+ *
+ * Útil para el admin page de `/settings/library` que necesita poder abrir
+ * el wizard en modo edit para cualquier categoría sin un round-trip extra
+ * al click. Una sola query con includes — 1 round-trip al pooler en
+ * total, no N×2.
+ *
+ * Retorna Map<categoryId, { write, read }> con los 6 sets de IDs por
+ * categoría. Categorías archivadas se incluyen — el admin puede editar
+ * archivadas si emerge esa necesidad (hoy la UI las oculta del listado).
+ */
+export type LibraryCategoryScopes = {
+  write: LibraryCategoryWriteScope
+  read: {
+    kind: 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
+    groupIds: ReadonlyArray<string>
+    tierIds: ReadonlyArray<string>
+    userIds: ReadonlyArray<string>
+  }
+}
+
+export async function listCategoryScopesByPlace(
+  placeId: string,
+): Promise<Map<string, LibraryCategoryScopes>> {
+  const rows = await prisma.libraryCategory.findMany({
+    where: { placeId },
+    select: {
+      id: true,
+      writeAccessKind: true,
+      readAccessKind: true,
+      writeGroupScopes: { select: { groupId: true } },
+      writeTierScopes: { select: { tierId: true } },
+      writeUserScopes: { select: { userId: true } },
+      readGroupScopes: { select: { groupId: true } },
+      readTierScopes: { select: { tierId: true } },
+      readUserScopes: { select: { userId: true } },
+    },
+  })
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        write: {
+          kind: r.writeAccessKind,
+          groupIds: r.writeGroupScopes.map((s) => s.groupId),
+          tierIds: r.writeTierScopes.map((s) => s.tierId),
+          userIds: r.writeUserScopes.map((s) => s.userId),
+        },
+        read: {
+          kind: r.readAccessKind,
+          groupIds: r.readGroupScopes.map((s) => s.groupId),
+          tierIds: r.readTierScopes.map((s) => s.tierId),
+          userIds: r.readUserScopes.map((s) => s.userId),
+        },
+      },
+    ]),
+  )
+}
+
+/**
  * ¿Puede el viewer crear contenido en al menos UNA categoría del place?
  *
  * Útil para gate de visibilidad del `<ZoneFab>` "+ Crear" en library.

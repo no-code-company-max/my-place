@@ -1,5 +1,13 @@
 # Plan — Rediseño `/settings/library` con master-detail
 
+> **⚠ SUPERSEDED (2026-05-13):** este plan fue **reemplazado** por
+> `2026-05-12-library-permissions-redesign.md` (S0–S3). La decisión de
+> master-detail se revirtió en S3 a EditPanel + lista plana (consistente
+> con `/settings/access` y `/settings/hours`). Razón: una vez clarificado
+> que los items NO se gestionan desde admin (viven en zona gated), el
+> detail no tenía sustancia para justificar el master-detail. Ver
+> `docs/decisions/2026-05-12-library-permissions-model.md`.
+
 **Fecha:** 2026-05-12
 **Base canónica:** `docs/ux-patterns.md` (post commit `c0936aa`)
 **Mini-spec referenciada:** § "Per-feature application matrix" → `/settings/library`

@@ -86,9 +86,7 @@ export {
 // UI admin (R.7.3) — settings/library
 // ---------------------------------------------------------------
 
-export { ArchiveCategoryButton } from './ui/admin/archive-category-button'
-export { CategoryListAdmin } from './ui/admin/category-list-admin'
-export { NewCategoryTrigger } from './ui/admin/new-category-trigger'
+export { LibraryCategoriesPanel } from './ui/admin/library-categories-panel'
 export { friendlyLibraryErrorMessage } from './ui/admin/errors'
 
 // ---------------------------------------------------------------

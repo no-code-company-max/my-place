@@ -21,5 +21,7 @@ import 'server-only'
 export {
   findWriteScope,
   canWriteInAnyCategory,
+  listCategoryScopesByPlace,
   type LibraryCategoryWriteScope,
+  type LibraryCategoryScopes,
 } from './server/queries'

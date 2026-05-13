@@ -19,7 +19,7 @@ type Props = {
   tiers: ReadonlyArray<Tier>
 }
 
-/** SheetState pattern como `<CategoryListAdmin>`. v1 no borra tiers
+/** SheetState pattern como `<LibraryCategoriesPanel>`. v1 no borra tiers
  *  (decisión #3 ADR — sin archivedAt). HIDDEN inline sin confirm modal. */
 type SheetState =
   | { kind: 'closed' }

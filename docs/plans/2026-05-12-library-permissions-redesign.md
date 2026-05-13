@@ -2,7 +2,17 @@
 
 **Fecha:** 2026-05-12
 **Origen:** decisión user 2026-05-12 — clarificación de qué administra el admin de library.
-**Reemplaza parcialmente:** `docs/plans/2026-05-12-settings-library-redesign.md` (ya no aplica master-detail; ver S3 abajo).
+**Reemplaza:** `docs/plans/2026-05-12-settings-library-redesign.md` (ya no aplica master-detail).
+
+## Estado de ejecución
+
+| Sesión                              | Estado  | Commit                |
+| ----------------------------------- | ------- | --------------------- |
+| S0 — ADR + spec                     | ✅ done | `961decc` / `3c08fc2` |
+| S1a — Modelo additive               | ✅ done | `e2e4fd5`             |
+| S1b — Drop legacy                   | ✅ done | `251651b`             |
+| S2 — Wizard write step              | ✅ done | `4d8b9d0`             |
+| S3 — Admin page EditPanel + cleanup | ✅ done | (este commit)         |
 
 ## Context
 

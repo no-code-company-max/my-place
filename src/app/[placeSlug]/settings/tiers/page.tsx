@@ -31,7 +31,7 @@ type Props = {
  * `2026-05-03-mobile-first-page-padding.md`. `<PageHeader>` para el
  * título; el orquestador `<TiersListAdmin>` (Client Component) contiene
  * sección + heading + lista (o empty state) + botón "+ Nuevo tier"
- * dashed-border + sheet de form. Mismo patrón que `<CategoryListAdmin>`
+ * dashed-border + sheet de form. Mismo patrón que `<LibraryCategoriesPanel>`
  * — el page solo carga datos y se los pasa al panel.
  *
  * Ver `docs/features/tiers/spec.md` § 4 y `docs/ux-patterns.md`.

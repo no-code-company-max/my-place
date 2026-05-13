@@ -1,13 +1,23 @@
 # Biblioteca — Especificación
 
-> **Actualización v2.1 (2026-05-12)**: modelo de permisos rediseñado a
-> `ReadAccessKind` + `WriteAccessKind` simétricos con 6 tablas pivote.
-> Reemplaza el modelo `ContributionPolicy + LibraryCategoryContributor`.
-> Decisión documentada en ADR `2026-05-12-library-permissions-model`.
-> Implementación en `docs/plans/2026-05-12-library-permissions-redesign.md`.
-> Las secciones 10 (modelo) y 11 (matriz) están actualizadas;
-> sub-fase 14.4 (designated contributors UI) queda **obsoleta** —
-> reemplazada por el wizard unificado con write access step.
+> **Actualización v2.1 (2026-05-12, S0–S3 done 2026-05-13)**: modelo de
+> permisos rediseñado a `ReadAccessKind` + `WriteAccessKind` simétricos
+> con 6 tablas pivote. Reemplaza el modelo `ContributionPolicy +
+LibraryCategoryContributor`. Decisión documentada en ADR
+> `2026-05-12-library-permissions-model`. Implementación completa en
+> `docs/plans/2026-05-12-library-permissions-redesign.md` (S0 ADR + spec
+> patch · S1a additive · S1b drop legacy · S2 wizard 4-step write+read ·
+> S3 admin page EditPanel + lista plana).
+>
+> Estado actual:
+>
+> - Backend: schema, queries, actions, RLS coordinada.
+> - UI admin: `/settings/library` con `<LibraryCategoriesPanel>` (flat
+>   list + RowActions + dashed-border "+ Nueva categoría").
+> - Wizard 4-step: Identidad → Escritura → Lectura → Tipo, con
+>   write-implica-read en el step Lectura.
+> - Sub-fase 14.4 (designated contributors UI) **eliminada** —
+>   reemplazada por el step "Escritura" del wizard.
 
 > **Alcance v1 (R.5, 2026-04-30)**: UI scaffold sin backend. Empty
 > state production-ready en `/library`; componentes UI listos para

@@ -1,12 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { toast } from '@/shared/ui/toaster'
+import { isDomainError } from '@/shared/errors/domain-error'
+import {
+  resendInvitationAction,
+  revokeInvitationAction,
+} from '@/features/members/invitations/public'
 import type {
   MemberDirectoryPage,
   MemberSummary,
   PendingInvitationsPage,
 } from '@/features/members/public.server'
 import type { PendingInvitation } from '@/features/members/public'
+import { InvitationDetailPanel } from './invitation-detail-panel'
 import { InvitationRow } from './invitation-row'
 import { MemberDetailPanel, type MemberDetailBlockInfo } from './member-detail-panel'
 import { MemberRow } from './member-row'
@@ -108,13 +115,29 @@ export function MembersAdminPanel({
     return true
   }
 
-  function handleResendInvitation(_inv: PendingInvitation): void {
-    // S3 wiring — placeholder noop hasta que el InvitationDetailPanel cablee
-    // `resendInvitationAction`. En S2 el row queda abierto al detalle.
+  const [, startResend] = useTransition()
+  const [, startRevoke] = useTransition()
+
+  function handleResendInvitation(inv: PendingInvitation): void {
+    startResend(async () => {
+      try {
+        await resendInvitationAction({ invitationId: inv.id })
+        toast.success(`Invitación reenviada a ${inv.email}.`)
+      } catch (err) {
+        toast.error(friendlyInvitationError(err))
+      }
+    })
   }
-  function handleRevokeInvitation(_inv: PendingInvitation): void {
-    // S3 wiring — placeholder noop. La action `revokeInvitationAction` ya
-    // existe y está gateada server-side; el client wiring va en S3.
+
+  function handleRevokeInvitation(inv: PendingInvitation): void {
+    startRevoke(async () => {
+      try {
+        await revokeInvitationAction({ invitationId: inv.id })
+        toast.success(`Invitación a ${inv.email} cancelada.`)
+      } catch (err) {
+        toast.error(friendlyInvitationError(err))
+      }
+    })
   }
 
   // URL builders para tabs y paginación.
@@ -245,14 +268,39 @@ export function MembersAdminPanel({
         onManageGroups={null}
       />
 
-      {/* Reference vars para evitar "unused" lint hasta que S3 los consuma. */}
-      <span
-        aria-hidden
-        className="hidden"
-        data-detail-invitation={detailInvitation?.id ?? 'none'}
+      <InvitationDetailPanel
+        open={sheet.kind === 'detail-invitation'}
+        onOpenChange={(next) => {
+          if (!next) close()
+        }}
+        invitation={detailInvitation}
+        canRevoke={canRevoke}
+        onRevoked={close}
       />
     </section>
   )
+}
+
+function friendlyInvitationError(err: unknown): string {
+  if (isDomainError(err)) {
+    switch (err.code) {
+      case 'AUTHORIZATION':
+        return 'No tenés permisos.'
+      case 'NOT_FOUND':
+        return 'La invitación ya no existe.'
+      case 'CONFLICT':
+        return err.message
+      case 'VALIDATION':
+        return err.message
+      case 'INVITATION_LINK_GENERATION':
+        return 'No pudimos generar el link. Intentá de nuevo.'
+      case 'INVITATION_EMAIL_FAILED':
+        return 'No pudimos enviar el email. Intentá de nuevo.'
+      default:
+        return 'No se pudo completar la acción.'
+    }
+  }
+  return 'Error inesperado.'
 }
 
 function TabChip({

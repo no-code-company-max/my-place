@@ -8,6 +8,18 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/settings/members',
 }))
 
+// El panel importa actions de members/invitations/public que arrastran supabase
+// server-only. Stubeamos el env para evitar parse eager de Zod sobre process.env.
+vi.mock('@/shared/config/env', () => ({
+  serverEnv: { NODE_ENV: 'test' },
+  clientEnv: {
+    NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon',
+    NEXT_PUBLIC_APP_URL: 'http://lvh.me:3000',
+    NEXT_PUBLIC_APP_DOMAIN: 'lvh.me:3000',
+  },
+}))
+
 import { MembersAdminPanel } from '../ui/members-admin-panel'
 import type {
   MemberDirectoryPage,

@@ -2,5 +2,4 @@
 
 export { rsvpEventAction } from './server/actions/rsvp'
 export { AttendeeAvatars } from './ui/attendee-avatars'
-export { RSVPButton } from './ui/rsvp-button'
 export { RSVP_BUTTON_ORDER, rsvpAcceptsNote, rsvpLabel, rsvpTextfieldHints } from './ui/rsvp-labels'

@@ -68,11 +68,6 @@ export {
 // Permissions helper (server-only)
 export { hasPermission } from './server/permissions'
 
-// Server-only UI (consume queries internamente). La fuente canónica vive en
-// el sub-slice invitations/; re-exportamos acá para mantener back-compat con
-// callers que importaban desde el barrel raíz.
-export { PendingInvitationsList } from './invitations/ui/pending-invitations-list'
-
 // Background jobs (cron, etc.)
 export { runErasure } from './server/erasure/run-erasure'
 export type { ErasureRunResult } from './server/erasure/types'

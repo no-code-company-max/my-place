@@ -10,7 +10,10 @@ import { useState } from 'react'
  * disparar la action en submit.
  *
  * UX:
- *  - Toggle (checkbox) "¿Esta lección depende de otra?". Default off.
+ *  - Switch (`role="switch"`) "¿Esta lección depende de otra?".
+ *    Default off. Mismo patrón visual que `<PluginSwitch>` /
+ *    `<DaySwitch>` de editor-config + hours, adaptado a tokens
+ *    brand (gated zone usa CSS vars del place, no tailwind neutrals).
  *  - Si on: muestra un `<select>` con los items de la misma categoría
  *    como opciones. Vacío = ninguno seleccionado (forzar elección).
  *  - Si off: el valor se resetea a `null` (limpiar prereq al guardar).
@@ -36,8 +39,7 @@ export function PrereqToggleSelector({
 }: Props): React.ReactNode {
   const [open, setOpen] = useState<boolean>(value !== null)
 
-  function handleToggle(e: React.ChangeEvent<HTMLInputElement>): void {
-    const next = e.target.checked
+  function handleToggle(next: boolean): void {
     setOpen(next)
     if (!next) onChange(null)
   }
@@ -60,22 +62,16 @@ export function PrereqToggleSelector({
 
   return (
     <div className="space-y-3 rounded-md border border-border bg-surface p-3">
-      <label className="flex min-h-11 items-start gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          className="mt-1.5"
-          checked={open}
-          onChange={handleToggle}
-          disabled={disabled}
-        />
-        <span>
+      <div className="flex min-h-11 items-start gap-3">
+        <div className="min-w-0 flex-1 text-sm text-text">
           <span className="font-medium">¿Esta lección depende de otra?</span>
           <span className="mt-0.5 block text-xs text-muted">
-            Si está marcado, los miembros tienen que completar la lección elegida antes de poder
+            Si está activado, los miembros tienen que completar la lección elegida antes de poder
             abrir esta.
           </span>
-        </span>
-      </label>
+        </div>
+        <PrereqSwitch isOn={open} disabled={disabled} onToggle={handleToggle} />
+      </div>
 
       {open ? (
         <label className="block">
@@ -96,5 +92,42 @@ export function PrereqToggleSelector({
         </label>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Switch accesible sin dep nueva. `role="switch"` + `aria-checked` cumplen
+ * WAI-ARIA. Touch target 44px (el contenedor padre tiene min-h-11 →
+ * 44px). Tokens brand del place (zona gated): `bg-text` / `bg-border` /
+ * `bg-surface` en lugar de neutrals tailwind.
+ */
+function PrereqSwitch({
+  isOn,
+  disabled,
+  onToggle,
+}: {
+  isOn: boolean
+  disabled: boolean
+  onToggle: (next: boolean) => void
+}): React.ReactNode {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={isOn}
+      aria-label={`Lección con prerequisito: ${isOn ? 'activado, tocá para desactivar' : 'desactivado, tocá para activar'}`}
+      disabled={disabled}
+      onClick={() => onToggle(!isOn)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-text disabled:cursor-not-allowed disabled:opacity-60 ${
+        isOn ? 'bg-text' : 'bg-border'
+      }`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform ${
+          isOn ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
   )
 }

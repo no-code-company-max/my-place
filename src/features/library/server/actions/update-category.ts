@@ -57,11 +57,15 @@ export async function updateLibraryCategoryAction(
   validateCategoryTitle(data.title)
   validateCategoryEmoji(data.emoji)
 
+  // `kind` es opcional en el schema: si el caller no lo envía (ej. forms
+  // legacy que solo editan emoji+title), preservamos el valor actual.
+  // Si lo envía, sobreescribe — el wizard COURSE/GENERAL lo necesita.
   await prisma.libraryCategory.update({
     where: { id: category.id },
     data: {
       title: data.title.trim(),
       emoji: data.emoji,
+      ...(data.kind !== undefined ? { kind: data.kind } : {}),
     },
   })
 
@@ -70,6 +74,7 @@ export async function updateLibraryCategoryAction(
       event: 'libraryCategoryUpdated',
       placeId: actor.placeId,
       categoryId: category.id,
+      kind: data.kind ?? null,
       actorId: actor.actorId,
     },
     'library category updated',

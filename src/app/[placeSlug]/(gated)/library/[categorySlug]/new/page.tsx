@@ -75,6 +75,13 @@ export default async function NewLibraryItemPage({ params }: Props) {
         }}
         enabledEmbeds={enabledEmbeds}
       />
+
+      {category.kind === 'COURSE' ? (
+        <p className="mt-4 rounded-md border border-border bg-surface p-3 text-xs text-muted">
+          Esta categoría es un curso. Después de publicar, podés asignar desde la edición de qué
+          otra lección depende este recurso.
+        </p>
+      ) : null}
     </div>
   )
 }

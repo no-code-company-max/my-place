@@ -15,6 +15,8 @@ import 'server-only'
 
 export {
   findItemPrereqChain,
+  listCategoryItemsForPrereqLookup,
   listCompletedItemIdsByUser,
+  type CategoryItemForPrereqLookup,
   type ItemForPrereqChain,
 } from './server/queries'

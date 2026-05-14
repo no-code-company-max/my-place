@@ -90,3 +90,60 @@ export function findItemPrereqChain(
 
   return out
 }
+
+/**
+ * Forma mínima de un item para alimentar `<PrereqSelector>` (form de
+ * crear/editar item) y construir el `itemsLookup` Map de
+ * `<CourseItemList>` (page de categoría kind=COURSE).
+ *
+ * Incluye `prereqItemId` para que la UI client detecte ciclos
+ * optimistically antes de submit (el server vuelve a validar).
+ */
+export type CategoryItemForPrereqLookup = {
+  id: string
+  title: string
+  postSlug: string
+  prereqItemId: string | null
+}
+
+/**
+ * Lista los items NO archivados de una categoría, ordenados por `createdAt asc`
+ * (orden estable para que el selector renderee consistente). Filtrado por
+ * `placeId` defensivo + `categoryId` exacto.
+ *
+ * Single source que alimenta:
+ *  - `<PrereqSelector>` en el form de item (W2): lista de candidates.
+ *  - `itemsLookup` Map del `<CourseItemList>` (W4): resolver title + slug
+ *    de cada `prereqItemId` para mostrar el lock + link al prereq.
+ *
+ * Sin paginación: cap real de items por categoría-curso es ~50 según UX
+ * (lecciones de un curso). Si emerge una categoría con cientos, sumar
+ * paginación a este query y al selector.
+ */
+export async function listCategoryItemsForPrereqLookup(
+  categoryId: string,
+  placeId: string,
+): Promise<CategoryItemForPrereqLookup[]> {
+  // `LibraryItem.title` no es columna directa — vive en `Post.title` via la
+  // relación 1:1 `LibraryItem.postId → Post.id`. Lo mismo `slug`. Include
+  // del Post (1 join) en lugar de 2 queries separadas.
+  const rows = await prisma.libraryItem.findMany({
+    where: {
+      categoryId,
+      placeId,
+      archivedAt: null,
+    },
+    select: {
+      id: true,
+      prereqItemId: true,
+      post: { select: { title: true, slug: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.post.title,
+    postSlug: r.post.slug,
+    prereqItemId: r.prereqItemId,
+  }))
+}

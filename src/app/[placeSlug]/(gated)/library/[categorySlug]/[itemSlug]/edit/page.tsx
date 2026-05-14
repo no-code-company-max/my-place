@@ -7,7 +7,6 @@ import {
   findLibraryCategoryBySlug,
   resolveLibraryViewer,
 } from '@/features/library/public.server'
-import { PrereqSelector } from '@/features/library/courses/public'
 import { listCategoryItemsForPrereqLookup } from '@/features/library/courses/public.server'
 import { LibraryItemComposerForm } from '@/features/discussions/composers/public'
 import type { LexicalDocument } from '@/features/rich-text/public'
@@ -24,12 +23,13 @@ type Props = {
  * F.4: monta `<LibraryItemComposerForm mode="edit">` con el body Lexical
  * + título + coverUrl. El submit redirect a la URL canónica de detail.
  *
- * **Courses (W2 wiring 2026-05-14)**: si la categoría es `kind: COURSE`,
- * además se monta `<PrereqSelector>` arriba del composer para que el
- * author/admin elija de cuál item de la misma categoría depende este
- * item. La selección se persiste vía `setItemPrereqAction` (manejado
- * adentro del selector — onChange = persist immediate). El item actual
- * se filtra de `availableItems` (no autoreferencia).
+ * **Courses (W2 wiring 2026-05-14, refactor 2026-05-14)**: si la categoría
+ * es `kind: COURSE`, el composer recibe `prereqMode` con las opciones de
+ * items siblings. El composer renderea `<PrereqToggleSelector>` adentro
+ * (toggle "¿depende de otra?" + select). Submit del form también dispara
+ * `setItemPrereqAction` si la selección cambió. Antes el `<PrereqSelector>`
+ * vivía aparte y persistía onChange — patrón reemplazado para UX
+ * consistente entre CREATE y EDIT.
  */
 export default async function EditLibraryItemPage({ params }: Props) {
   const { placeSlug, categorySlug, itemSlug } = await params
@@ -77,16 +77,6 @@ export default async function EditLibraryItemPage({ params }: Props) {
         </div>
       </header>
 
-      {category.kind === 'COURSE' ? (
-        <div className="mb-4">
-          <PrereqSelector
-            itemId={item.id}
-            availableItems={prereqOptions.map((opt) => ({ id: opt.id, title: opt.title }))}
-            currentPrereqId={item.prereqItemId}
-          />
-        </div>
-      ) : null}
-
       <LibraryItemComposerForm
         mode={{
           kind: 'edit',
@@ -100,6 +90,14 @@ export default async function EditLibraryItemPage({ params }: Props) {
           onUpdate: updateLibraryItemAction,
         }}
         enabledEmbeds={enabledEmbeds}
+        {...(category.kind === 'COURSE'
+          ? {
+              prereqMode: {
+                options: prereqOptions.map((opt) => ({ id: opt.id, title: opt.title })),
+                initialPrereqId: item.prereqItemId,
+              },
+            }
+          : {})}
       />
     </div>
   )

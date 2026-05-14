@@ -11,6 +11,7 @@ import {
   listLibraryCategoriesForMentionAction,
   searchLibraryItemsForMentionAction,
 } from '@/features/library/public'
+import { PrereqToggleSelector, setItemPrereqAction } from '@/features/library/courses/public'
 
 const TITLE_MIN = 5
 const TITLE_MAX = 120
@@ -40,9 +41,26 @@ type EditMode = {
   onUpdate: (input: unknown) => Promise<{ ok: true; postSlug: string }>
 }
 
+/**
+ * Prereq mode opcional — solo se pasa cuando la categoría es kind=COURSE.
+ * Si está, el composer renderea `<PrereqToggleSelector>` debajo del título
+ * y dispara `setItemPrereqAction` post-submit (CREATE: usa itemId del
+ * response; EDIT: usa mode.itemId). Categorías GENERAL pasan undefined →
+ * el selector no se renderiza.
+ *
+ * Errores del prereq NO bloquean el item — si la action falla, el item
+ * ya quedó creado/editado y se muestra toast warning separado para que
+ * el author reintente desde la edición.
+ */
+export type LibraryItemComposerPrereqMode = {
+  options: ReadonlyArray<{ id: string; title: string }>
+  initialPrereqId: string | null
+}
+
 export type LibraryItemComposerFormProps = {
   mode: CreateMode | EditMode
   enabledEmbeds: EnabledEmbeds
+  prereqMode?: LibraryItemComposerPrereqMode
 }
 
 /**
@@ -54,6 +72,7 @@ export type LibraryItemComposerFormProps = {
 export function LibraryItemComposerForm({
   mode,
   enabledEmbeds,
+  prereqMode,
 }: LibraryItemComposerFormProps): React.JSX.Element {
   const router = useRouter()
 
@@ -61,6 +80,9 @@ export function LibraryItemComposerForm({
   const [coverUrl, setCoverUrl] = useState(mode.kind === 'edit' ? (mode.initialCoverUrl ?? '') : '')
   const [doc, setDoc] = useState<LexicalDocument | null>(
     mode.kind === 'edit' ? mode.initialDocument : null,
+  )
+  const [prereqItemId, setPrereqItemId] = useState<string | null>(
+    prereqMode?.initialPrereqId ?? null,
   )
   const [pending, setPending] = useState(false)
 
@@ -86,6 +108,10 @@ export function LibraryItemComposerForm({
     setPending(true)
     try {
       const cover = coverUrl.trim().length > 0 ? coverUrl.trim() : null
+      let resolvedItemId: string
+      let categorySlug: string
+      let postSlug: string
+
       if (mode.kind === 'create') {
         const res = await mode.onCreate({
           placeId: mode.placeId,
@@ -95,11 +121,9 @@ export function LibraryItemComposerForm({
           coverUrl: cover,
         })
         toast.success('Recurso publicado.')
-        // `router.replace`: el form `/library/<cat>/new` (o `/edit`)
-        // queda obsoleto post-submit. Evita que el back button del
-        // item detail vuelva al form. Ver
-        // `docs/decisions/2026-05-09-back-navigation-origin.md`.
-        router.replace(`/library/${res.categorySlug}/${res.postSlug}`)
+        resolvedItemId = res.itemId
+        categorySlug = res.categorySlug
+        postSlug = res.postSlug
       } else {
         const res = await mode.onUpdate({
           itemId: mode.itemId,
@@ -109,8 +133,34 @@ export function LibraryItemComposerForm({
           expectedVersion: mode.expectedVersion,
         })
         toast.success('Recurso actualizado.')
-        router.replace(`/library/${mode.categorySlug}/${res.postSlug}`)
+        resolvedItemId = mode.itemId
+        categorySlug = mode.categorySlug
+        postSlug = res.postSlug
       }
+
+      // Persist prereq SI el caller pasó prereqMode (categoría kind=COURSE) Y
+      // hubo cambio respecto al inicial. Errores acá NO bloquean — el item
+      // ya quedó guardado, mostramos toast warning para que el author
+      // reintente desde la edición.
+      if (prereqMode && prereqItemId !== prereqMode.initialPrereqId) {
+        try {
+          const result = await setItemPrereqAction({
+            itemId: resolvedItemId,
+            prereqItemId,
+          })
+          if (!result.ok) {
+            toast.warning('No pudimos guardar el prereq. Editá el recurso para reintentar.')
+          }
+        } catch {
+          toast.warning('No pudimos guardar el prereq. Editá el recurso para reintentar.')
+        }
+      }
+
+      // `router.replace`: el form `/library/<cat>/new` (o `/edit`) queda
+      // obsoleto post-submit. Evita que el back button del item detail
+      // vuelva al form. Ver
+      // `docs/decisions/2026-05-09-back-navigation-origin.md`.
+      router.replace(`/library/${categorySlug}/${postSlug}`)
     } catch (err) {
       const msg =
         err instanceof Error && err.message.length > 0
@@ -120,7 +170,7 @@ export function LibraryItemComposerForm({
     } finally {
       setPending(false)
     }
-  }, [submitDisabled, doc, coverUrl, trimmedTitle, mode, router])
+  }, [submitDisabled, doc, coverUrl, trimmedTitle, mode, router, prereqMode, prereqItemId])
 
   return (
     <div className="space-y-4">
@@ -149,6 +199,15 @@ export function LibraryItemComposerForm({
           className="w-full rounded-md border border-border bg-surface px-3 py-2 text-text focus:border-bg focus:outline-none"
         />
       </label>
+
+      {prereqMode ? (
+        <PrereqToggleSelector
+          availableItems={prereqMode.options}
+          value={prereqItemId}
+          onChange={setPrereqItemId}
+          disabled={pending}
+        />
+      ) : null}
 
       <LibraryItemComposer
         placeId={mode.placeId}

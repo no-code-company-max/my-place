@@ -7,6 +7,7 @@ import { canWriteCategory } from '@/features/library/contribution/public'
 import { findWriteScope } from '@/features/library/contribution/public.server'
 import { LibraryItemComposerForm } from '@/features/discussions/composers/public'
 import { getEditorConfigForPlace } from '@/features/editor-config/public.server'
+import { listCategoryItemsForPrereqLookup } from '@/features/library/courses/public.server'
 
 type Props = {
   params: Promise<{ placeSlug: string; categorySlug: string }>
@@ -52,6 +53,12 @@ export default async function NewLibraryItemPage({ params }: Props) {
 
   const enabledEmbeds = await getEditorConfigForPlace(place.id)
 
+  // Si la categoría es CURSO, cargar opciones de prereq para que el author
+  // pueda asignar desde el composer mismo (toggle "¿depende de otra?").
+  // Para GENERAL no se carga (es ruido innecesario).
+  const prereqOptions =
+    category.kind === 'COURSE' ? await listCategoryItemsForPrereqLookup(category.id, place.id) : []
+
   return (
     <div className="px-3 py-6">
       <header className="mb-5 flex items-center gap-3">
@@ -76,14 +83,15 @@ export default async function NewLibraryItemPage({ params }: Props) {
           onCreate: createLibraryItemAction,
         }}
         enabledEmbeds={enabledEmbeds}
+        {...(category.kind === 'COURSE'
+          ? {
+              prereqMode: {
+                options: prereqOptions.map((opt) => ({ id: opt.id, title: opt.title })),
+                initialPrereqId: null,
+              },
+            }
+          : {})}
       />
-
-      {category.kind === 'COURSE' ? (
-        <p className="mt-4 rounded-md border border-border bg-surface p-3 text-xs text-muted">
-          Esta categoría es un curso. Después de publicar, podés asignar desde la edición de qué
-          otra lección depende este recurso.
-        </p>
-      ) : null}
     </div>
   )
 }

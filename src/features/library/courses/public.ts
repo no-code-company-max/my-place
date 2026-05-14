@@ -61,6 +61,7 @@ export {
 // ---------------------------------------------------------------
 // UI components
 // ---------------------------------------------------------------
+export { CourseItemList } from './ui/course-item-list'
 export { LibraryItemLockedRow } from './ui/library-item-locked-row'
 export { MarkCompleteButton } from './ui/mark-complete-button'
 export { PrereqLockBadge } from './ui/prereq-lock-badge'

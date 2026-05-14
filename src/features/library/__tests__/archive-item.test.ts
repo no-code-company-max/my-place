@@ -83,7 +83,7 @@ vi.mock('@/shared/config/env', () => ({
 // Imports después del setup (hoisting de vi.mock)
 // ---------------------------------------------------------------
 
-import { archiveLibraryItemAction } from '@/features/library/items/server/actions/archive-item'
+import { archiveLibraryItemAction } from '@/features/library/server/actions/archive-item'
 import { PERMISSIONS_ALL } from '@/features/groups/public'
 
 // ---------------------------------------------------------------

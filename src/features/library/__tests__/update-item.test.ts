@@ -94,7 +94,7 @@ vi.mock('@/shared/config/env', () => ({
 // Imports después del setup (hoisting de vi.mock)
 // ---------------------------------------------------------------
 
-import { updateLibraryItemAction } from '@/features/library/items/server/actions/update-item'
+import { updateLibraryItemAction } from '@/features/library/server/actions/update-item'
 import { PERMISSIONS_ALL } from '@/features/groups/public'
 
 // ---------------------------------------------------------------

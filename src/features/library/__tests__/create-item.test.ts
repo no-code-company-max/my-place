@@ -124,7 +124,7 @@ vi.mock('@/features/library/contribution/public.server', () => ({
 // Imports después del setup (hoisting de vi.mock)
 // ---------------------------------------------------------------
 
-import { createLibraryItemAction } from '@/features/library/items/server/actions/create-item'
+import { createLibraryItemAction } from '@/features/library/server/actions/create-item'
 import { PERMISSIONS_ALL } from '@/features/groups/public'
 
 // ---------------------------------------------------------------

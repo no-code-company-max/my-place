@@ -69,12 +69,12 @@ export {
 // ---------------------------------------------------------------
 
 export { archiveLibraryCategoryAction } from './server/actions/archive-category'
-export { archiveLibraryItemAction } from './items/server/actions/archive-item'
+export { archiveLibraryItemAction } from './server/actions/archive-item'
 export { createLibraryCategoryAction } from './server/actions/create-category'
-export { createLibraryItemAction } from './items/server/actions/create-item'
+export { createLibraryItemAction } from './server/actions/create-item'
 export { reorderLibraryCategoriesAction } from './server/actions/reorder-categories'
 export { updateLibraryCategoryAction } from './server/actions/update-category'
-export { updateLibraryItemAction } from './items/server/actions/update-item'
+export { updateLibraryItemAction } from './server/actions/update-item'
 
 // F.4 (rich-text): Server Action wrappers para autocomplete `/library`.
 export {

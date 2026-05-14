@@ -1,25 +1,21 @@
 import { LibraryItemRow, type LibraryItemListView } from '@/features/library/public'
-import { LibraryItemLockedRow } from '@/features/library/courses/public'
+import { LibraryItemLockedRow } from './library-item-locked-row'
 
 /**
- * Lista de items dentro de una categoría (R.7.10) — sub-page
- * `/library/[categorySlug]`.
+ * Lista de items dentro de una categoría tipo CURSO. Mismo layout visual
+ * que `<ItemList>` (raíz, para categorías GENERAL) pero con awareness de
+ * prereqs: items con prereq incompleto se renderean como
+ * `<LibraryItemLockedRow>` (intercepta click → toast con CTA al prereq) en
+ * lugar de `<LibraryItemRow>` plano.
  *
- * Reusa `<LibraryItemRow>` con divider hairline entre rows. Wrapper
- * con `mx-3` respeta el padding lateral 12px de la zona; los borders
- * y dividers también respetan el inset (mismo pattern que el listado
- * de discusiones tras el fix R.6.4).
+ * Decisión D11 ADR `2026-05-04-library-courses-and-read-access.md`:
+ * **visible-but-locked**, no ocultar.
  *
- * G.2+3.b (2026-05-04): si la categoría es `kind === 'COURSE'`, el caller
- * pasa `completedItemIds` (los que el viewer ya marcó) + `itemsLookup`
- * (id → metadata para resolver prereqs). Items con prereq incompleto se
- * renderizan con `<LibraryItemLockedRow>` (intercepta click → toast con
- * CTA al prereq). Decisión #D11 ADR `2026-05-04-library-courses-and-read-access.md`.
+ * Bypass para owner: `viewerIsOwner=true` ⇒ todos los items renderean
+ * desbloqueados independiente del prereq (admin necesita ver todo el
+ * itinerary sin completar nada).
  *
- * Si `items.length === 0`, retorna null — el caller (page) usa
- * `<EmptyItemList>` en su lugar.
- *
- * Server Component puro (el child `<LibraryItemLockedRow>` es Client).
+ * Server Component puro (`<LibraryItemLockedRow>` es Client adentro).
  */
 type ItemLookupEntry = {
   title: string
@@ -29,9 +25,8 @@ type ItemLookupEntry = {
 
 type Props = {
   items: ReadonlyArray<LibraryItemListView>
-  /** Items que el viewer ya marcó como completados. Sólo aplica en
-   *  categorías `kind === 'COURSE'`. Default vacío (rows nunca se
-   *  bloquean). */
+  /** Items que el viewer ya marcó como completados. Default vacío
+   *  (rows nunca se bloquean — equivale a recién entrar al curso). */
   completedItemIds?: ReadonlyArray<string>
   /** Lookup id → metadata para resolver el prereq de cada item bloqueado.
    *  El caller arma el map con los items de la categoría (los prereqs
@@ -41,7 +36,7 @@ type Props = {
   viewerIsOwner?: boolean
 }
 
-export function ItemList({
+export function CourseItemList({
   items,
   completedItemIds,
   itemsLookup,

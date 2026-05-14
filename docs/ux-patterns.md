@@ -490,6 +490,7 @@ md:data-[state=open]:slide-in-from-right md:data-[state=closed]:slide-out-to-rig
 
 - `features/library/ui/admin/category-detail-panel.tsx` + `library-categories-panel.tsx` (canon original, S5).
 - `features/groups/admin/ui/group-detail-panel.tsx` + `groups-admin-panel.tsx` (S7, 2026-05-13). Suma sub-sheet pattern (Gestionar miembros): el detail-panel cierra antes de abrir el members sheet — evita stack de 2 EditPanels y mantiene latch en parent para ambos.
+- `features/members/admin/ui/{member-detail-panel,members-admin-panel}.tsx` (2026-05-14). Extiende el patrón con **2 listados intercambiables** (Activos / Invitados con tab chips URL-based), search bar paginada y **2 sub-sheets paralelos** (Gestionar tiers + Gestionar grupos) que abren desde el detail-panel con `returnTo: 'detail-member'`. Detail panel embebe `<BlockMemberDialog>` + `<ExpelMemberDialog>` del sub-slice `moderation/` con el patrón `trigger=` self-controlled — sin duplicar la lógica de los dialogs canónicos.
 
 **Pitfalls.**
 
@@ -879,90 +880,40 @@ Decidir entre 2 enfoques según count típico:
 
 ---
 
-## Settings/members — extension del patrón
+## Settings/members — implementación canónica (2026-05-14)
 
-La página más compleja del set. Hoy mezcla 5 concerns en 1 page (lista, invitar, pending, transfer, leave) + sub-page detail por userId con N sub-sections.
+`/settings/members` aplica el **patrón flat `detail-from-list`** (mismo canon que `groups/admin` y `library/admin`), NO master-detail. La iteración previa de este doc proponía master-detail; descartado porque rompía consistencia con los otros consumers del patrón y porque el detail-pane responsive (EditPanel) cubre el caso desktop sin route splitting.
 
-### Análisis del estado actual
+### Decisiones cerradas
 
-`src/app/[placeSlug]/settings/members/page.tsx` (122 LOC):
+- **Drop sub-page `/[userId]/page.tsx`**: la info completa (groups, tiers, bloqueo) vive en el detail panel + sub-sheets. No hay deep-link al detalle de un miembro.
+- **Drop "Salir del place"** del page: vive en `/settings/system` (perfil del viewer, no admin action).
+- **"Transferir ownership"** se mantiene como sección al final del page actual (sin tocar — fuera de scope).
+- **Filter chip Activos / Invitados** mutuamente excluyentes (URL `?tab=active|pending`). Tab Invitados muestra invitaciones pendientes con delivery status + Reenviar/Cancelar.
+- **Search bar único** con debounce 300ms (URL `?q=`). Placeholder dinámico: por nombre+handle en Activos, por email en Invitados. Privacy guard: email NO se expone en results de Activos (decisión #6 spec).
+- **Paginación URL** (`?page=N`, default limit=20, cap 50). Sin números intermedios — prev/next basta para 150 max.
+- **Cancelar invitación** usa `revokeInvitationAction` (permission `members:revoke-invitation` delegable — los grupos custom lo pueden recibir).
+- **Bloquear / Expulsar / Desbloquear**: reuse de `<BlockMemberDialog>` + `<ExpelMemberDialog>` del sub-slice `moderation/` embebidos en el footer del detail panel con el patrón `trigger=` self-controlled.
 
-- Section "Lista": `members.map(...)` con role chips (owner/admin/miembro). Sin per-row actions, sin search, sin filter.
-- Section "Invitar": `<InviteMemberForm>` (form inline).
-- Section "Invitaciones pendientes": `<PendingInvitationsList>` (component externo).
-- Section "Transferir ownership" (si owner).
-- Section "Salir del place".
+### Componentes del sub-slice
 
-Sub-page `[userId]/page.tsx` (148 LOC) tiene:
+`src/features/members/admin/`:
 
-- Header con avatar + name + roles
-- Section "Grupos": asignar/quitar member de groups
-- Section "Tiers": asignar/quitar tiers
-- Section "Bloqueo": block / unblock
-- Section "Expulsar": expel member
+- `ui/members-admin-panel.tsx` — orchestrator. State machine: `closed | invite | detail-member | detail-invitation | edit-tiers | edit-groups` con `returnTo` en los sub-sheets.
+- `ui/member-detail-panel.tsx` — read-only EditPanel; embebe `<BlockMemberDialog>` + `<ExpelMemberDialog>` en el footer.
+- `ui/invitation-detail-panel.tsx` — read-only EditPanel + footer Reenviar/Cancelar; el Cancelar abre Dialog confirm inline.
+- `ui/invite-member-sheet.tsx` — form RHF + Zod con `inviteMemberAction`.
+- `ui/member-tiers-sheet.tsx` + `ui/member-groups-sheet.tsx` — thin wrappers de los controles existentes (`<AssignedTiersList>` + `<TierAssignmentControl>` / `<MemberGroupsControl>`) en EditPanel.
+- `ui/member-row.tsx` + `ui/invitation-row.tsx` — row tappable + kebab atajos (Expulsar/Bloquear / Reenviar/Cancelar).
+- `ui/members-pagination.tsx` + `ui/tab-chip.tsx` + `ui/members-search-bar.tsx`.
+- `lib/use-subsheet-targets.ts` — hook que latchea target del sub-sheet activo + deriva `availableGroups`.
+- `lib/friendly-invitation-error.ts` — mapper DomainError → toast string.
+- `server/admin-queries.ts` — 3 batch queries (`listTierMembershipsForUsers`, `listGroupsForUsers`, `listBlockInfoForUsers`) que alimentan el panel con max 3 round-trips por page-render, independiente de N members visibles.
 
-Search bar + filters ya implementados (`member-search-bar.tsx`, `member-filters.tsx`).
+### Page server (`src/app/[placeSlug]/settings/members/page.tsx`)
 
-### Propuesta de rediseño
+Flat con `<PageHeader>` + `<MembersSearchBar>` + `<MembersAdminPanel>`. searchParams parseados con `directoryQueryParamsSchema` (Zod, defensa contra valores inválidos). Cargas paralelas: `searchMembers` (paginada) / `listPendingInvitationsByPlace` (paginada con search por email) + tiers + groups + perms + las 3 batch queries del detail. "Transferir ownership" queda como `<section>` al final si `perms.isOwner`.
 
-**Layout: Master-detail** (igual a groups + library). Razones:
+### Plan de implementación (ejecutado)
 
-- Members tiene detail page rica (groups, tiers, block, expel) que merece pane propio en desktop.
-- Search/filter en master pane reduce ruido.
-- Master pane reusa la lista — sub-page navigation no recarga.
-
-**Master pane** (`/settings/members`):
-
-- `<PageHeader title="Miembros" description="N miembros activos." actions={<button>Invitar</button>} />`
-- Sticky search bar + filter chips (role, group, tier).
-- `<ul divide-y>` de rows planas (no cards) — 150 items pueden ser mucho para cards individuales con border. Cada row:
-  - Avatar + displayName + handle + role chips
-  - `<RowActions>` con [Ver detalle (link → `[userId]`), Cambiar rol, Expulsar (destructive)]
-- Botón "Invitar miembro" en `<PageHeader>` actions slot — abre BottomSheet con form invitar (email + checkbox admin).
-
-**Detail pane** (`/settings/members/[userId]`):
-
-- Header con avatar grande + name + roles + back link (md:hidden).
-- Sub-sections con `<h2>` border-b: Grupos, Tiers, Bloqueo, Expulsar.
-- Cada sub-section usa el patrón canónico — `<RowActions>` para chips de groups/tiers, `<Dialog>` para expel/block.
-
-**Sub-pages separadas (no en página de members):**
-
-- "Invitaciones pendientes" → mover a `/settings/access` (eso ya existe — tiene más sentido ahí, "access" es el concept paraguas).
-- "Transferir ownership" → mover a `/settings/access` también, o a su propia sub-page si crece.
-- "Salir del place" → mover al `/settings/profile` (cuando exista) o al `/settings` root como acción global del user. NO debería estar en una página de admin de members — no es admin action.
-
-### Patrón aplicado + extensions
-
-| Patrón canónico                    | Aplica directo |
-| ---------------------------------- | -------------- |
-| Master-detail layout               | ✓              |
-| `<PageHeader>` con actions slot    | ✓              |
-| `<RowActions>` per member row      | ✓              |
-| Confirm dialog destructive (expel) | ✓              |
-| `<BottomSheet>` para invitar       | ✓              |
-| Color palette neutrals             | ✓              |
-
-**Extensions específicas del dominio:**
-
-1. **Sticky search bar** en master pane. `<MemberSearchBar>` ya existe — verificar que sea sticky en mobile y desktop, y que no compita con `<PageHeader>`.
-2. **Filter chips** (role, group, tier). `<MemberFilters>` ya existe — verificar accesibilidad y que se rendericen below la search bar, sin esconder.
-3. **Counts derivados:** mostrar "5 de 150 miembros" cuando hay filtros activos — ayuda al user a saber que está filtrando.
-4. **Cambiar rol como action en `<RowActions>`** — pero "rol" tiene 3 valores (owner/admin/miembro), no es destructive ni 1-tap. Considerar:
-   - Opción A: `<RowActions>` con sub-action "Cambiar rol" → abre BottomSheet con radio selector.
-   - Opción B: Si el role chip mismo es tappeable (tap "miembro" → BottomSheet "Cambiar rol"), no necesita estar en `<RowActions>`. Más descubrible.
-5. **Bulk actions opcional:** si emerge necesidad ("seleccionar N members para asignar tier X"), agregar selección con checkboxes + footer toolbar de bulk actions. **NO incluir en V1** — sumar cuando emerja caso real.
-6. **Virtualización con 150 items:** probablemente NO necesaria — 150 rows con `divide-y` es performante. Solo considerar si se rompe scroll en mobile (mediar con DevTools antes de optimizar).
-7. **Avatares:** comp `<Avatar>` shared (verificar que existe). En el master pane pueden ser pequeños (h-8 w-8); en detail pane grandes (h-16 w-16).
-
-### Sesiones recomendadas para rediseñar members
-
-Por size + complejidad del feature, dividir en sesiones:
-
-1. **Sesión 1 — extracciones de páginas:** mover "Invitaciones pendientes" + "Transferir" a `/settings/access`; mover "Salir del place" a `/settings/profile` (o root). Members queda solo con Lista + Invitar.
-2. **Sesión 2 — master-detail base:** layout.tsx con master pane + detail children (igual a groups).
-3. **Sesión 3 — master pane + RowActions:** integrar search/filter existentes + RowActions per row.
-4. **Sesión 4 — detail pane:** rediseñar sub-sections (Grupos, Tiers, Block, Expel) aplicando el patrón.
-5. **Sesión 5 — invitar BottomSheet:** mover form invitar de inline a BottomSheet desde el actions slot del header.
-
-Cada sesión: typecheck + tests + lint + commit + push antes de pasar a la siguiente.
+`docs/plans/2026-05-14-redesign-settings-members.md` — 4 sesiones (S1 backend paginado · S2 sub-slice + detail panel · S3 con 5 sub-sesiones de overlays + page rewrite · S4 cleanup + docs).

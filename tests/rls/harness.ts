@@ -454,17 +454,24 @@ export async function insertTestLibraryItem(
   },
 ): Promise<string> {
   const id = opts.id ?? rlsId('libitem_rls')
+  // `authorSnapshot` es NOT NULL (snapshot denormalizado del autor —
+  // patrón erasure 365d, mismo que Post/Comment/Event). Mismo shape que
+  // `insertTestPost`. Su ausencia rompía library-item.test.ts desde que
+  // se introdujo la columna; el resync (Fase 0) no lo detectó porque se
+  // enfocó en `contributionPolicy`.
   await client.query(
     `INSERT INTO "LibraryItem"
-       (id, "placeId", "categoryId", "postId", "authorUserId", "coverUrl",
+       (id, "placeId", "categoryId", "postId", "authorUserId",
+        "authorSnapshot", "coverUrl",
         "archivedAt", "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, NOW(), NOW())`,
     [
       id,
       opts.placeId,
       opts.categoryId,
       opts.postId,
       opts.authorUserId,
+      JSON.stringify({ displayName: 'RLS', avatarUrl: null }),
       opts.coverUrl ?? null,
       opts.archivedAt ?? null,
     ],

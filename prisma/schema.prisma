@@ -67,6 +67,10 @@ model Place {
   name        String
   description String?
 
+  // Controla la visibilidad del place en el directorio público. Default false:
+  // el place es íntimo/invisible; el owner opta por listarlo.
+  discoverable Boolean @default(false)
+
   themeConfig  Json @default("{}")
   openingHours Json @default("{}")
 

@@ -1,5 +1,7 @@
 # Places — Especificación
 
+> **Actualizado 2026-05-15** — alineado con `docs/rls/place-access.md` (modelo de directorio + preview + `discoverable`). Reemplaza la versión que asumía place sin directorio público.
+
 > **Alcance:** ciclo de vida del objeto `Place` — creación, listado "mis places" desde el inbox, archivado. No cubre membership (`members/spec.md`), billing real (Fase 3), ni feature flags (Fase 4), que se enchufan encima de este slice.
 
 > **Referencias:** `docs/blueprint.md` (qué es un place), `docs/architecture.md` (slices, boundaries), `docs/data-model.md` (schema), `docs/multi-tenancy.md` (slug → subdomain), `docs/theming.md` (themeConfig), `docs/ontologia/miembros.md` (rol contextual), `CLAUDE.md` (principios no negociables), `docs/features/auth/spec.md` (sesión universal).
@@ -11,7 +13,9 @@
 - Un place recién creado **nace cerrado** (`openingHours = {}`, interpretado como `unconfigured`). El owner tiene acceso permanente a `/settings/*` (incluido `/settings/hours`) para poder configurarlo. El resto del contenido queda gated hasta que se configure un horario y éste incluya al momento actual.
 - **Ownership y membership son ortogonales.** Crear un place te hace `PlaceOwnership` + `Membership(role=ADMIN)` en ese place, pero son dos filas distintas con significado distinto (ver `members/spec.md`).
 - **No hay límite de places por usuario.** Un usuario puede ser owner de N places simultáneamente, miembro de M places, y las dos cosas no se interfieren.
-- **Sin perfil público de place fuera de la app.** Un place no listado en el inbox de nadie es invisible. No existe un directorio global.
+- **Un place es íntimo por default.** El campo `discoverable` (boolean, default `false`) controla si el place aparece en el **directorio de places**. Sin opt-in explícito del owner, el place es invisible para no-miembros: solo lo ven sus miembros activos.
+- **Existe un directorio de places.** Un usuario que se registra desde la landing `place.community` puede: (A) crear un place, (B) unirse vía el directorio, o (C) aceptar una invitación recibida. El directorio lista únicamente places con `discoverable = true`.
+- **Preview público mínimo.** Un no-miembro ve, SOLO de places `discoverable`, un preview reducido a `slug` + `name` + `description`. Nada de contenido, ni cantidad de miembros, ni actividad, ni métricas — coherente con "sin métricas vanidosas" de `CLAUDE.md`. El contenido del place nunca es público; su privacidad la enforce la RLS de sus propias tablas (`is_active_member`).
 
 ## Scope del slice
 
@@ -39,6 +43,8 @@ El schema ya existe en `prisma/schema.prisma`. Este slice **no modifica** el sch
 - `PlaceOwnership` — una fila `(creator, place)` al crear.
 
 Se apoya en la constraint `@@unique([userId, placeId])` de ambas tablas para garantizar idempotencia y no duplicar roles del mismo user en el mismo place.
+
+**Campo `Place.discoverable` (boolean, default `false`)** — controla la visibilidad del place en el directorio. Default `false`: el place nace íntimo/invisible para no-miembros. El owner opta por listarlo activando el toggle en `/settings` (owner-only). El campo gobierna la policy RLS `Place` SELECT (`is_active_member(id) OR "discoverable" = true`) y el filtro del directorio. **Este campo es una dependencia de implementación**: ver `docs/rls/place-access.md` § "Dependencia de implementación" (campo + toggle + vista `PlaceDirectory` column-safe son trabajo de Fase 2; mientras no exista, todos los places son no-discoverable y el preview público no opera). El slice de creación inicializa el campo en su default; no lo edita.
 
 ## Slug
 
@@ -109,6 +115,8 @@ Opcional: parámetro `{ includeArchived: boolean }` para una vista futura "mis p
 
 **Multi-place observable:** el inbox muestra simultáneamente places donde el usuario es owner y places donde es solo miembro, sin segmentarlos en tabs. Son "mis places", punto.
 
+**Relación con el directorio:** `listMyPlaces` lista solo los places donde el usuario tiene `Membership` activa — es independiente de `discoverable`. El **directorio de places** es una superficie aparte (no entregada en este slice): lista places con `discoverable = true` de los que el usuario _no_ es miembro, con el preview mínimo (`slug` + `name` + `description`). El recorte column-safe del preview se hace vía la vista `PlaceDirectory` (`security_invoker`, excluye archivados y filtra `discoverable`), no recortando columnas en app-layer — ver `docs/rls/place-access.md`.
+
 ## Archivar
 
 **Server action `archivePlaceAction(placeId)`:**
@@ -130,6 +138,8 @@ Opcional: parámetro `{ includeArchived: boolean }` para una vista futura "mis p
 
 **Decisión:** archivar **no** transfiere ownership ni expulsa miembros. Si un owner archiva un place del que también es miembro otro owner, ambos pierden acceso hasta desarchivar. Esto es intencional: archivar es una acción drástica y consciente.
 
+**Config + archivar = owner-only (no delegable).** Configurar el place (incluido el toggle `discoverable`, `name`, `description`, `themeConfig`, horario) y archivarlo son acciones exclusivas del owner — no se delegan vía permisos granulares. Consistente con ADR `2026-05-02` (settings del place no son un permiso atómico) y con la policy RLS `Place` UPDATE = `is_place_owner(id)`. Los **permisos granulares** (grupos creados en `settings/groups`, solo el owner crea grupos) aplican a **moderación de contenido** (discussions/library/events/flags), **no** a la config del `Place` en sí.
+
 ## Multi-place — casuística explícita
 
 Este slice debe preservar y tener cubierto en tests:
@@ -148,6 +158,8 @@ Los tests de `__tests__/create-place.test.ts` y `__tests__/list-places.test.ts` 
 - **Mínimo 1 `Membership` activa del owner al crear.** Garantizado por la transacción.
 - **Slug único global + inmutable.** Constraint DB + ausencia de action de update.
 - **`archivedAt` es monótono**: una vez seteado, no se des-setea en Fase 2 (desarchivar es gap agendado).
+- **`discoverable` default `false`**: el place nace invisible para no-miembros. Solo el owner puede activarlo (config owner-only). Un place archivado nunca aparece en el directorio aunque tenga `discoverable = true` (la vista `PlaceDirectory` excluye archivados).
+- **Config + archivar son owner-only**: nunca delegables vía permisos granulares (ADR `2026-05-02`).
 - **No crear `User` en este slice.** Si `actorId` no existe en `User` (imposible si el middleware y el callback funcionan), el `INSERT Membership` falla por FK. Es un síntoma de bug upstream, no un caso a manejar en el dominio.
 
 ## Errores estructurados
@@ -185,9 +197,15 @@ El contrato completo del horario (shape, invariantes, gate por rol, utility `isP
 - Transferir ownership al crear (crear en nombre de otro) — no se soporta.
 - Borrar (hard delete) un place — no existe.
 - Cambiar `billingMode` post-creación — explícitamente out-of-scope en `docs/roadmap.md`.
-- Directorio público de places — viola "sin perfil público fuera de places".
 - Importar/exportar place — futuro, no MVP.
 - Slugs personalizados (nombres de dominio custom) — futuro; en MVP todos viven bajo `*.place.app`.
+
+### Pendiente / no implementado (alineado con `docs/rls/place-access.md`)
+
+- **Toggle `discoverable` en `/settings`** — el campo + el toggle (owner-only) son dependencia de implementación de la policy `Place` SELECT. Mientras no exista, todos los places son no-discoverable y el preview público no opera.
+- **Vista `PlaceDirectory`** — preview público column-safe (`slug`, `name`, `description`; `security_invoker`; excluye archivados y filtra `discoverable`). Diseño de Fase 2; evita filtrar campos sensibles de `Place` (`stripeCustomerId/SubscriptionId/ConnectId`).
+- **Directorio de places (UI + query)** — superficie de descubrimiento para usuarios registrados no-miembros. No entregada en este slice.
+- **Solicitudes de unión (`JoinRequest`)** — si el place lo permite, un usuario registrado puede solicitar unirse a un place `discoverable`; un owner, o un miembro de grupo con permiso, acepta la solicitud. Feature aparte, **no implementada**: modelo + RLS se diseñan cuando se construya la feature (decisión del owner en `docs/rls/place-access.md`).
 
 ## Verificación
 

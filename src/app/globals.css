@@ -1,207 +1,26 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/*
- * Default tokens del producto. Cada place sobrescribe via
- * buildThemeVars() en su layout.tsx (per-place customization).
- *
- * Acá viven los SSR fallbacks antes que el layout per-place inyecte
- * las CSS vars dinámicas.
- *
- * F.G rebrand (2026-04-27): nuevos tokens del handoff (warm warm-brown
- * accent, oklch surfaces, member palette) + place-* aliases backward-
- * compat. Ver docs/theming.md § "Design tokens (rebrand F.G)".
- */
+@import "tailwindcss";
 
 :root {
-  /* ── Tokens primarios (handoff — oklch para browsers modernos). ── */
-  --bg: oklch(0.985 0.006 75);
-  --surface: oklch(1 0 0);
-  --soft: oklch(0.95 0.008 75);
-  --text: oklch(0.22 0.008 60);
-  --muted: oklch(0.55 0.012 60);
-  --border: oklch(0.9 0.008 75);
-  --dot: oklch(0.82 0.008 75);
-
-  --accent: #b5633a;
-  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-
-  --pad: 14px;
-  --radius-card: 16px;
-
-  --title-font: var(--font-fraunces), 'Source Serif 4', Georgia, serif;
-  --body-font: var(--font-inter), -apple-system, system-ui, sans-serif;
-  --mono-font: ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  --member-1: #c0825b;
-  --member-2: #7a8c5a;
-  --member-3: #4f6b85;
-  --member-4: #8b6aa3;
-  --member-5: #b08a3e;
-  --member-6: #8a5a2b;
-  --member-7: #9a6b4e;
-  --member-8: #5e7d6f;
-
-  /* ── Aliases place-* legacy (backward-compat). ── */
-  --place-bg: #f5f1ea;
-  --place-card-bg: #ffffff;
-  --place-card-bg-soft: #efeae0;
-  --place-text: #1f1d1a;
-  --place-text-medium: #52483b;
-  --place-text-soft: #847d72;
-  --place-text-whisper: #aaa498;
-  --place-link: #b5633a;
-  --place-link-underline: #b5633a;
-  --place-divider: #e2dccf;
-  --place-mark-bg: #b5633a;
-  --place-mark-fg: #ffffff;
-
-  /* ── Producto: presencia + unread (no rebrand-able, identidad fija). ── */
-  --place-presence: #22c55e;
-  --place-unread: #f59e0b;
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
-/*
- * Browser fallback: Safari <16.4, Chrome <111, Firefox <113 no soportan
- * oklch(). Renderizamos hex aproximado para garantizar visual coherente.
- */
-@supports not (color: oklch(0 0 0)) {
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
   :root {
-    --bg: #f5f1ea;
-    --surface: #ffffff;
-    --soft: #efeae0;
-    --text: #1f1d1a;
-    --muted: #847d72;
-    --border: #e2dccf;
-    --dot: #cfc9bd;
+    --background: #0a0a0a;
+    --foreground: #ededed;
   }
 }
 
-/*
- * color-mix() requiere los mismos targets. Fallback rgba estático para
- * --accent-soft.
- */
-@supports not (color: color-mix(in srgb, red, blue)) {
-  :root {
-    --accent-soft: rgba(181, 99, 58, 0.14);
-  }
-}
-
-html,
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--body-font);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  color: var(--accent);
-  text-decoration-color: var(--accent);
-}
-
-h1,
-h2,
-h3,
-.font-serif,
-.font-title {
-  font-family: var(--title-font);
-}
-
-/*
- * Rich-text rendering (slice `rich-text`).
- *
- * El renderer SSR pinta JSX semántico (p, h1-h3, ul/ol, a, span/strong/em).
- * Estas reglas le dan estilos de prosa coherentes con el resto del producto
- * y aplican el "italic en links" estipulado en
- * docs/features/rich-text/spec.md § "Estilo de links". Sólo afectan el
- * renderer (no el contenedor del editor — ese vive en .rich-text-editor-*).
- */
-.rich-text {
-  @apply text-base leading-relaxed;
-}
-.rich-text p {
-  @apply mb-3;
-}
-.rich-text h1 {
-  @apply mb-4 font-serif text-3xl;
-}
-.rich-text h2 {
-  @apply mb-3 font-serif text-2xl;
-}
-.rich-text h3 {
-  @apply mb-2 font-serif text-xl;
-}
-.rich-text ul {
-  @apply mb-3 list-inside list-disc;
-}
-.rich-text ol {
-  @apply mb-3 list-inside list-decimal;
-}
-.rich-text a {
-  font-style: italic;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.rich-text-mention {
-  @apply inline-flex items-center gap-1 rounded-md bg-neutral-100 px-1.5 py-0.5 align-baseline text-[0.95em] font-medium text-neutral-900 no-underline;
-}
-.rich-text-mention:hover {
-  @apply bg-neutral-200;
-}
-.rich-text-mention-icon {
-  @apply text-neutral-500;
-}
-.rich-text-mention-event,
-.rich-text-mention-library-item {
-  @apply bg-neutral-50;
-}
-.rich-text-mention-event:hover,
-.rich-text-mention-library-item:hover {
-  @apply bg-neutral-100;
-}
-.rich-text-mention-fallback {
-  @apply italic text-neutral-400;
-}
-.rich-text-embed-placeholder {
-  @apply my-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-500;
-}
-
-/* Editor (composer) — estilos del ContentEditable visible. */
-.rich-text-editor-paragraph {
-  @apply mb-2;
-}
-.rich-text-editor-h1 {
-  @apply mb-2 font-serif text-2xl;
-}
-.rich-text-editor-h2 {
-  @apply mb-2 font-serif text-xl;
-}
-.rich-text-editor-h3 {
-  @apply mb-2 font-serif text-lg;
-}
-.rich-text-editor-ul {
-  @apply mb-2 list-inside list-disc;
-}
-.rich-text-editor-ol {
-  @apply mb-2 list-inside list-decimal;
-}
-.rich-text-editor-link {
-  font-style: italic;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.rich-text-editor-bold {
-  @apply font-semibold;
-}
-.rich-text-editor-italic {
-  @apply italic;
-}
-.rich-text-editor-underline {
-  @apply underline underline-offset-[3px];
-}
-.rich-text-mention-token {
-  @apply font-medium text-neutral-900;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
 }

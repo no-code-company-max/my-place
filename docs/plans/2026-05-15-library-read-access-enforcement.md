@@ -158,7 +158,26 @@ Typecheck verde. Suite completa 2132/2132 (cero regresión).
   `assertCategoryReadable` antes de operar.
 - Tests por action.
 
-### S4 — RLS defensa en profundidad
+### S4 — ✅ Migración escrita (NO aplicada — bloqueada por harness)
+
+**Resultado**: `prisma/migrations/20260515000000_library_read_scope_rls/`
+— helper `is_in_category_read_scope` (espeja `canReadCategory ||
+canWriteCategory`, mismo patrón SQL que la policy write existente) +
+reescritura de la policy SELECT preservando blind-write (author) y
+audit (admin). **Cierra la contradicción activa** de los ADR 2026-05-04
+/ 2026-05-12 (especificaban este RLS, nunca implementado).
+
+**NO aplicada a cloud**: aplicar (`migrate deploy`/MCP) + `pnpm
+test:rls` es deploy con blast radius (requiere OK explícito) Y está
+**bloqueado por deuda preexistente**: el harness RLS de library
+(`tests/rls/harness.ts`) usa `contributionPolicy::"ContributionPolicy"`
+
+- `LibraryCategoryContributor`, ambos DROPEADOS en `20260513000000`. El
+  test RLS read-scope no se puede escribir/correr hasta repararlo.
+  Registrado como follow-up en el ADR. Decisión "incremental-escrito":
+  policy escrita ahora, activación runtime holística pre-launch.
+
+### S4 — Plan original (referencia)
 
 - NEW migración: helper SQL `is_in_category_read_scope(category_id,
 user_id)` (espeja la lógica de `canReadCategory`: owner, PUBLIC,
@@ -171,7 +190,17 @@ user_id)` (espeja la lógica de `canReadCategory`: owner, PUBLIC,
 - Verificación: tests SQL de la policy (patrón de `__tests__` RLS
   existentes si los hay) o script de verificación manual.
 
-### S5 — Auditoría de datos + ADR + cierre
+### S5 — ✅ EJECUTADA (ADR + auditoría + follow-ups)
+
+**Resultado**: NEW ADR `2026-05-15-rls-incremental-write-holistic-activate.md`
+— supersede parcialmente `2026-05-01` (separa "escribir+testear
+incremental" de "activar holístico"), reconcilia la contradicción
+activa, documenta asimetría admin + write-implica-read, registra 4
+follow-ups (switch runtime pre-launch, harness desincronizado, punto 7,
+ADRs a marcar históricos). Auditoría de datos corrida (1 categoría
+no-PUBLIC, segura, sin backfill). Plan A cerrado.
+
+### S5 — Plan original (referencia)
 
 - Query (Supabase MCP, solo lectura): `LibraryCategory WHERE
 readAccessKind != 'PUBLIC'` + conteo de pivotes. Reportar categorías

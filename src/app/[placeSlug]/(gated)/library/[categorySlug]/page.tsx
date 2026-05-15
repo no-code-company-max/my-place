@@ -8,6 +8,8 @@ import {
 } from '@/features/library/public.server'
 import { canWriteCategory } from '@/features/library/contribution/public'
 import { findWriteScope } from '@/features/library/contribution/public.server'
+import { ItemAccessDeniedView } from '@/features/library/access/public'
+import { canViewCategory, findReadScope } from '@/features/library/access/public.server'
 import { CourseItemList } from '@/features/library/courses/public'
 import {
   listCategoryItemsForPrereqLookup,
@@ -50,6 +52,20 @@ export default async function LibraryCategoryPage({ params }: Props) {
   })
   if (!category) notFound()
   if (category.archivedAt && !viewer.isAdmin) notFound()
+
+  // Gate de read-access (Hallazgo #2): si la categoría es restringida y
+  // el viewer no está en el read-scope (ni write-scope — write implica
+  // read), mostramos la vista de acceso denegado en vez del contenido.
+  // No `notFound()`: el ADR quiere mensaje explícito.
+  if (!(await canViewCategory(category.id, viewer))) {
+    const scope = await findReadScope(category.id)
+    return (
+      <div className="pb-6">
+        <CategoryHeaderBar />
+        <ItemAccessDeniedView readAccessKind={scope?.kind ?? 'PUBLIC'} />
+      </div>
+    )
+  }
 
   const writeScope = await findWriteScope(category.id)
   const canCreate = writeScope

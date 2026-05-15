@@ -78,7 +78,26 @@ canWriteCategory`, owner/PUBLIC short-circuit (ya en `canReadCategory`).
 - Export en `library/access/public.server.ts`.
 - **No cablea nada todavía.** Riesgo deploy: cero.
 
-### S2 — Enforcement en pages de lectura (puntos 1,2,3,10)
+> **Reorden de ejecución (2026-05-15)**: punto 3 (recents en landing)
+> movido a S3. Razón técnica: `LibraryItemListView` no expone
+> `categoryId` (solo `categorySlug`); filtrar recents por legibilidad
+> requiere resolución cross-categoría — misma técnica que mention-search
+> (5-9). S2 cubre 1, 2 (mayor severidad: lista completa de items + body
+> completo) y 10 (documentado). No reduce scope: reagrupa por afinidad.
+
+### S2 — Enforcement en pages de lectura ✅ EJECUTADA (puntos 1,2; 10 documentado)
+
+**Resultado**: `library/[categorySlug]/page.tsx` + `[itemSlug]/
+_library-item-content.tsx` ahora gatean con `canViewCategory` tras
+resolver viewer+categoría; si deniega → `<ItemAccessDeniedView
+readAccessKind={findReadScope.kind}>` (no notFound — mensaje explícito
+del ADR). `findReadScope` cacheado (0 round-trips extra: el helper ya
+lo llamó). Punto 10 (conversations redirect): NO se toca código — el
+destino (item content) ya rechaza con ItemAccessDeniedView; el redirect
+no fuga body (decisión del plan, se documenta en ADR S5). Typecheck
+verde, library+discussions 575/575 (cero regresión).
+
+### S2 — Plan original (referencia, puntos 1,2,10)
 
 - `library/[categorySlug]/page.tsx`: `assertCategoryReadable` top-level
   tras resolver viewer; si deniega → `<ItemAccessDeniedView>` (no

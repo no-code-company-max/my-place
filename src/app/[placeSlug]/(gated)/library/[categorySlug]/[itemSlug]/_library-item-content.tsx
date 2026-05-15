@@ -7,6 +7,8 @@ import {
   type LibraryItemDetailView,
 } from '@/features/library/public'
 import { findLibraryCategoryBySlug, resolveLibraryViewer } from '@/features/library/public.server'
+import { ItemAccessDeniedView } from '@/features/library/access/public'
+import { canViewCategory, findReadScope } from '@/features/library/access/public.server'
 import { canOpenItem, MarkCompleteButton } from '@/features/library/courses/public'
 import {
   listCategoryItemsForPrereqLookup,
@@ -54,6 +56,14 @@ export async function LibraryItemContent({
 
   const itemCtx = { authorUserId: item.authorUserId }
   if (item.archivedAt && !canArchiveItem(itemCtx, libraryViewer)) notFound()
+
+  // Gate de read-access (Hallazgo #2): categoría restringida + viewer
+  // fuera del read-scope (y del write-scope — write implica read) →
+  // vista de acceso denegado en vez del body del item.
+  if (!(await canViewCategory(item.categoryId, libraryViewer))) {
+    const scope = await findReadScope(item.categoryId)
+    return <ItemAccessDeniedView readAccessKind={scope?.kind ?? 'PUBLIC'} />
+  }
 
   // Detectar si la categoría es CURSO. La query es cached per-request
   // (React.cache) así que sibling Suspense la comparten.

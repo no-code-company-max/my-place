@@ -31,11 +31,15 @@ import { RichTextRenderer, type MentionResolvers } from '@/features/rich-text/pu
 export function PostDetail({
   post,
   viewerUserId,
+  viewerIsAdmin,
   placeSlug,
   mentionResolvers,
 }: {
   post: Post
   viewerUserId: string
+  /** Admin/owner/grupo delegado: ya tiene "Editar" en el kebab del
+   *  header, así que `<EditWindowActions>` omite el botón duplicado. */
+  viewerIsAdmin: boolean
   placeSlug: string
   /**
    * Resolvers inyectados por la page consumer — el slice `rich-text` no
@@ -73,9 +77,11 @@ export function PostDetail({
 
       {isAuthor ? (
         <EditWindowActions
+          viewerIsAdmin={viewerIsAdmin}
           subject={{
             kind: 'post',
             postId: post.id,
+            slug: post.slug,
             title: post.title,
             body: post.body,
             createdAt: post.createdAt,

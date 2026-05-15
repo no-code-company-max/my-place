@@ -75,7 +75,12 @@ async function renderThreadHeaderActions({
   }
   if (viewer.isAdmin) {
     return (
-      <PostAdminMenu postId={post.id} hiddenAt={post.hiddenAt} expectedVersion={post.version} />
+      <PostAdminMenu
+        postId={post.id}
+        postSlug={post.slug}
+        hiddenAt={post.hiddenAt}
+        expectedVersion={post.version}
+      />
     )
   }
   return null

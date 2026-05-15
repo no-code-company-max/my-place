@@ -3,10 +3,10 @@
  * Vive como archivo separado para romper ciclos (el root importa los
  * sub-components, y éstos necesitan los tipos).
  *
- * El editor inline 60s se restaura post-MVP — hoy solo el flujo "delete"
- * está cableado. El campo `body` se preserva en el tipo para que el
- * delete confirm pueda mostrar excerpt si el producto lo decide en el
- * futuro.
+ * Posts: "Editar" (navega a la page dedicada) + "Eliminar". Comments:
+ * solo "Eliminar" (su edición inline es flujo aparte, fuera de F.4). El
+ * campo `body` se preserva para que el delete confirm pueda mostrar
+ * excerpt si el producto lo decide en el futuro.
  */
 
 import type { LexicalDocument } from '@/features/rich-text/public'
@@ -14,6 +14,8 @@ import type { LexicalDocument } from '@/features/rich-text/public'
 export type PostSubject = {
   kind: 'post'
   postId: string
+  /** Slug del post — destino del botón "Editar" (`/conversations/<slug>/edit`). */
+  slug: string
   title: string
   body: LexicalDocument | null
   createdAt: Date

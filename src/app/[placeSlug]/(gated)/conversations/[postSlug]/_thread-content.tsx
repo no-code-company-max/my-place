@@ -87,6 +87,7 @@ async function renderThreadContent({ placeSlug, placeId, post }: Props): Promise
         <PostDetail
           post={post}
           viewerUserId={viewer.actorId}
+          viewerIsAdmin={viewer.isAdmin}
           placeSlug={viewer.placeSlug}
           mentionResolvers={buildMentionResolvers({
             placeId,

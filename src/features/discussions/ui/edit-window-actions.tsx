@@ -1,24 +1,27 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { EDIT_WINDOW_MS } from '../domain/invariants'
 import { EditWindowConfirmDelete } from './edit-window-confirm-delete'
 import type { EditWindowSubject } from './edit-window-types'
 
 /**
- * Acciones editar/eliminar para el autor dentro de los 60s. Tras expirar la
- * ventana, el componente deja de renderizar.
+ * Acciones editar/eliminar para el autor dentro de los 60s. Tras expirar
+ * la ventana, el componente deja de renderizar.
  *
- * stub F.1: el modo "edit" está deshabilitado durante la migración a Lexical;
- * sólo queda el branch de delete. Se restaura el flujo completo en F.3 (comments)
- * y F.4 (posts) con el composer Lexical.
+ * "Editar" (F.4) solo aparece para subjects `post` y cuando el viewer NO
+ * es admin: el admin ya tiene "Editar" en el kebab del header
+ * (`<PostAdminMenu>`) sin límite de ventana — evitamos el botón
+ * duplicado. Navega a la page dedicada `/conversations/<slug>/edit`.
+ * Comments mantienen solo "Eliminar" (su edición es flujo aparte).
  */
 
 export type { EditWindowSubject, PostSubject, CommentSubject } from './edit-window-types'
 
-type Props = { subject: EditWindowSubject }
+type Props = { subject: EditWindowSubject; viewerIsAdmin?: boolean }
 
-export function EditWindowActions({ subject }: Props): React.ReactNode {
+export function EditWindowActions({ subject, viewerIsAdmin = false }: Props): React.ReactNode {
   const [remaining, setRemaining] = useState(() => remainingMs(subject.createdAt, new Date()))
   const [mode, setMode] = useState<'idle' | 'confirm-delete'>('idle')
 
@@ -37,8 +40,17 @@ export function EditWindowActions({ subject }: Props): React.ReactNode {
   if (remaining <= 0) return null
 
   const seconds = Math.ceil(remaining / 1000)
+  const showEdit = subject.kind === 'post' && !viewerIsAdmin
   return (
     <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+      {showEdit ? (
+        <Link
+          href={`/conversations/${subject.slug}/edit`}
+          className="text-muted hover:text-text focus:outline-none focus-visible:underline"
+        >
+          Editar
+        </Link>
+      ) : null}
       <button
         type="button"
         onClick={() => setMode('confirm-delete')}

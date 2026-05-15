@@ -33,10 +33,12 @@ import { friendlyErrorMessage } from './utils'
  */
 export function PostAdminMenu({
   postId,
+  postSlug,
   hiddenAt,
   expectedVersion,
 }: {
   postId: string
+  postSlug: string
   hiddenAt: Date | null
   expectedVersion: number
 }): React.ReactNode {
@@ -88,7 +90,7 @@ export function PostAdminMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
-            onSelect={() => router.push(`/conversations/new?edit=${postId}`)}
+            onSelect={() => router.push(`/conversations/${postSlug}/edit`)}
             disabled={pending}
           >
             Editar

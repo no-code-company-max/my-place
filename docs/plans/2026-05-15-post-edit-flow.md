@@ -160,7 +160,35 @@ del wrapper en `/new`).
 
 ---
 
-## Sesión 3 — Wiring de los 2 entry points + dedup
+## Sesión 3 — Wiring de los 2 entry points + dedup ✅ EJECUTADA
+
+**Files realmente tocados**:
+
+- `post-admin-menu.tsx`: prop `postSlug`; URL →
+  `/conversations/<postSlug>/edit` (antes `?edit=`).
+- `_thread-header-actions.tsx`: pasa `postSlug={post.slug}`.
+- `edit-window-types.ts`: `PostSubject` + `slug`; doc actualizada
+  (quita stub "post-MVP").
+- `edit-window-actions.tsx`: prop `viewerIsAdmin`; branch "Editar"
+  (`<Link>`) solo si `subject.kind==='post' && !viewerIsAdmin` (dedup
+  gap I2 — admin ya lo tiene en kebab); quita comentario stub F.1.
+- `post-detail.tsx`: prop `viewerIsAdmin`; pasa `slug` + `viewerIsAdmin`
+  al subject.
+- `_thread-content.tsx`: pasa `viewerIsAdmin={viewer.isAdmin}`.
+
+**Decisión**: comments NO obtienen branch "Editar" (se discrimina por
+`subject.kind==='post'`) → cero regresión en `comment-item.tsx`. No se
+propaga API innecesaria: `viewerIsAdmin` viaja por la cadena ya
+existente (`_thread-content` ya resolvía `viewer`).
+
+**Verificación S3**: `pnpm typecheck` verde. `grep 'conversations/new?edit='`
+→ 0. `pnpm vitest run src/features/discussions` → 268/268 (cero
+regresión). LOC real: ~45.
+
+### Plan original S3 (referencia)
+
+**Goal**: botón "Editar" del admin menu y del autor (60s) navegan a la
+nueva page. Sin duplicar para admin-autor.
 
 **Goal**: botón "Editar" del admin menu y del autor (60s) navegan a la
 nueva page. Sin duplicar para admin-autor.

@@ -2,8 +2,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   closePool,
   insertTestLibraryCategory,
-  insertTestLibraryContributor,
   insertTestLibraryItem,
+  insertTestLibraryReadScope,
+  insertTestLibraryWriteScope,
   insertTestPost,
   resolveE2EUserIds,
   withUser,
@@ -16,14 +17,27 @@ const belgranoId = E2E_PLACES.belgrano.id
 /**
  * RLS: LibraryItem (R.7.5).
  *
- * Cubre las 3 policies definidas en
- * `prisma/migrations/20260430010000_library_items/migration.sql`:
+ * **2026-05-15 — modelo nuevo**: `ContributionPolicy` (ADMIN_ONLY /
+ * DESIGNATED / MEMBERS_OPEN) + `LibraryCategoryContributor` fueron
+ * eliminados (`20260513000000`) y reemplazados por `writeAccessKind`
+ * (OWNER_ONLY / GROUPS / TIERS / USERS) + tablas write-scope. Los casos
+ * INSERT se reescribieron a ese modelo (paridad con la policy
+ * `LibraryItem_insert_with_write_access`, migración `20260513000000`).
  *
- *   - SELECT: member ve no archivadas; admin ve todas; non-member nada.
- *   - INSERT: replica matriz canCreateInCategory (admin | designated |
- *     members_open) + valida `authorUserId = auth.uid()`.
- *   - UPDATE: admin del place o author directo (sin sub-query — author
- *     denormalizado en LibraryItem.authorUserId).
+ * El bloque SELECT read-scope valida la policy de la migración
+ * `20260515000000_library_read_scope_rls` (Plan A S4): helper
+ * `is_in_category_read_scope` = `canReadCategory || canWriteCategory`.
+ * GROUPS/TIERS de read-scope ya están cubiertos a nivel lógica por el
+ * unit test `src/features/library/access/__tests__/assert-readable.test.ts`;
+ * acá se cubre la integración SQL con USERS/PUBLIC/owner/
+ * write-implica-read/blind-write (sin depender de fixtures de grupos/
+ * tiers).
+ *
+ * Policies cubiertas:
+ *   - SELECT: member ve no archivadas + en read-scope; admin audita;
+ *     author ve su archivada (blind-write).
+ *   - INSERT: `writeAccessKind` + `authorUserId = auth.uid()`.
+ *   - UPDATE: admin del place o author directo.
  *   - DELETE: bloqueado para authenticated.
  */
 describe('RLS: LibraryItem (R.7.5)', () => {
@@ -37,7 +51,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     await closePool()
   })
 
-  // ── SELECT ────────────────────────────────────────────────────────────
+  // ── SELECT (categoría PUBLIC: comportamiento base) ───────────────────
 
   it('1. SELECT: memberA ve items no archivados del place', async () => {
     await withUser(
@@ -95,10 +109,9 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  it('3. SELECT: archivada visible para admin + author, oculta para otros members', async () => {
+  it('3. SELECT: archivada visible para author + admin, oculta para otros members', async () => {
     let archivedId: string
 
-    // memberB (no author de este item) NO la ve
     await withUser(
       userIds.memberB,
       async (client) => {
@@ -126,7 +139,6 @@ describe('RLS: LibraryItem (R.7.5)', () => {
       },
     )
 
-    // memberA (author) SÍ la ve — necesario para que pueda restaurar/editar
     await withUser(
       userIds.memberA,
       async (client) => {
@@ -154,7 +166,6 @@ describe('RLS: LibraryItem (R.7.5)', () => {
       },
     )
 
-    // admin SÍ la ve
     await withUser(
       userIds.admin,
       async (client) => {
@@ -183,20 +194,158 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  // ── INSERT (matriz canCreateInCategory) ──────────────────────────────
+  // ── SELECT read-scope (policy 20260515000000_library_read_scope_rls) ──
 
-  it('4. INSERT: admin crea item en categoría ADMIN_ONLY OK', async () => {
+  it('4. READ-SCOPE: categoría USERS — member EN el read-scope ve el item', async () => {
+    let itemId: string
+    await withUser(
+      userIds.memberA,
+      async (client) => {
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT id FROM "LibraryItem" WHERE id = $1`,
+          [itemId],
+        )
+        expect(rows).toHaveLength(1)
+      },
+      {
+        setup: async (client) => {
+          const categoryId = await insertTestLibraryCategory(client, {
+            placeId: palermoId,
+            readAccessKind: 'USERS',
+          })
+          await insertTestLibraryReadScope(client, { categoryId, userId: userIds.memberA })
+          const postId = await insertTestPost(client, {
+            placeId: palermoId,
+            authorUserId: userIds.memberA,
+          })
+          itemId = await insertTestLibraryItem(client, {
+            placeId: palermoId,
+            categoryId,
+            postId,
+            authorUserId: userIds.memberA,
+          })
+        },
+      },
+    )
+  })
+
+  it('5. READ-SCOPE: categoría USERS — member FUERA del read-scope NO ve el item', async () => {
+    let itemId: string
+    await withUser(
+      userIds.memberB,
+      async (client) => {
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT id FROM "LibraryItem" WHERE id = $1`,
+          [itemId],
+        )
+        expect(rows).toHaveLength(0)
+      },
+      {
+        setup: async (client) => {
+          const categoryId = await insertTestLibraryCategory(client, {
+            placeId: palermoId,
+            readAccessKind: 'USERS',
+          })
+          await insertTestLibraryReadScope(client, { categoryId, userId: userIds.memberA })
+          const postId = await insertTestPost(client, {
+            placeId: palermoId,
+            authorUserId: userIds.memberA,
+          })
+          itemId = await insertTestLibraryItem(client, {
+            placeId: palermoId,
+            categoryId,
+            postId,
+            authorUserId: userIds.memberA,
+          })
+        },
+      },
+    )
+  })
+
+  it('6. READ-SCOPE: owner del place SIEMPRE ve, aunque esté fuera del read-scope', async () => {
+    let itemId: string
+    await withUser(
+      userIds.owner,
+      async (client) => {
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT id FROM "LibraryItem" WHERE id = $1`,
+          [itemId],
+        )
+        expect(rows).toHaveLength(1)
+      },
+      {
+        setup: async (client) => {
+          const categoryId = await insertTestLibraryCategory(client, {
+            placeId: palermoId,
+            readAccessKind: 'USERS',
+          })
+          await insertTestLibraryReadScope(client, { categoryId, userId: userIds.memberA })
+          const postId = await insertTestPost(client, {
+            placeId: palermoId,
+            authorUserId: userIds.memberA,
+          })
+          itemId = await insertTestLibraryItem(client, {
+            placeId: palermoId,
+            categoryId,
+            postId,
+            authorUserId: userIds.memberA,
+          })
+        },
+      },
+    )
+  })
+
+  it('7. READ-SCOPE: write implica read — member en WRITE-scope (no en read-scope) ve', async () => {
+    let itemId: string
+    await withUser(
+      userIds.memberB,
+      async (client) => {
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT id FROM "LibraryItem" WHERE id = $1`,
+          [itemId],
+        )
+        expect(rows).toHaveLength(1)
+      },
+      {
+        setup: async (client) => {
+          // read=USERS con memberA; write=USERS con memberB. memberB NO
+          // está en read-scope pero SÍ en write-scope → write implica read.
+          const categoryId = await insertTestLibraryCategory(client, {
+            placeId: palermoId,
+            readAccessKind: 'USERS',
+            writeAccessKind: 'USERS',
+          })
+          await insertTestLibraryReadScope(client, { categoryId, userId: userIds.memberA })
+          await insertTestLibraryWriteScope(client, { categoryId, userId: userIds.memberB })
+          const postId = await insertTestPost(client, {
+            placeId: palermoId,
+            authorUserId: userIds.memberA,
+          })
+          itemId = await insertTestLibraryItem(client, {
+            placeId: palermoId,
+            categoryId,
+            postId,
+            authorUserId: userIds.memberA,
+          })
+        },
+      },
+    )
+  })
+
+  // ── INSERT (writeAccessKind + authorUserId = auth.uid()) ─────────────
+
+  it('8. INSERT: owner crea en categoría OWNER_ONLY OK', async () => {
     let categoryId: string
     let postId: string
     await withUser(
-      userIds.admin,
+      userIds.owner,
       async (client) => {
         const r = await client.query(
           `INSERT INTO "LibraryItem"
             (id, "placeId", "categoryId", "postId", "authorUserId", "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id`,
-          ['libitem_admin', palermoId, categoryId, postId, userIds.admin],
+          ['libitem_owner', palermoId, categoryId, postId, userIds.owner],
         )
         expect(r.rows).toHaveLength(1)
       },
@@ -204,18 +353,18 @@ describe('RLS: LibraryItem (R.7.5)', () => {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, {
             placeId: palermoId,
-            contributionPolicy: 'ADMIN_ONLY',
+            writeAccessKind: 'OWNER_ONLY',
           })
           postId = await insertTestPost(client, {
             placeId: palermoId,
-            authorUserId: userIds.admin,
+            authorUserId: userIds.owner,
           })
         },
       },
     )
   })
 
-  it('5. INSERT: memberA NO crea en categoría ADMIN_ONLY', async () => {
+  it('9. INSERT: memberA NO crea en categoría OWNER_ONLY', async () => {
     let categoryId: string
     let postId: string
     await withUser(
@@ -234,7 +383,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, {
             placeId: palermoId,
-            contributionPolicy: 'ADMIN_ONLY',
+            writeAccessKind: 'OWNER_ONLY',
           })
           postId = await insertTestPost(client, {
             placeId: palermoId,
@@ -245,37 +394,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  it('6. INSERT: memberA crea en categoría MEMBERS_OPEN OK', async () => {
-    let categoryId: string
-    let postId: string
-    await withUser(
-      userIds.memberA,
-      async (client) => {
-        const r = await client.query(
-          `INSERT INTO "LibraryItem"
-            (id, "placeId", "categoryId", "postId", "authorUserId", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-           RETURNING id`,
-          ['libitem_open', palermoId, categoryId, postId, userIds.memberA],
-        )
-        expect(r.rows).toHaveLength(1)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'MEMBERS_OPEN',
-          })
-          postId = await insertTestPost(client, {
-            placeId: palermoId,
-            authorUserId: userIds.memberA,
-          })
-        },
-      },
-    )
-  })
-
-  it('7. INSERT: designated en su categoría OK; otro miembro bloqueado', async () => {
+  it('10. INSERT: member EN write-scope USERS crea OK; otro miembro bloqueado', async () => {
     let categoryId: string
     let postIdA: string
     let postIdB: string
@@ -288,7 +407,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
             (id, "placeId", "categoryId", "postId", "authorUserId", "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
            RETURNING id`,
-          ['libitem_des_a', palermoId, categoryId, postIdA, userIds.memberA],
+          ['libitem_ws_a', palermoId, categoryId, postIdA, userIds.memberA],
         )
         expect(r.rows).toHaveLength(1)
       },
@@ -296,13 +415,9 @@ describe('RLS: LibraryItem (R.7.5)', () => {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, {
             placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
+            writeAccessKind: 'USERS',
           })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberA,
-            invitedByUserId: userIds.admin,
-          })
+          await insertTestLibraryWriteScope(client, { categoryId, userId: userIds.memberA })
           postIdA = await insertTestPost(client, {
             placeId: palermoId,
             authorUserId: userIds.memberA,
@@ -319,7 +434,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
             `INSERT INTO "LibraryItem"
               (id, "placeId", "categoryId", "postId", "authorUserId", "createdAt", "updatedAt")
              VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
-            ['libitem_des_b_blocked', palermoId, categoryId, postIdB, userIds.memberB],
+            ['libitem_ws_b_blocked', palermoId, categoryId, postIdB, userIds.memberB],
           ),
         ).rejects.toThrow(/row-level security/i)
       },
@@ -327,13 +442,9 @@ describe('RLS: LibraryItem (R.7.5)', () => {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, {
             placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
+            writeAccessKind: 'USERS',
           })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberA,
-            invitedByUserId: userIds.admin,
-          })
+          await insertTestLibraryWriteScope(client, { categoryId, userId: userIds.memberA })
           postIdB = await insertTestPost(client, {
             placeId: palermoId,
             authorUserId: userIds.memberB,
@@ -343,7 +454,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  it('8. INSERT: members_open con authorUserId de otro user → bloqueado', async () => {
+  it('11. INSERT: write-scope USERS con authorUserId de otro user → bloqueado', async () => {
     let categoryId: string
     let postId: string
     await withUser(
@@ -362,8 +473,9 @@ describe('RLS: LibraryItem (R.7.5)', () => {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, {
             placeId: palermoId,
-            contributionPolicy: 'MEMBERS_OPEN',
+            writeAccessKind: 'USERS',
           })
+          await insertTestLibraryWriteScope(client, { categoryId, userId: userIds.memberA })
           postId = await insertTestPost(client, {
             placeId: palermoId,
             authorUserId: userIds.memberB,
@@ -375,7 +487,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
 
   // ── UPDATE ────────────────────────────────────────────────────────────
 
-  it('9. UPDATE: author puede archivar su item', async () => {
+  it('12. UPDATE: author puede archivar su item', async () => {
     let itemId: string
     await withUser(
       userIds.memberA,
@@ -388,10 +500,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
       },
       {
         setup: async (client) => {
-          const categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'MEMBERS_OPEN',
-          })
+          const categoryId = await insertTestLibraryCategory(client, { placeId: palermoId })
           const postId = await insertTestPost(client, {
             placeId: palermoId,
             authorUserId: userIds.memberA,
@@ -407,7 +516,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  it('10. UPDATE: admin actualiza item de otro author OK', async () => {
+  it('13. UPDATE: admin actualiza item de otro author OK', async () => {
     let itemId: string
     await withUser(
       userIds.admin,
@@ -436,7 +545,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
     )
   })
 
-  it('11. UPDATE: memberB (no author, no admin) NO puede modificar', async () => {
+  it('14. UPDATE: memberB (no author, no admin) NO puede modificar', async () => {
     let itemId: string
     await withUser(
       userIds.memberB,
@@ -467,7 +576,7 @@ describe('RLS: LibraryItem (R.7.5)', () => {
 
   // ── DELETE ────────────────────────────────────────────────────────────
 
-  it('12. DELETE: admin NO puede DELETE físico (no policy DELETE)', async () => {
+  it('15. DELETE: admin NO puede DELETE físico (no policy DELETE)', async () => {
     let itemId: string
     await withUser(
       userIds.admin,

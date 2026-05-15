@@ -1,32 +1,32 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  closePool,
-  insertTestLibraryCategory,
-  insertTestLibraryContributor,
-  resolveE2EUserIds,
-  withUser,
-} from './harness'
+import { closePool, insertTestLibraryCategory, resolveE2EUserIds, withUser } from './harness'
 import { E2E_PLACES, type E2ERole } from '../fixtures/e2e-data'
 
 const palermoId = E2E_PLACES.palermo.id
 const belgranoId = E2E_PLACES.belgrano.id
 
 /**
- * RLS: LibraryCategory + LibraryCategoryContributor (R.7.1).
+ * RLS: LibraryCategory (R.7.1).
  *
- * Cubre las 6 policies definidas en
- * `prisma/migrations/20260430000000_library_categories/migration.sql`:
+ * Cubre las policies de `LibraryCategory`: SELECT (member ve, archivada
+ * solo admin), INSERT (solo admin), UPDATE (solo admin), DELETE
+ * bloqueado.
  *
- *   - LibraryCategory: SELECT (member ve, archivada solo admin), INSERT
- *     (solo admin), UPDATE (solo admin), DELETE bloqueado.
- *   - LibraryCategoryContributor: SELECT (member transparente), INSERT
- *     (solo admin), DELETE (solo admin), UPDATE bloqueado.
+ * **2026-05-15**: los ex-casos 12-17 cubrían `LibraryCategoryContributor`
+ * — tabla ELIMINADA en `20260513000000` (reemplazada por
+ * `readAccessKind`/`writeAccessKind` + 6 tablas scope). Verificado en
+ * Fase 0 (`docs/plans/2026-05-15-rls-harness-library-resync.md`): las
+ * tablas scope no tienen RLS hoy, así que NO hay cobertura RLS
+ * equivalente a reescribir acá — la superficie vigente se cubre en
+ * `library-scope-tables.test.ts` (S3 del plan) tras la migración
+ * `20260515000100_library_scope_tables_rls`. Los casos 12-17 se
+ * eliminaron (no reescritos): la cobertura que daban ya no aplica.
  *
  * Aislamiento cross-place via `is_active_member` (helper compartido,
  * mismo precedente que events). Tests usan placeholder data dentro de tx
  * con setup como postgres super → switch a authenticated.
  */
-describe('RLS: LibraryCategory + LibraryCategoryContributor (R.7.1)', () => {
+describe('RLS: LibraryCategory (R.7.1)', () => {
   let userIds: Record<E2ERole, string>
 
   beforeAll(async () => {
@@ -244,169 +244,6 @@ describe('RLS: LibraryCategory + LibraryCategoryContributor (R.7.1)', () => {
       {
         setup: async (client) => {
           categoryId = await insertTestLibraryCategory(client, { placeId: palermoId })
-        },
-      },
-    )
-  })
-
-  // ── LibraryCategoryContributor ───────────────────────────────────────
-
-  it('12. SELECT contributor: memberA ve la lista de la categoría del place', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.memberA,
-      async (client) => {
-        const { rows } = await client.query<{ userId: string }>(
-          `SELECT "userId" FROM "LibraryCategoryContributor" WHERE "categoryId" = $1`,
-          [categoryId],
-        )
-        expect(rows).toHaveLength(1)
-        expect(rows[0]?.userId).toBe(userIds.memberB)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberB,
-            invitedByUserId: userIds.admin,
-          })
-        },
-      },
-    )
-  })
-
-  it('13. SELECT contributor: nonMember NO ve la lista', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.nonMember,
-      async (client) => {
-        const { rows } = await client.query<{ userId: string }>(
-          `SELECT "userId" FROM "LibraryCategoryContributor" WHERE "categoryId" = $1`,
-          [categoryId],
-        )
-        expect(rows).toHaveLength(0)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberB,
-            invitedByUserId: userIds.admin,
-          })
-        },
-      },
-    )
-  })
-
-  it('14. INSERT contributor: admin invita OK', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.admin,
-      async (client) => {
-        const r = await client.query(
-          `INSERT INTO "LibraryCategoryContributor"
-            ("categoryId", "userId", "invitedByUserId", "invitedAt")
-           VALUES ($1, $2, $3, NOW())
-           RETURNING "categoryId"`,
-          [categoryId, userIds.memberB, userIds.admin],
-        )
-        expect(r.rows).toHaveLength(1)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-        },
-      },
-    )
-  })
-
-  it('15. INSERT contributor: memberA NO puede invitar', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.memberA,
-      async (client) => {
-        await expect(
-          client.query(
-            `INSERT INTO "LibraryCategoryContributor"
-              ("categoryId", "userId", "invitedByUserId", "invitedAt")
-             VALUES ($1, $2, $3, NOW())`,
-            [categoryId, userIds.memberB, userIds.memberA],
-          ),
-        ).rejects.toThrow(/row-level security/i)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-        },
-      },
-    )
-  })
-
-  it('16. DELETE contributor: admin desinvita OK', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.admin,
-      async (client) => {
-        const r = await client.query(
-          `DELETE FROM "LibraryCategoryContributor"
-           WHERE "categoryId" = $1 AND "userId" = $2`,
-          [categoryId, userIds.memberB],
-        )
-        expect(r.rowCount).toBe(1)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberB,
-            invitedByUserId: userIds.admin,
-          })
-        },
-      },
-    )
-  })
-
-  it('17. DELETE contributor: memberA NO puede desinvitar', async () => {
-    let categoryId: string
-    await withUser(
-      userIds.memberA,
-      async (client) => {
-        const r = await client.query(
-          `DELETE FROM "LibraryCategoryContributor"
-           WHERE "categoryId" = $1 AND "userId" = $2`,
-          [categoryId, userIds.memberB],
-        )
-        expect(r.rowCount).toBe(0)
-      },
-      {
-        setup: async (client) => {
-          categoryId = await insertTestLibraryCategory(client, {
-            placeId: palermoId,
-            contributionPolicy: 'DESIGNATED',
-          })
-          await insertTestLibraryContributor(client, {
-            categoryId,
-            userId: userIds.memberB,
-            invitedByUserId: userIds.admin,
-          })
         },
       },
     )

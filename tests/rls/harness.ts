@@ -335,7 +335,12 @@ export async function insertTestRsvp(
  * Helpers para slice `library` (R.7.1).
  * ==================================================================== */
 
-export type ContributionPolicyValue = 'ADMIN_ONLY' | 'DESIGNATED' | 'MEMBERS_OPEN'
+// Modelo nuevo (post-`20260513000000`): `ContributionPolicy` +
+// `LibraryCategoryContributor` fueron eliminados y reemplazados por
+// `readAccessKind`/`writeAccessKind` + 6 tablas scope. Los helpers
+// reflejan el schema vigente.
+export type LibraryReadAccessKindValue = 'PUBLIC' | 'GROUPS' | 'TIERS' | 'USERS'
+export type LibraryWriteAccessKindValue = 'OWNER_ONLY' | 'GROUPS' | 'TIERS' | 'USERS'
 
 export async function insertTestLibraryCategory(
   client: PoolClient,
@@ -344,7 +349,11 @@ export async function insertTestLibraryCategory(
     slug?: string
     title?: string
     emoji?: string
-    contributionPolicy?: ContributionPolicyValue
+    /** Default `PUBLIC` (= default del schema): mantiene el comportamiento
+     *  "cualquier member ve" de los tests SELECT existentes. */
+    readAccessKind?: LibraryReadAccessKindValue
+    /** Default `OWNER_ONLY` (= default del schema). */
+    writeAccessKind?: LibraryWriteAccessKindValue
     archivedAt?: Date | null
     position?: number | null
     id?: string
@@ -356,9 +365,12 @@ export async function insertTestLibraryCategory(
   const slug = opts.slug ?? id.replace(/_/g, '-')
   await client.query(
     `INSERT INTO "LibraryCategory"
-       (id, "placeId", slug, emoji, title, "position", "contributionPolicy",
+       (id, "placeId", slug, emoji, title, "position",
+        "readAccessKind", "writeAccessKind",
         "archivedAt", "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7::"ContributionPolicy", $8, NOW(), NOW())`,
+     VALUES ($1, $2, $3, $4, $5, $6,
+        $7::"LibraryReadAccessKind", $8::"WriteAccessKind",
+        $9, NOW(), NOW())`,
     [
       id,
       opts.placeId,
@@ -366,27 +378,67 @@ export async function insertTestLibraryCategory(
       opts.emoji ?? '📚',
       opts.title ?? 'RLS test category',
       opts.position ?? null,
-      opts.contributionPolicy ?? 'ADMIN_ONLY',
+      opts.readAccessKind ?? 'PUBLIC',
+      opts.writeAccessKind ?? 'OWNER_ONLY',
       opts.archivedAt ?? null,
     ],
   )
   return id
 }
 
-export async function insertTestLibraryContributor(
+/**
+ * Siembra una fila en la tabla read-scope que corresponda según el
+ * discriminador provisto (group | tier | user). Reemplaza al difunto
+ * `insertTestLibraryContributor` (tabla `LibraryCategoryContributor`
+ * eliminada en `20260513000000`).
+ */
+export async function insertTestLibraryReadScope(
   client: PoolClient,
-  opts: {
-    categoryId: string
-    userId: string
-    invitedByUserId: string
-  },
+  opts: { categoryId: string; groupId?: string; tierId?: string; userId?: string },
 ): Promise<void> {
-  await client.query(
-    `INSERT INTO "LibraryCategoryContributor"
-       ("categoryId", "userId", "invitedByUserId", "invitedAt")
-     VALUES ($1, $2, $3, NOW())`,
-    [opts.categoryId, opts.userId, opts.invitedByUserId],
-  )
+  if (opts.groupId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryGroupReadScope" ("categoryId", "groupId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.groupId],
+    )
+  }
+  if (opts.tierId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryTierReadScope" ("categoryId", "tierId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.tierId],
+    )
+  }
+  if (opts.userId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryUserReadScope" ("categoryId", "userId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.userId],
+    )
+  }
+}
+
+/** Análogo de `insertTestLibraryReadScope` para las 3 tablas write-scope. */
+export async function insertTestLibraryWriteScope(
+  client: PoolClient,
+  opts: { categoryId: string; groupId?: string; tierId?: string; userId?: string },
+): Promise<void> {
+  if (opts.groupId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryGroupWriteScope" ("categoryId", "groupId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.groupId],
+    )
+  }
+  if (opts.tierId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryTierWriteScope" ("categoryId", "tierId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.tierId],
+    )
+  }
+  if (opts.userId) {
+    await client.query(
+      `INSERT INTO "LibraryCategoryUserWriteScope" ("categoryId", "userId") VALUES ($1, $2)`,
+      [opts.categoryId, opts.userId],
+    )
+  }
 }
 
 export async function insertTestLibraryItem(

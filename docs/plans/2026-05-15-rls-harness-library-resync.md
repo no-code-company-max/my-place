@@ -55,7 +55,15 @@ arregla acá (este plan es solo infra de test).
 - `library-item.test.ts`: SELECT con helper; INSERT 4-10 → writeAccessKind + scope (decisión D); nuevo bloque SELECT read-scope (decisión E).
 - Verif: `pnpm typecheck` + revisión estática (la corrida real es S3 — cloud).
 
-### S3 — RLS de las 6 tablas scope (local, artefacto + tests)
+### S3 — ✅ EJECUTADA (migración + test escritos, no aplicada)
+
+NEW `20260515000100_library_scope_tables_rls` (6 `ALTER TABLE ENABLE
+RLS` + 6 SELECT policies admin/owner, sin INSERT/UPDATE/DELETE =
+deny-by-default). NEW `tests/rls/library-scope-tables.test.ts` (6 casos:
+admin/owner ve, member/nonMember no, escritura deny). typecheck verde,
+SQL balanceado. NO aplicada a cloud (= S4, gate OK explícito).
+
+### S3 — Plan original (referencia)
 
 Cierra la inconsistencia detectada en Fase 0 (decisión del owner:
 dejarlas listas ahora, no diferir al comprehensive). Coherente con la

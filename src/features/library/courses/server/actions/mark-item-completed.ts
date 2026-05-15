@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@/db/client'
 import { NotFoundError, ValidationError } from '@/shared/errors/domain-error'
 import { logger } from '@/shared/lib/logger'
-import { resolveActorForPlace } from '@/features/discussions/public.server'
+import { resolveLibraryViewer } from '@/features/library/public.server'
+import { assertCategoryReadable } from '@/features/library/access/public.server'
 import { markItemCompletedInputSchema } from '@/features/library/courses/schemas'
 
 /**
@@ -21,9 +22,11 @@ export type MarkItemCompletedResult = {
 /**
  * Marca un item como completado por el viewer actual.
  *
- * Cualquier miembro activo puede marcar (D3 ADR `2026-05-04`). El
- * caller (la page detalle) ya validó membership + read access; acá
- * solo gateamos auth + existencia del item.
+ * Cualquier miembro activo puede marcar (D3 ADR `2026-05-04`), pero
+ * SOLO si tiene read-access a la categoría — `assertCategoryReadable`
+ * (Hallazgo #2, Plan A S3). Antes el comentario asumía que "el caller
+ * ya validó read access": era falso (la page no lo hacía). Ahora el
+ * gate vive acá, defensa en profundidad independiente del caller.
  *
  * Idempotencia: el insert tiene PK compuesta `(itemId, userId)`. Si
  * ya existe, Postgres tira P2002 → mapeamos a `alreadyCompleted: true`.
@@ -47,6 +50,7 @@ export async function markItemCompletedAction(input: unknown): Promise<MarkItemC
     select: {
       id: true,
       placeId: true,
+      categoryId: true,
       archivedAt: true,
       category: { select: { slug: true } },
       post: { select: { slug: true } },
@@ -59,8 +63,9 @@ export async function markItemCompletedAction(input: unknown): Promise<MarkItemC
     throw new NotFoundError('Item archivado.', { itemId: data.itemId })
   }
 
-  // Auth + membership via resolveActorForPlace (cached by request).
-  const actor = await resolveActorForPlace({ placeId: item.placeId })
+  // Auth + membership + read-access (cached by request).
+  const { viewer, actor } = await resolveLibraryViewer({ placeId: item.placeId })
+  await assertCategoryReadable(item.categoryId, viewer)
 
   let alreadyCompleted = false
   try {

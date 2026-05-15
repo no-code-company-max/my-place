@@ -115,7 +115,39 @@ verde, library+discussions 575/575 (cero regresión).
   no fuga body. Documentar.
 - Tests por page. Smoke manual de los 4 readAccessKind.
 
-### S3 — Enforcement en mention-search + courses (puntos 5,6,7,8,9)
+### S3 — ✅ EJECUTADA (puntos 3,5,6,8 cerrados; 9 por caller; 7 follow-up)
+
+**Resultado**:
+
+- **5,6** `actions/mention-search.ts`: resuelve viewer post-cache +
+  `canViewCategory` → categorías/items de categorías restringidas no
+  aparecen en autocomplete para quien no tiene acceso.
+- **3** `library/page.tsx`: recents filtrados reusando
+  `listLibraryCategoriesForMentionAction` (ya filtra legibilidad);
+  match por `categorySlug` (LibraryItemListView no expone categoryId).
+- **8** `mark-item-completed.ts`: `resolveActorForPlace` →
+  `resolveLibraryViewer` + `assertCategoryReadable`. Comentario falso
+  ("caller ya validó read access") corregido. Test reescrito a mocks de
+  boundary + cobertura del gate (deniega → AuthorizationError).
+- **unmark**: NO se gatea — decisión consciente documentada en el
+  archivo: solo borra completion propia (cero fuga) y gatear rompería
+  el caso legítimo "perdí acceso, limpio mi lista".
+- **9** `listCategoryItemsForPrereqLookup`/`listCompletedItemIdsByUser`:
+  queries puras; sus callers ya gatean (category page/item content tras
+  S2; new/edit por write-scope). Patrón "query pura, caller gatea"
+  (decisión C) — no se gatea dentro de la query.
+- **7 `findLibraryItemForMention`** → **FOLLOW-UP, no en S3**. Es el
+  resolver de menciones cross-slice (renderiza título+link de un item
+  mencionado en cualquier thread). Gatearlo exige propagar el viewer
+  por `buildMentionResolvers` (usado en todo render de discussions) —
+  refactor cross-slice de severidad baja (un título embebido). Se
+  separa para no parchear un refactor cross-slice al final de sesión;
+  queda registrado en el ADR S5 como follow-up explícito con su
+  diagnóstico.
+
+Typecheck verde. Suite completa 2132/2132 (cero regresión).
+
+### S3 — Plan original (referencia, puntos 5,6,7,8,9)
 
 - `mention-search.ts` (`searchLibraryItems`, `listCategoriesForMention`,
   `findLibraryItemForMention`): hoy reciben solo `placeId`. Resolver

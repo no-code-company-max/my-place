@@ -25,6 +25,13 @@ export type UnmarkItemCompletedResult = { ok: true }
  * Permite desmarcar incluso si el item está archivado — el viewer
  * puede querer hacer cleanup de su completion list. Único gate: auth +
  * existencia del item.
+ *
+ * Hallazgo #2 (Plan A S3): a diferencia de `markItemCompletedAction`,
+ * acá NO se aplica `assertCategoryReadable` — decisión consciente, no
+ * olvido. `deleteMany` solo borra completion PROPIA del viewer: no lee
+ * body ni títulos (cero fuga de confidencialidad) y gatear read-access
+ * rompería el caso legítimo "perdí acceso a la categoría, quiero
+ * limpiar mi lista" que esta action soporta a propósito.
  */
 export async function unmarkItemCompletedAction(
   input: unknown,

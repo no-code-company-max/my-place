@@ -59,7 +59,7 @@ Auth provider: **Neon Auth** (sobre Better Auth) — ver `docs/stack.md`. Place 
 
 ## Gate de horario del place
 
-Fuera del horario, el place no es accesible para contenido: ningún miembro ve foro, eventos, threads ni miembros. El **owner** mantiene acceso **solo** a `/settings/*` para poder configurar el horario (no hay rol "admin"; la administración delegada será una feature futura de grupos).
+Fuera del horario, **el miembro** no accede al place: cualquier ruta no-settings devuelve `<PlaceClosedView>`. **El owner es la excepción: accede al place completo fuera de horario** (discusiones, eventos, miembros, settings) — lo ve como si estuviera abierto. No hay rol "admin"; la administración delegada será una feature futura de grupos.
 
 **Regla técnica:** el gate vive a nivel del place en `[placeSlug]/(gated)/layout.tsx`, **no por feature**. Cada feature confía en que el layout ya validó el acceso; no reimplementa la verificación de horario. El comportamiento de producto (qué ve cada rol fuera de horario) es canónico en `docs/ontologia/conversaciones.md`.
 

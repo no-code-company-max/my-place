@@ -72,7 +72,7 @@ En el thread se discute lo que corresponda según el tipo de evento:
 - Viernes de película online: votación de peli, set-up del stream, quién tiene Plex/Disney
 - Juntada presencial a distancia: logística de viaje, alojamiento, quién viene de dónde
 
-**No hay templates prescriptivos**. El thread es espacio abierto con todas las reglas del foro (verticalidad, citas estilo WhatsApp, audio efímero, "traído por"). El grupo usa el espacio según lo que necesita.
+**No hay templates prescriptivos**. El evento es una Discusión con todas sus reglas (hilo vertical, citas, "traído por"); cambia solo la morfología del mensaje principal. El grupo usa el espacio según lo que necesita.
 
 El thread está conectado bidireccional con el evento:
 

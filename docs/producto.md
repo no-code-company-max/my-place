@@ -10,7 +10,7 @@ Documento canónico de **qué es Place** y de los **principios de experiencia/di
 
 Place es un lugar digital pequeño e íntimo para hasta 150 personas. Es **cozytech**: un espacio tranquilo donde entrás, te ponés al día de lo que pasa, participás si querés, y salís. Como entrar a un pub conocido — no como abrir una red social.
 
-**No es:** un feed con scroll infinito, una app que compite por atención, un producto con notificaciones agresivas, un sistema con métricas de engagement, ni una plataforma que gamifica la atención.
+**No es:** un feed algorítmico infinito, una app que compite por atención, un producto con notificaciones agresivas, un sistema con métricas de engagement, ni una plataforma que gamifica la atención.
 
 **Es:** un lugar con miembros, conversaciones, eventos y memoria compartida. Donde cada place tiene su identidad visual propia y su propio ritmo.
 
@@ -25,7 +25,7 @@ Estos principios definen el DNA de Place. Violarlos es violar qué es el product
 - **Sin urgencia artificial.** Nada de "EN 2 DÍAS", "ÚLTIMA CHANCE", countdowns o similar.
 - **Reconocimiento de pertenencia y rol, sí. Competencia por estatus, no.** Se permite lo que celebra vínculo, permanencia y *tipo de aporte* como un hecho: antigüedad ("miembro desde marzo 2024"), hitos temporales tranquilos ("hace un año traías tu primer tema", mostrado una vez, no un contador que tictaquea), contribuciones como hechos contextuales, insignias/títulos **cualitativos** que reconocen un rol o forma de participar (conferidos por estructura o por el owner), y acumulación **colectiva** ("este año hicimos 48 misas"). Se prohíbe lo que crea comparación, escasez o FOMO: leaderboards, rankings, "top contributor", comparación entre miembros, streaks que se "rompen", puntos/karma/niveles por volumen, contadores como estatus, e insignias convertidas en colección competitiva o achievement-hunting. **Test:** ¿esto afirma pertenencia/rol, o dispara comparación social o loss-aversion? Lo primero entra; lo segundo no.
 - **Sin push notifications agresivas.** El MVP no tiene push notifications. Sumar notificaciones requiere decisión de producto, no técnica.
-- **Sin infinite scroll.** Los feeds interminables son el paradigma opuesto.
+- **Sin feed algorítmico infinito.** Lo prohibido es el stream interminable sin fondo, ordenado por algoritmo para capturar atención. Sí se permite **scroll con lazyload de una lista acotada y cronológica** (ej. la Zona Discusión: discusiones agrupadas por día, más nuevas primero, que cargan más al bajar por performance) — finita, reconocible, con un fondo, el usuario siempre sabe dónde está.
 - **Presencia silenciosa.** Quién está se comunica visualmente (burbuja con borde verde), nunca con texto ansioso ni animaciones.
 - **Customización activa, no algorítmica.** El owner del place configura colores. El orden y la personalización son decisión humana, no del algoritmo.
 
@@ -57,7 +57,7 @@ La estrategia técnica (librería, catálogos de mensajes, routing por locale, d
 Los principios que pertenecen a un objeto específico viven en su ontología canónica, no acá:
 
 - **Identidad de los miembros** (se manifiestan por lo que hacen, identidad contextual, derecho al olvido, sin perfil público fuera de places) → `docs/ontologia/miembros.md`
-- **Comunicación** (discusiones como turnos editoriales, audios efímeros, lectores como presencia, temas dormidos) → `docs/ontologia/conversaciones.md`
+- **Comunicación** (Zona Discusión vs Discusión, traídas no autorizadas, lectores como presencia, una discusión nunca se cierra) → `docs/ontologia/conversaciones.md`
 - **Momentos compartidos** (eventos-ocasión vs ritual, acumulación como memoria cálida) → `docs/ontologia/eventos.md`
 - **Invariantes de dominio** (máx 150 miembros, mínimo 1 owner, slug inmutable, transferencia de ownership) → `docs/data-model.md`
 - **Horario y multi-tenancy** (gate por horario, routing por subdomain, slug inmutable) → `docs/multi-tenancy.md` y `docs/ontologia/conversaciones.md`

@@ -1,6 +1,6 @@
 # Eventos · objeto consolidado
 
-Documento final del objeto "evento" en Place. Todas las decisiones tomadas.
+Documento canónico del objeto "evento" en Place. Decisiones tomadas.
 
 > _Última actualización: 2026-05-16._ Ontología canónica del dominio. Si una decisión de producto cambia, se actualiza acá **en la misma sesión** y se ajusta la fecha; el schema (`docs/data-model.md`) es su expresión, no su fuente.
 
@@ -8,153 +8,96 @@ Documento final del objeto "evento" en Place. Todas las decisiones tomadas.
 
 ## El principio
 
-El evento en Place no es un ítem aislado de calendario. Es un **momento compartido del lugar**, con su vibe, su preparación colectiva, su suceder, y su memoria que se integra a la identidad del place.
+El evento en Place no es un ítem aislado de calendario. Es un **momento compartido del lugar**, con su preparación colectiva, su suceder, y su memoria que se integra a la identidad del place.
 
-Place tiene dos tipos de eventos, mismo objeto en datos pero tratamiento visual y narrativo diferenciado:
+**Un evento es una Discusión** (la Discusión es el primitivo, ver `docs/ontologia/conversaciones.md`): mismo hilo de mensajes y mismas reglas. Lo único que cambia es la **morfología del mensaje principal** — en vez del cuerpo libre de una discusión normal, es el formulario del evento.
 
-- **Evento-ocasión**: único, especial, con peso individual. "Juntada presencial en Córdoba el 9 de noviembre."
-- **Evento-ritual**: recurrente, parte de la identidad del place. "Misa del domingo", "Viernes de película online".
+Dos tipos, mismo objeto en datos, tratamiento narrativo distinto:
+
+- **Único (ocasión)**: especial, con peso individual. "Juntada presencial en Córdoba el 9 de noviembre."
+- **Recurrente (ritual)**: parte de la identidad del place. "Misa del domingo", "Viernes de película online".
 
 ---
 
-## Estructura del objeto evento
+## Estructura: el mensaje principal del evento
 
-### Identidad
+No admite cover (por ahora). Es casi el mismo formulario que un thread:
 
-- Cover visual y/o color (vibe-first, no info-first)
-- Título con peso tipográfico
-- Descripción en voz del host, no formulario
-- Tipo: ocasión o ritual
-- Naturaleza: presencial, virtual síncrono, híbrido
-- "Para quién es": texto explícito del alcance del evento
+- **Título del evento**: texto.
+- **Tipo de evento**: único | recurrente.
+- **Fecha del evento**: inicio y fin; si es recurrente, patrón de recurrencia (cada X días, en Y horarios).
+- **Texto**: cuerpo libre como en una discusión, con Lexical (enlaces, video, negritas, listas).
+- **Modalidad**: presencial → dirección física · online → link (Zoom/Meet/Discord externos) · híbrido → ambos.
+- **Visibilidad / acceso**: quién puede *abrir* el evento (entrar a la Discusión, participar, ver dirección/link, confirmar). Las opciones dependen de quién crea el evento, porque **un miembro no elige abstracciones que no conoce** (ver "Visibilidad y participación").
 
-### Tiempo
+El **hilo de mensajes** debajo del mensaje principal funciona igual que cualquier Discusión (vertical, citas, lectores como presencia, @menciones, nunca se cierra).
 
-- Fecha y hora de inicio (con timezone awareness para eventos virtuales con miembros distribuidos)
-- Duración estimada
-- Si es ritual: patrón de recurrencia (semanal, mensual, específico)
+### Zona horaria
 
-### Espacio
+El evento se crea en la zona horaria del creador y **cada persona lo ve en su propia zona horaria local** — siempre, tanto presencial como online. Quien mira el evento ve la hora ya convertida a su huso: sabe sin pensar a qué hora es "para él".
 
-- Si es presencial: dirección física
-- Si es virtual: link (Zoom/Meet/Discord externos, o sala integrada cuando exista)
-- Si es híbrido: ambos, físico y link, requeridos
+### Visibilidad y participación
 
-### Participantes
+**Todos los miembros del place ven que el evento existe** y de qué se trata (título, tipo, cuándo, descripción), siempre. Lo que se restringe es *abrirlo*: entrar a la Discusión, participar, confirmar, ver dirección/link. Quien no tiene acceso ve que existe pero no entra ni ve dirección/link.
 
-- Default: todos los miembros del place
-- Exclusiones manuales posibles al crear
-- "Para quién es" escrito explícitamente
-- Confirmación texturada: voy / voy si X / no voy pero aporto Y / no voy
-- Los excluidos pueden ver que el evento existe y de qué se trata, pero no pueden confirmar ni participar
+Opciones de acceso, según quién crea el evento (principio: un miembro nunca elige ni ve abstracciones que gestiona el owner y de las que no forma parte — coherente con identidad contextual, `docs/ontologia/miembros.md`):
 
-### Visibilidad
+- **Cualquier miembro** puede setear:
+  - **Público**: cualquier miembro del place abre y participa (default).
+  - **Usuarios específicos**: elige qué miembros pueden abrir/participar.
+  - **Su mismo grupo**: solo si el creador ya pertenece a un grupo, puede acotar el evento a ese grupo (lo conoce porque está en él). No puede elegir grupos ajenos ni tiers — no sabe que existen.
+- **El owner**, además: restringir a **cualquier grupo** o a **cualquier tier** (gestiona grupos y tiers, sabe que existen).
 
-- Evento visible para todo el place por default
-- Solo invitados pueden confirmar/asistir/entrar al evento durante su suceder
-- Memoria post-evento: visible para todo el place por default, configurable a "solo asistentes" si el creador lo define (caso típico: empresa con info sensible)
+Grupos y tiers son features futuras (ver `docs/decisions/0002-roles-gamificacion-handle.md` y `0003-lifecycle-cuenta-place-tombstone.md`); hasta que existan, el acceso es público o por usuarios específicos.
+
+**Confirmación texturada** (para quienes tienen acceso): voy / voy si X / no voy pero aporto Y / no voy.
+
+**Memoria post-evento:** usa exactamente la misma configuración de acceso del evento — no es una restricción aparte. Si el evento se restringió a Y usuarios, solo ellos ven la memoria.
 
 ---
 
 ## Los tres momentos del evento
 
-El evento en Place vive en tres momentos con tratamientos distintos:
-
 ### Momento 1 — Preparación colectiva (antes)
 
-El evento genera automáticamente un **thread en el foro** del place. Este thread es el espacio de preparación colectiva, y después se transforma en memoria del evento.
+El evento **es una Discusión** en la Zona Discusión desde que se crea: el hilo es el espacio de preparación colectiva y después se vuelve memoria. Se discute lo que corresponda según el tipo (asado: quién trae qué; misa: intenciones; workshop: material previo; película: votación y set-up; viaje: logística). **No hay templates prescriptivos** — el grupo usa el espacio según necesita.
 
-En el thread se discute lo que corresponda según el tipo de evento:
-
-- Asado presencial: quién trae qué
-- Misa: intenciones a mencionar, lectura previa, qué se celebra esta semana
-- Workshop: material previo, qué traer preparado, links
-- Viernes de película online: votación de peli, set-up del stream, quién tiene Plex/Disney
-- Juntada presencial a distancia: logística de viaje, alojamiento, quién viene de dónde
-
-**No hay templates prescriptivos**. El evento es una Discusión con todas sus reglas (hilo vertical, citas, "traído por"); cambia solo la morfología del mensaje principal. El grupo usa el espacio según lo que necesita.
-
-El thread está conectado bidireccional con el evento:
-
-- Desde el evento: botón/link "conversación del evento"
-- Desde el foro: el thread tiene header que dice "evento: [nombre], [fecha]" distinguiéndolo como thread de evento
-- En la lista de threads del foro, los threads de evento tienen marca visual distintiva
-
-La anticipación sube a medida que se acerca el evento. En la home del place, el evento gana peso visual cuando se acerca. El día anterior o el mismo día, es uno de los bloques protagonistas del bento.
+El mensaje principal del evento distingue visualmente a esta Discusión en la lista. La anticipación sube al acercarse: el evento gana peso visual en la home del place; el día anterior o el mismo día es uno de los bloques protagonistas.
 
 ### Momento 2 — El evento sucediendo (durante)
 
-Durante las horas del evento:
+- Presencial: punto de encuentro, mapa, contacto del organizador.
+- Online: link prominente; se entra y se participa.
+- Híbrido: ambos caminos disponibles, cada uno elige.
 
-- Si es presencial: el evento es en el mundo físico. El producto muestra punto de encuentro, mapa, contacto del organizador.
-- Si es virtual síncrono: el link al evento está prominente. Se entra y se participa.
-- Si es híbrido: ambos caminos disponibles, cada uno elige.
+**La home se transforma durante el evento, solo para quienes tienen acceso** ("el evento está pasando ahora — [entrar / ver punto de encuentro]"). Los que no tienen acceso siguen viendo el place funcional (nota "hay un evento en curso, no podés entrar").
 
-**La home del place se transforma durante el evento, pero solo para los invitados.** Si estás invitado y entrás al place durante esas horas, lo primero que ves es "el evento está pasando ahora — [botón para entrar/ver punto de encuentro]".
+**Horario del place × evento:**
 
-**Los no-invitados siguen viendo el place funcional**. Ven una nota "hay un evento en curso, no estás invitado" como información, pero pueden seguir interactuando con foro, biblioteca, etc.
-
-**Sobre el horario del place y el evento**:
-
-- Evento dentro del horario regular del place: se integra, el place está abierto normal, los invitados están "en el evento" mientras los demás pueden interactuar con otros objetos
-- Evento presencial fuera del horario regular: el place no se abre. Solo existe el evento físico.
-- Evento virtual fuera del horario regular: el place se abre solo para el evento. Si entrás, ves solo el evento, no otros objetos del place.
-- Durante un evento en horario regular, para los invitados: están "dentro del evento", no en otros objetos del place.
+- Dentro del horario regular: se integra; los invitados están "en el evento" mientras los demás interactúan con otros objetos.
+- Evento presencial fuera del horario regular: el place no se abre para miembros; solo existe el evento físico. (El owner siempre puede entrar — ver `docs/architecture.md` § "Gate de horario del place".)
+- Evento online fuera del horario regular: el place se abre solo para el evento; si entrás, ves solo el evento.
 
 ### Momento 3 — Memoria del evento (después)
 
-El evento terminó pero no desaparece. Entra en **período de memoria fresca** (~2-4 semanas) donde:
-
-- El thread del foro sigue vivo — fotos, comentarios, "qué bueno estuvo", recuerdos
-- El evento sigue apareciendo en la home del place pero con peso decreciente día a día
-- La gente puede seguir subiendo cosas, comentando
-
-Después de la memoria fresca, el evento pasa a **archivo del place** — parte permanente de la identidad histórica del lugar. El thread y todo su contenido quedan accesibles, pero ya no son protagonistas en la home.
-
-Los eventos archivados se integran en la **temporada/anuario del place**. La historia del lugar es la suma de sus momentos.
+El evento **no se cierra nunca** (es una Discusión). Después de que sucede solo se le pone un **marcador visual** ("finalizado" / "memoria") y se publica igual que siempre: fotos, comentarios, recuerdos, sin límite de tiempo. No hay transición automática a "archivo" ni cierre por antigüedad — evitar tener que ir cerrando cosas solas es justamente el punto. Lo único que cambia con el tiempo es la **prominencia en la home** (pierde peso visual a medida que pasa), pero la Discusión sigue abierta. Se integra a la **temporada/anuario**: la historia del lugar es la suma de sus momentos.
 
 ---
 
 ## Eventos-ritual y acumulación como memoria cálida
 
-Los eventos recurrentes tienen tratamiento distinto al único, aunque son el mismo objeto en datos.
+El ritual se visualiza **como patrón**, no como lista de instancias: próxima instancia destacada ("Misa del domingo, mañana 11:00"), acumulación como contexto cálido ("47ª misa dominical de este año"), historia accesible para profundizar.
 
-**Cómo se visualiza un ritual**:
-
-En la home del place, no aparecen 47 instancias de "misa del domingo" como lista. Aparece **el ritual como patrón**:
-
-- La próxima instancia destacada ("Misa del domingo, mañana a las 11:00")
-- La acumulación como contexto cálido ("47ª misa dominical de este año")
-- La historia del ritual es accesible si el miembro quiere profundizar — todas las instancias pasadas con sus threads de memoria
-
-**Qué NO hacemos (diferencia tonal con Duolingo/Strava)**:
-
-- No hay "streak" que se puede "romper"
-- No hay ansiedad por faltar
-- No hay castigo visual si una instancia se saltea
-- No hay comparación ni ranking entre miembros ("el más fiel", "el que más asistió")
-
-**Qué SÍ hacemos**:
-
-- La acumulación se celebra como memoria ("mirá cuánto hemos construido juntos")
-- Los huecos no rompen nada — quedan como parte natural de la historia
-- El valor está en lo que se hizo, no en el miedo a perderlo
-
-Si una misa se cancela por lluvia, no "se pierde" nada. Simplemente esa semana no hay misa. La siguiente sigue el patrón. El ritual no es frágil — es tejido acumulado del place.
-
-Esto conecta directamente con el concepto de **anuario/temporada**: al cerrar una temporada del place, los rituales acumulados quedan como parte visible de la historia. "En 2026, hicimos 48 misas dominicales. Fuimos a 12 retiros espirituales. Celebramos 8 bautismos."
+**NO**: streaks que se "rompen", ansiedad por faltar, castigo visual si se saltea una instancia, comparación o ranking entre miembros. **SÍ**: la acumulación se celebra como **memoria colectiva** ("mirá cuánto construimos juntos"), los huecos no rompen nada. Si una misa se cancela por lluvia, no se pierde nada — la siguiente sigue el patrón. Conecta con el anuario/temporada: "En 2026 hicimos 48 misas dominicales, 12 retiros, 8 bautismos." (Esto es acumulación colectiva permitida — ver principio en `docs/producto.md` y `docs/decisions/0002-roles-gamificacion-handle.md`.)
 
 ---
 
-## Lo que hereda el evento de otros objetos de Place
+## Lo que hereda el evento
 
-**Del horario del place**: la noción de tiempo del lugar se respeta y se integra.
-
-**De las discusiones**: el thread del evento es un thread del foro con todas sus reglas.
-
-**De los miembros**: los invitados son miembros del place, con sus avatares, nombres, contribuciones visibles. Los excluidos siguen siendo miembros del place.
-
-**De la identidad del place**: la paleta, tipografía, mark del place se ejercen en el evento. No es un objeto con branding propio.
+- **De la Discusión**: es una Discusión — hilo vertical, citas, lectores como presencia, @menciones, nunca se cierra.
+- **Del horario del place**: la noción de tiempo del lugar se respeta e integra (con la excepción del owner).
+- **De los miembros**: quienes tienen acceso son miembros del place, con sus avatares/nombres; quienes no tienen acceso siguen siendo miembros igual.
+- **De la identidad del place**: paleta, tipografía y mark del place. No tiene branding propio.
 
 ---
 
@@ -162,50 +105,33 @@ Esto conecta directamente con el concepto de **anuario/temporada**: al cerrar un
 
 Para proteger el primitivo y no convertirnos en Circle:
 
-- **No tiene waitlist** (place es íntimo, no hay tickets ni escasez artificial)
-- **No tiene ticketing/cobro** (si se necesita pago, se resuelve fuera del place con otra herramienta)
-- **No tiene streaming propio integrado** para el MVP (usa Zoom/Meet/Discord externos)
-- **No tiene moderación algorítmica** del thread (moderación humana, como el resto del place)
-- **No tiene "discover" público** (eventos son del place, no del mundo)
-- **No tiene competencia de asistencia** (no hay points por asistir, ni ranking, ni comparación de asistentes; sí puede haber reconocimiento cualitativo de rol tipo "siempre presente en los eventos" — ver principio en `docs/producto.md`)
+- No waitlist (place es íntimo, sin escasez artificial).
+- No ticketing/cobro integrado. Cobrar por un evento puntual es un eje distinto del billing del place (suscripción del owner / tiers de miembro, ver `docs/decisions/0003-lifecycle-cuenta-place-tombstone.md`); queda fuera de alcance hasta su propio spec.
+- No streaming propio integrado (MVP usa Zoom/Meet/Discord externos).
+- No moderación algorítmica (humana, como el resto del place).
+- No "discover" público (los eventos son del place, no del mundo).
+- No competencia de asistencia: no points, no ranking, no comparación de asistentes. Sí reconocimiento cualitativo de rol ("siempre presente en los eventos") — ver `docs/producto.md`.
 
 ---
 
 ## Abierto para después (no MVP)
 
-Algunas cosas que tienen sentido pensar pero no son bloqueantes para lanzar:
-
-- **Sala de video integrada**: construir propia vs siempre externa. Por ahora externa.
-- **Eventos con pago**: si la iglesia cobra retiro espiritual, ¿Place lo integra o se resuelve fuera? Por ahora fuera.
-- **Invitaciones a no-miembros**: ¿un place puede invitar a alguien externo a un evento puntual? Por ahora no. Para estar en un evento, tenés que ser miembro del place.
-- **Timezone display avanzado**: para eventos con gente en muchos timezones, mostrar la hora local de cada uno. Nice-to-have.
-- **Integración con calendario externo** (Google Calendar, Apple Calendar): agregar el evento al calendario del usuario. Muy útil pero no core.
+- Sala de video integrada (por ahora externa).
+- Eventos con pago (eje distinto; depende del modelo de billing/tiers y su spec).
+- Invitaciones a no-miembros (por ahora no: para estar en un evento hay que ser miembro del place).
+- Integración con calendario externo (Google/Apple Calendar).
 
 ---
 
-## Estado del core de Place
+## Estado
 
-Con eventos cerrado, el core completo del place queda definido:
-
-1. **Discusiones** — listo
-2. **Miembros + perfil contextual + DMs** — listo
-3. **Eventos** — listo (este documento)
-4. **Home del place** — primer mockup bento existente, necesita refactor sin vocabulario inventado y con eventos integrados
-
-Los objetos adicionales (biblioteca/documentos, cursos, chat en vivo, etc) son addons que pueden sumarse pero no son core.
+**Ontología:** cerrada — este documento es canónico. **Implementación:** no empezada (scaffold limpio; no hay UI). El detalle de pantallas vive en el spec de la feature cuando se construya, no acá.
 
 ---
 
-## Lo que viene ahora
+## Referencias cruzadas
 
-Con los cuatro objetos del core definidos, tres caminos posibles:
-
-**Uno — UI del objeto evento** (pantallas: crear evento, ver evento próximo, evento durante, evento en memoria, ritual con acumulación).
-
-**Dos — Rehacer home del place** con los cuatro objetos reales y sin vocabulario inventado. Este era el pendiente más fuerte.
-
-**Tres — Definir los flows de producto** (onboarding de crear place, onboarding de sumarse a place, flow de invitar miembros, etc) antes de más UI de detalle.
-
-Mi recomendación: **dos primero**. La home es lo que define la experiencia del place y todavía no la resolvimos bien. Con los cuatro objetos core cerrados, podemos rehacer la home de verdad.
-
-Pero decime vos.
+- `docs/ontologia/conversaciones.md` — la Discusión, primitivo del que el evento es una variante
+- `docs/ontologia/miembros.md` — invitados/participantes son miembros del place
+- `docs/producto.md` — principios de experiencia (acumulación colectiva vs vanidad)
+- `docs/architecture.md` § "Gate de horario del place" — regla técnica del gate (excepción owner)

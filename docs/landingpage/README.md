@@ -60,6 +60,8 @@ Orden de alta conversión 2026, con qué decir / qué NO:
 - **WCAG 2.2 AA**: contraste 4.5:1 (cuidado con paleta tenue), targets ≥24px (44 en mobile), `:focus-visible` de alto contraste, HTML semántico (1 `<h1>`, landmarks), `lang` por locale, skip-link, sin info solo-por-color, reflow 320px, texto en `rem`.
 - **Mobile-first**: una columna, CTA sin scroll, cuerpo ≥16px, targets ≥44px, sin depender de hover.
 
+**Dirección de arte (calmo ≠ soso):** restraint mal ejecutado se lee como vacío. La presencia se logra con **oficio, no con ruido**: contraste de escala tipográfica (titulares enormes y quietos vs cuerpo chico), un **visual protagonista trabajado** en el hero (composición tipográfica/SVG/ilustración cálida, no una foto stock ni la nada), ritmo y composición de secciones (grilla, asimetría intencional), textura del papel y el acento usado en los puntos justos. El producto no está construido → **donde irían capturas reales del producto van placeholders/imágenes de ejemplo claramente marcados** (`[CAPTURA: …]`) para reemplazar cuando exista la UI. Un dev no debe construir algo plano por seguir el spec literal: el plan de implementación especifica la dirección de arte.
+
 ## Performance (cómo se logra el <200ms)
 
 - **SSG puro servido desde el edge de Vercel.** Cero APIs dinámicas (`cookies()`/`headers()`/dinámico) en el árbol → TTFB decenas de ms. (La regla de "streaming agresivo del shell" de `architecture.md` **NO** aplica: es para pages con datos, no para una landing estática — no meter `<Suspense>` artificial.)
@@ -90,6 +92,10 @@ Orden de alta conversión 2026, con qué decir / qué NO:
 1. **`localePrefix` = `always`** (`/es` `/en` `/fr` `/pt`), default `es`, `x-default`→es. Es la opción más limpia para SEO multi-idioma: cada locale con su path canónico explícito, `hreflang` sin ambigüedad, sin el caso raro del default-sin-prefijo.
 2. **Hero = composición tipográfica/SVG** (opción 2: más rápida, coherente con el DNA, sin imagen en el critical path). Si no convence al ver el resultado, se pasa a imagen.
 3. **Voz**: amistosa y cercana; diferenciación moderada (capturar, no sermonear).
+3b. **Modo = B (landing de producto)**: CTA → `/login` → onboarding (bifurca crear/unirse/invitación). No es waitlist.
+3c. **Tipografía**: Fraunces (titulares) + Inter (cuerpo), variable, self-hosted `next/font`.
+3d. **Paleta = Papel cálido**: `--bg #FAF7F0` · `--surface #FFFFFF` · `--ink #1C1B22` · `--muted #6B6A73` · `--border #E7E2D6` · `--accent #C4632F` (terracota) · `--accent-ink #FFFFFF`. 1 acento, usado con intención (CTA, kickers).
+3e. **Contacto**: `hola@place.community`.
 4. **CTA**: una sola acción/mensaje, **repetida ≥3 veces** (hero, tras solución, cierre). No un único botón (riesgo).
 5. **Pricing en la landing (MVP)**: se muestra, con **30 días gratis** como promesa destacada; Hobby **$7/mes**, Comunidad **$30/mes**. Comisión por plan aún sin fijar (ADR-0004 pendiente cuando se cierre).
 6. **Footer/legales**: Términos, Privacidad, Contacto.
@@ -99,7 +105,7 @@ Orden de alta conversión 2026, con qué decir / qué NO:
 
 1. Owner revisa/ajusta este diseño (sobre todo posicionamiento, copy, y las decisiones).
 2. Registrar decisiones en `docs/decisions/`.
-3. Implementación en código — **sesión aparte** (frontend = su propia sesión).
+3. Implementación en código — **sesión aparte** (frontend = su propia sesión). Runway en `docs/landingpage/implementation-plan.md`.
 4. Deploy a Vercel — **requiere autorización explícita** ("push").
 
 ---

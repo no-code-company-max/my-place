@@ -1,64 +1,26 @@
-# Place
+# CLAUDE.md
 
-Place es un lugar digital pequeño e íntimo para hasta 150 personas. Es **cozytech**: un espacio tranquilo donde entrás, te ponés al día de lo que pasa, participás si querés, y salís. Como entrar a un pub conocido — no como abrir una red social.
-
-**No es:** un feed con scroll infinito, una app que compite por atención, un producto con notificaciones agresivas, un sistema con métricas de engagement, ni una plataforma con gamificación.
-
-**Es:** un lugar con miembros, conversaciones, eventos y memoria compartida. Donde cada place tiene su identidad visual propia y su propio ritmo.
+Reglas operativas para no romper este proyecto. El producto/dominio se documenta una sola vez en `docs/`; acá se apunta, no se copia.
 
 ## Estado del proyecto
 
-El código fue **reseteado a un scaffold limpio** (Next.js 15 + TS + Tailwind). No hay features implementadas todavía. La capa de datos migra a **Neon (Postgres 17)**; auth, storage, realtime, pagos y el método de acceso a la DB están **TBD**. La historia previa (implementación Prisma+Supabase) queda en `git log`.
+- Scaffold limpio, **sin features implementadas** — no busques features que no existen.
+- Acceso a datos, auth, storage, realtime y pagos están **TBD**: no asumas que existen ni los elijas vos. **NO se vuelve a Prisma.** Stack y estado de los TBD en `docs/stack.md`.
+- **Antes de tocar UI o tomar una decisión de producto, leé `docs/producto.md`** (visión + principios de experiencia, canónico).
 
-## Documentos de referencia
+## Mapa de documentos canónicos
 
-Para entender el producto y el proyecto en profundidad:
+Cada cosa vive en un solo lugar. Antes de implementar, leé el doc que corresponda:
 
-- `docs/architecture.md` — decisiones técnicas, paradigma, índice
-- `docs/stack.md` — stack técnico y variables de entorno (estado de los TBD)
+- `docs/producto.md` — visión y principios de experiencia/diseño (transversal)
+- `docs/architecture.md` — paradigma, decisiones técnicas, índice arquitectónico
+- `docs/stack.md` — stack técnico, variables de entorno, estado de los TBD
 - `docs/data-model.md` — schema SQL del core e invariantes del dominio
-- `docs/multi-tenancy.md` — routing por subdomain, DNS, middleware
-- `docs/ontologia/` — documentos canónicos de cada objeto (conversaciones, eventos, miembros)
+- `docs/multi-tenancy.md` — routing por subdomain, DNS, middleware, slug inmutable
+- `docs/ontologia/` — documentos canónicos de cada objeto del core (`miembros.md`, `conversaciones.md`, `eventos.md`)
 - `docs/landingpage/` — arquitectura y contenido de la landing pública
 
 Otros docs (blueprint, features, mockups, pre-launch-checklist, gotchas, decisions) se eliminaron en el reset y se reescriben cuando corresponda.
-
-## Principios no negociables del producto
-
-Estos principios definen el DNA de Place. Violarlos es violar qué es el producto.
-
-### Sobre la experiencia
-
-- **Nada parpadea, nada grita, nada demanda atención.** La información está disponible para el que mire, nunca se impone.
-- **Sin métricas vanidosas.** No se muestran contadores que no aporten al lugar ("47 eventos en memoria", "el más consultado esta semana").
-- **Sin urgencia artificial.** Nada de "EN 2 DÍAS", "ÚLTIMA CHANCE", countdowns o similar.
-- **Sin gamificación.** No hay streaks, badges, puntos, niveles, rankings, achievements.
-- **Sin push notifications agresivas.** El MVP no tiene push notifications. Sumar notificaciones requiere decisión de producto, no técnica.
-- **Sin infinite scroll.** Los feeds interminables son el paradigma opuesto.
-- **Presencia silenciosa.** Quién está se comunica visualmente (burbuja con borde verde), nunca con texto ansioso ni animaciones.
-- **Customización activa, no algorítmica.** El admin del place configura colores. El orden y la personalización son decisión humana, no del algoritmo.
-
-### Sobre la identidad de los miembros
-
-- **Los miembros se manifiestan por lo que hacen**, no por lo que declaran. Sin bios, sin "about me", sin selección curada de identidad.
-- **La identidad es contextual.** Lo que sos en un place no viaja a otro. Solo nombre, avatar y handle opcional son universales.
-- **Derecho al olvido estructurado.** El contenido que alguien crea queda en el place; su rastro personal se borra al salir; su nombre se desliga del contenido tras 365 días.
-- **Sin perfil público fuera de places.** No existe `/user/max`. Si no compartís un place conmigo, no me podés ver.
-
-### Sobre los lugares
-
-- **Máximo 150 miembros por place.** Es un invariante del dominio, no una validación UI. Intentar superarlo falla en el modelo.
-- **Cada place tiene identidad visual propia**, configurable por el admin. El producto provee defaults; cada place los personaliza dentro de límites que protegen usabilidad.
-- **Cada place tiene su propio horario.** Fuera del horario el place no está accesible: ningún miembro ve contenido (foro, eventos, threads, miembros). Admin/owner mantiene acceso solo a `/settings/*` para poder configurar el horario. El gate vive a nivel del place (`[placeSlug]/(gated)/layout.tsx`), no por feature.
-- **Mínimo 1 owner siempre.** Un place no puede quedar sin owner. Transferir ownership requiere que el receptor sea miembro actual.
-- **Slug del place es inmutable una vez creado.**
-
-### Sobre la comunicación
-
-- **Las discusiones son turnos editoriales, no chat.** Mensajes largos, pensados, sin presión de respuesta inmediata.
-- **Los audios son efímeros.** Se escuchan durante 24 horas, después queda solo la transcripción como texto.
-- **Los lectores son parte de la conversación.** Leer es una forma visible de presencia, no lurking invisible.
-- **Los temas dormidos no mueren.** Cualquier mensaje reactiva un tema de hace meses al estado vivo.
 
 ## Paradigma arquitectónico
 
@@ -73,29 +35,26 @@ Si rompés esta regla, rompés el paradigma entero y perdés la capacidad de agr
 
 ## Reglas de vibecoding
 
-Cómo trabajamos con Claude Code en este proyecto.
-
 ### Antes de implementar
 
 - **Diagnosticar antes de implementar.** Leer archivos relevantes, reportar estado actual, identificar patrones existentes. Nunca asumir paths, tipos, o convenciones — verificar.
-- **Leer la ontología antes de tocar una feature del core.** Discusiones, eventos y miembros tienen documentos canónicos. La implementación los respeta, no los reinterpreta.
-- **Spec antes de código.** Features nuevas requieren especificación en `docs/features/` antes de implementarse. La spec describe comportamiento esperado, no implementación.
-- **Pages de detalle siguen el patrón "streaming agresivo del shell".** Top-level await SÓLO para validación de existencia + redirect; todo lo demás vive bajo `<Suspense>`. Ver `docs/architecture.md` § "Streaming agresivo del shell" para la regla canónica + implementaciones de referencia. **Aplica a pages nuevas y refactor de pages existentes que tengan `await Promise.all` en el shell**.
+- **Documentación primero.** Antes de implementar, revisar si hay doc relevante en `docs/`. Si existe: la implementación la respeta; si algo cambia, se actualiza el doc y se anota la fecha de última actualización. Si es algo nuevo: se documenta antes de codear (comportamiento esperado, no implementación).
+- **Pages de detalle:** antes de construir o refactorizar una, consultar `docs/architecture.md` § "Streaming agresivo del shell" para confirmar el patrón vigente. No replicar la regla de memoria.
 - **Triple review antes de ejecutar.** Todo prompt se revisa tres veces contra `docs/architecture.md` y `CLAUDE.md` antes de ejecutar.
 
 ### Durante la implementación
 
 - **TDD obligatorio.** Tests primero, verificar que fallan, implementar, verificar que pasan. Sin excepciones en el core.
 - **Un prompt = una responsabilidad.** Si una tarea toca más de 5 archivos o mezcla backend con frontend, dividir en sesiones separadas.
-- **Sesiones focalizadas y cortas.** Backend y frontend en sesiones separadas cuando sea posible. Usar `/compact` al 70% del contexto.
+- **Sesiones focalizadas y cortas.** Backend y frontend en sesiones separadas cuando sea posible. Usar `/compact` al 60% del contexto.
 - **Sin libertad para decisiones arquitectónicas.** Las decisiones están en `docs/architecture.md`. Si algo no está claro, pausar y consultar, no improvisar.
 - **Nunca asumir el estado del código.** Siempre leer el archivo antes de modificarlo, porque puede haber cambiado desde la última vez que se revisó.
 
 ### Después de implementar
 
-- **Cada sesión se auto-verifica.** Correr tests, typecheck, reportar líneas de archivos tocados.
-- **Documentar decisiones arquitectónicas.** Cambios que afectan paradigma o estructura se registran en `docs/architecture.md` o `docs/decisions/`.
-- **Gotchas compartidos.** Problemas sutiles descubiertos durante el desarrollo se anotan en la sección Gotchas más abajo, para que el contexto persista entre sesiones.
+- **Auto-verificar:** correr tests y typecheck, reportar archivos tocados con sus líneas.
+- **Cambios de paradigma/estructura** se registran en `docs/architecture.md` o `docs/decisions/`.
+- **Gotchas nuevos** van a la sección Gotchas (criterio abajo).
 
 ## Seguridad de secrets
 
@@ -106,14 +65,7 @@ Cómo trabajamos con Claude Code en este proyecto.
 
 ## Límites de tamaño
 
-Acotar el tamaño hace que el código sea auditable por humanos y por agentes. No son cosméticos.
-
-- **Archivos:** máximo 300 líneas
-- **Funciones:** máximo 60 líneas
-- **Feature completa:** máximo 1500 líneas
-- **Servicio/módulo:** máximo 800 líneas
-
-Si algo supera estos límites, se divide antes de continuar.
+Superar un límite = dividir antes de continuar. Archivo ≤ 300 líneas · función ≤ 60 · feature ≤ 1500 · servicio/módulo en `shared/` ≤ 800.
 
 ## Idioma
 
@@ -123,27 +75,16 @@ Si algo supera estos límites, se divide antes de continuar.
 
 ## Estilo de código
 
-- **Estado inmutable en React.** Patrón de copia explícita. No mutar in-place.
-- **Server Components por default, Client Components solo cuando hacen falta.**
-- **Tipos estrictos.** Sin `any`, sin type assertions innecesarios, sin `@ts-ignore` excepto con justificación escrita.
-- **Validación con Zod** para todo input externo (forms, API, webhooks).
-- **Tailwind solo para layout y spacing.** Los colores del place viven como CSS custom properties configurables por el admin, no como clases Tailwind hardcoded.
+- **Tailwind solo para layout y spacing.** Los colores del place son CSS custom properties configurables por el admin, nunca clases Tailwind hardcoded.
+- **Zod para todo input externo** (forms, API, webhooks).
+- `any`/`@ts-ignore` solo con justificación escrita.
 
 ## Gotchas
 
-Los gotchas del proyecto previo se eliminaron en el reset. Se reconstruyen a medida que aparezcan.
+Agregar uno cuando un comportamiento (a) no es derivable del código, (b) tiene síntoma confuso, (c) volvería a morder: crear `docs/gotchas/<slug>.md` + índice en `docs/gotchas/README.md`.
 
-**Cuándo agregar uno nuevo:** cuando descubrís un comportamiento que (a) no es derivable del código, (b) tiene un síntoma confuso, y (c) volvería a morder a alguien en el futuro. Crear `docs/gotchas/<topic-slug>.md` (creando el directorio si hace falta) y sumarlo a un índice en `docs/gotchas/README.md`.
+- **`next build` + `NODE_ENV`:** falla con error falso de `<Html> should not be imported outside of pages/_document` si el shell tiene `NODE_ENV=development`. Por eso el script `build` usa `cross-env NODE_ENV=production next build`.
 
-**Gotcha vigente heredado:** `next build` falla con un error falso de `<Html> should not be imported outside of pages/_document` si el shell tiene `NODE_ENV=development`. Por eso el script `build` usa `cross-env NODE_ENV=production next build`.
+## Ante una desviación
 
-## Qué hacer cuando tengas dudas
-
-Si en algún momento de la implementación pensás que vale la pena desviarte de estos principios, del paradigma, o de una decisión en `docs/architecture.md`:
-
-1. Pausá. No implementes la desviación.
-2. Consultame el motivo.
-3. Si acordamos la desviación, la registramos en `docs/decisions/` con fecha y razón.
-4. Recién ahí implementás.
-
-Nunca tomes una decisión arquitectónica solo durante una sesión de código.
+Nunca tomes una decisión arquitectónica solo durante una sesión. Si querés desviarte de un principio, del paradigma o de una decisión en `docs/architecture.md`: pausá, no la implementes, consultá el motivo. Si se acuerda, se registra en `docs/decisions/` con fecha y razón **antes** de implementar.

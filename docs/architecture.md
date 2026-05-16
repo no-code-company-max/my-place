@@ -4,6 +4,8 @@ Paradigma: **Modular Monolith con Vertical Slices**. Priorizamos calma, estabili
 
 Este documento es el índice de las decisiones arquitectónicas. El detalle de cada área vive en `docs/`.
 
+> _Última actualización: 2026-05-15._ Documento vivo: si un cambio de código afecta una decisión de esta página, se actualiza **en la misma sesión** y se ajusta la fecha. Un doc viejo desinforma al agente — los specs stale causan fallos silenciosos.
+
 ## Principios de organización
 
 - **Vertical slices sobre capas horizontales**: cada feature agrupa toda su lógica —UI, server actions, queries, schemas, tests— en un único directorio.
@@ -34,20 +36,34 @@ src/
 
 ## Límites de tamaño
 
-- Archivo: máximo 300 líneas
-- Función: máximo 60 líneas
-- Feature completa: máximo 1500 líneas
-- Servicio/módulo en `shared/`: máximo 800 líneas
+Canónico en `CLAUDE.md` › Límites de tamaño. Superar un límite = dividir antes de continuar.
 
-Superar un límite es señal de que hay que dividir.
+## Sesión y SSO
 
-## Cookies de sesión cross-subdomain (regla a reinstaurar)
+Auth provider: **Neon Auth** (sobre Better Auth) — ver `docs/stack.md`. Place actúa como **su propio OIDC Identity Provider** (plugin OIDC Provider de Better Auth): el modelo "Sign in with Google", pero el IdP somos nosotros.
 
-> El proveedor de auth es **TBD**. Cuando se elija, esta regla se reescribe con los detalles concretos. Se conserva el principio porque la arquitectura multi-tenant por subdomain lo va a requerir igual.
+**Topología:**
 
-**Principio:** cualquier cookie de sesión compartida entre el apex y los subdomains de place DEBE setear `Domain=<apex>` explícito (resuelto desde `NEXT_PUBLIC_APP_DOMAIN`; `place.community` en prod, sin domain en dev local).
+- **IdP central** en el apex (`auth.place.community`), con su propia sesión (cookie `Domain=place.community`).
+- Cada dominio de place —`{slug}.place.community`, custom domains (`community.empresa.com`)— y el inbox universal (`app.place.community`) son **Relying Parties** del mismo IdP.
 
-**Por qué:** cookies host-only (sin `Domain`) en un subdomain place sobrescriben las del apex. Por **RFC 6265 § 5.3 step 6** las host-only tienen precedencia y aparecen primero en el `Cookie` header, así que el código de sesión puede leer una cookie host-only (potencialmente inválida) en vez de la apex correcta. Cuando se reimplemente auth, agregar un test guard estático que falle el build si se emite una cookie de sesión sin `Domain`.
+**Flujo:** dominio sin sesión local → redirect al IdP → si el IdP ya tiene sesión, emite auth code **silencioso** (sin re-prompt) → callback en el dominio → el dominio setea su **propia sesión local** (scopeada a su host). Un solo login → SSO silencioso a todos los places (subdomain y custom domain) y al inbox.
+
+**Por qué no rompe "inbox universal" ni el aislamiento:** el SSO ocurre vía el flujo OIDC (auth code → tokens), **no compartiendo cookies cross-domain**. Cada dominio mantiene su sesión local aislada; lo único compartido es la sesión del IdP. El inbox universal (ontología en `docs/ontologia/miembros.md`) es un RP más → se llega con SSO silencioso desde cualquier place, incluso uno con dominio propio.
+
+**Cookie del IdP:** la sesión del IdP en el apex DEBE setear `Domain=place.community` explícito (sin `Domain` en dev local; resuelto desde `NEXT_PUBLIC_APP_DOMAIN`). Test guard que falle el build si se emite sin `Domain`: una cookie host-only (sin `Domain`) en un subdomain sobrescribe la del apex (RFC 6265 §5.3, host-only tienen precedencia y van primero en el header `Cookie`).
+
+**TBD acotado (se decide al implementar auth):** firma de ID tokens (JWT plugin, RS256/EdDSA) y registro de clients (estático vs dynamic client registration).
+
+## Gate de horario del place
+
+Fuera del horario, el place no es accesible para contenido: ningún miembro ve foro, eventos, threads ni miembros. Admin/owner mantiene acceso **solo** a `/settings/*` para poder configurar el horario.
+
+**Regla técnica:** el gate vive a nivel del place en `[placeSlug]/(gated)/layout.tsx`, **no por feature**. Cada feature confía en que el layout ya validó el acceso; no reimplementa la verificación de horario. El comportamiento de producto (qué ve cada rol fuera de horario) es canónico en `docs/ontologia/conversaciones.md`.
+
+## Presupuesto de performance
+
+Objetivo: una page con sus queries a la DB renderiza y carga en **≤200ms**. Es el NFR que motiva dos decisiones de abajo: el patrón de streaming agresivo del shell (FCP inmediato sin esperar queries) y la co-location de Neon en la misma región que las Functions (ver `docs/stack.md` § Región). Toda page nueva se mide contra este presupuesto.
 
 ## Streaming agresivo del shell
 
@@ -126,34 +142,14 @@ Los 3 Suspense children del page suelen compartir queries (ej: `resolveViewerFor
 
 Aún no existen (reset a scaffold limpio). La primera page de detalle que se construya con este patrón queda como implementación canónica y se referencia acá.
 
-## Regla de sesiones
-
-- Una sesión = una cosa. Nunca mezclar capas (UI + lógica, DB + API, migración + feature).
-- Si un cambio toca más de 5 archivos o cruza backend/frontend, partir en múltiples sesiones.
-- Si una funcionalidad no cabe cómodamente en el 70% de la ventana de contexto, dividir.
-- Al terminar, auto-verificar: `pnpm test`, `pnpm typecheck`, y reportar líneas de archivos tocados.
-
-## Documentos de detalle
-
-Cada área técnica tiene su propio documento. Leer el relevante antes de implementar.
-
-- [`docs/stack.md`](stack.md) — stack técnico completo y variables de entorno
-- [`docs/multi-tenancy.md`](multi-tenancy.md) — routing por subdomain, DNS, middleware
-- [`docs/data-model.md`](data-model.md) — schema SQL del core e invariantes del dominio
-- [`docs/ontologia/`](ontologia/) — documentos canónicos de cada objeto (conversaciones, eventos, miembros)
-- [`docs/landingpage/`](landingpage/) — arquitectura y contenido de la landing pública
-
-Otros docs (feature-flags, billing, realtime, notifications, theming, roadmap) se eliminaron en el reset y se reescriben cuando la feature correspondiente se reconstruya.
-
 ## Checklist de validación por feature
 
 Antes de dar por terminada una feature, verificar:
 
 - [ ] Todos los archivos viven dentro de `src/features/<feature>/`
 - [ ] No hay imports cruzados hacia archivos internos de otras features
-- [ ] Ningún archivo supera 300 líneas ni función 60
-- [ ] Feature completa ≤ 1500 líneas
+- [ ] Respeta los límites de tamaño (ver `CLAUDE.md`)
 - [ ] Dependencias externas son solo `db/`, `shared/` y otras features vía `public.ts`
 - [ ] Existe spec en `docs/features/<feature>/`
-- [ ] Respeta los principios no negociables (ver `CLAUDE.md`)
+- [ ] Respeta los principios no negociables de experiencia (ver `docs/producto.md`)
 - [ ] `pnpm test` y `pnpm typecheck` pasan en verde

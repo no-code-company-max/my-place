@@ -2,7 +2,7 @@
 
 Elecciones tecnológicas de Place y justificación de cada una. Cualquier cambio de stack se registra acá antes de implementarse.
 
-> **Estado:** post reset a scaffold limpio. La capa de datos migra a **Neon (Postgres)**. Auth, Storage, Realtime, Pagos y método de acceso a la DB (ORM/driver) están **por definir (TBD)** — se deciden en sesiones futuras antes de implementarse.
+> **Estado:** post reset a scaffold limpio. La capa de datos migra a **Neon (Postgres)** y auth a **Neon Auth**. Storage, Realtime, Pagos, i18n y método de acceso a la DB (ORM/driver) están **por definir (TBD)** — se deciden en sesiones futuras antes de implementarse.
 
 ## Piezas
 
@@ -13,7 +13,7 @@ Elecciones tecnológicas de Place y justificación de cada una. Cualquier cambio
 | UI library     | React 19                                        | Estándar                                                                                           |
 | Base de datos  | PostgreSQL 17 gestionado por **Neon**           | Postgres serverless con branching; relacional denso; aislamiento de places vía RLS de Postgres     |
 | Acceso a datos | **TBD**                                         | ORM vs query builder vs SQL plano sin decidir. NO se vuelve a Prisma.                               |
-| Auth           | **TBD**                                         | Sin proveedor de auth elegido. Decisión de producto + técnica pendiente.                           |
+| Auth           | **Neon Auth** (sobre Better Auth)               | Mismo proveedor que la DB. Place es su propio OIDC IdP (plugin OIDC Provider) → SSO cross-domain para custom domains + inbox (ver `architecture.md` § Sesión y SSO). Migración: neon.com/docs/auth/migrate/from-legacy-auth |
 | Storage        | **TBD**                                         | Avatares / assets del place: proveedor pendiente.                                                  |
 | Realtime       | **TBD**                                         | Si se necesita, se decide acotadamente cuando aparezca el caso de uso.                             |
 | Pagos          | **TBD**                                         | Los modos de billing del producto requieren decisión antes de implementar.                         |
@@ -21,6 +21,7 @@ Elecciones tecnológicas de Place y justificación de cada una. Cualquier cambio
 | Estado cliente | Zustand                                         | Simple, sin boilerplate. Uso mínimo — preferir URL y server state                                  |
 | Data fetching  | Server Components (server-first)                | Datos estables vía RSC. Mutations vía Server Actions. Capa de cliente para mutations/realtime: TBD |
 | Forms          | React Hook Form + Zod                           | Validación tipada server + client                                                                  |
+| i18n           | **TBD**                                         | Multi-idioma del contenido estático. ES base day-one; EN/FR/PT roadmap. Librería/estrategia sin decidir. Requisito de producto en `docs/producto.md` |
 | Testing        | Vitest + Playwright                             | Unit/integration con Vitest (jsdom); E2E con Playwright                                            |
 | Hosting        | Vercel                                          | Wildcard subdomains nativos, edge middleware, deploy automático                                    |
 

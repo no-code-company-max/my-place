@@ -48,9 +48,10 @@ src/app/
 
 Un place puede configurar su propio dominio en vez del subdomain asignado: en vez de `mio.place.community`, servirse en `community.empresa.com`. El subdomain `{slug}.place.community` sigue existiendo siempre como fallback canónico.
 
-- **Routing:** el middleware resuelve el place por hostname. Si el host no es `*.place.community` ni el apex, se busca el place por su custom domain mapeado (tabla de dominios → `place_id`); si no matchea, 404.
-- **DNS/SSL:** el dueño del place apunta su dominio a Vercel; el dominio se agrega vía la API de domains de Vercel (SSL automático). Flujo de verificación de propiedad: **TBD**.
-- **Sesión:** un custom domain no comparte la cookie del apex, pero el miembro igual tiene SSO silencioso: cada custom domain es un Relying Party del IdP OIDC central de Place. Login único, sesión local aislada por dominio. Ver `docs/architecture.md` § "Sesión y SSO".
+- **Routing:** el middleware resuelve el place por hostname. Si el host no es `*.place.community` ni el apex, se busca el place por `place_domain` (ver `data-model.md`); resuelve **solo dominios verificados**; si no matchea, 404.
+- **Alta y verificación (vía Vercel Domains API, sin trabajo manual):** el dueño escribe su dominio en la UI del place → el backend lo agrega al proyecto con `POST /v10/projects/{project}/domains` → Vercel devuelve los records DNS + challenge → se muestran en la UI → el dueño los pone en su DNS provider (su único paso manual) → polleamos el estado hasta `verified: true`; Vercel emite el SSL solo. Recién ahí se setea `place_domain.verified_at`. Vercel es la única fuente de verdad de verificación + SSL.
+- **OIDC client:** al verificarse el dominio, el backend provisiona su client OIDC confidencial (`place_domain.oauth_client_id`); al archivar el dominio, se revoca.
+- **Sesión:** un custom domain no comparte la cookie del apex, pero el miembro igual tiene SSO silencioso vía el flujo OIDC. Login único, sesión local aislada por dominio. Canónico en `docs/architecture.md` § "Sesión y SSO".
 
 ## Development local
 

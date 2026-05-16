@@ -42,18 +42,20 @@ Canónico en `CLAUDE.md` › Límites de tamaño. Superar un límite = dividir a
 
 Auth provider: **Neon Auth** (sobre Better Auth) — ver `docs/stack.md`. Place actúa como **su propio OIDC Identity Provider** (plugin OIDC Provider de Better Auth): el modelo "Sign in with Google", pero el IdP somos nosotros.
 
-**Topología:**
+**Dos mundos de sesión:**
 
-- **IdP central** en el apex (`auth.place.community`), con su propia sesión (cookie `Domain=place.community`).
-- Cada dominio de place —`{slug}.place.community`, custom domains (`community.empresa.com`)— y el inbox universal (`app.place.community`) son **Relying Parties** del mismo IdP.
+- **`*.place.community` (subdomains + inbox):** una sola sesión compartida vía **cookie cross-subdomain** `Domain=place.community`. El inbox (`app.place.community`) y `{slug}.place.community` comparten esa cookie — **no son RPs OIDC**. El IdP central vive acá (`auth.place.community`).
+- **Custom domains (`community.empresa.com`):** registrable domain distinto, no puede compartir la cookie apex. Cada custom domain es un **Relying Party OIDC** con su propio client confidencial (`client_id`/`secret` propios, `redirect_uri` exacta), **provisionado por el backend en el flujo de verificación del dominio** (ver `docs/multi-tenancy.md`). Un client por dominio: aislamiento por tenant, revocación quirúrgica, sin blast radius, exact redirect-URI match.
 
-**Flujo:** dominio sin sesión local → redirect al IdP → si el IdP ya tiene sesión, emite auth code **silencioso** (sin re-prompt) → callback en el dominio → el dominio setea su **propia sesión local** (scopeada a su host). Un solo login → SSO silencioso a todos los places (subdomain y custom domain) y al inbox.
+**Flujo de SSO (solo custom domains):** custom domain sin sesión local → redirect al IdP → si el IdP ya tiene sesión, emite auth code **silencioso** (sin re-prompt) → callback en el custom domain → setea su **propia sesión local** scopeada a su host. Un solo login en el IdP → SSO silencioso a todos los places del miembro, con o sin dominio propio.
 
-**Por qué no rompe "inbox universal" ni el aislamiento:** el SSO ocurre vía el flujo OIDC (auth code → tokens), **no compartiendo cookies cross-domain**. Cada dominio mantiene su sesión local aislada; lo único compartido es la sesión del IdP. El inbox universal (ontología en `docs/ontologia/miembros.md`) es un RP más → se llega con SSO silencioso desde cualquier place, incluso uno con dominio propio.
+**Por qué no rompe "inbox universal" ni el aislamiento:** el SSO cross-domain ocurre vía el flujo OIDC (auth code → tokens), **no compartiendo cookies cross-domain**. Cada custom domain mantiene su sesión local aislada; lo único compartido es la sesión del IdP. El inbox universal (ontología en `docs/ontologia/miembros.md`) vive en `app.place.community` → se alcanza con la cookie compartida del apex, o vía SSO silencioso desde un custom domain.
 
-**Cookie del IdP:** la sesión del IdP en el apex DEBE setear `Domain=place.community` explícito (sin `Domain` en dev local; resuelto desde `NEXT_PUBLIC_APP_DOMAIN`). Test guard que falle el build si se emite sin `Domain`: una cookie host-only (sin `Domain`) en un subdomain sobrescribe la del apex (RFC 6265 §5.3, host-only tienen precedencia y van primero en el header `Cookie`).
+**Cookie del IdP:** la sesión del IdP/apex DEBE setear `Domain=place.community` explícito (sin `Domain` en dev local; resuelto desde `NEXT_PUBLIC_APP_DOMAIN`). Test guard que falle el build si se emite sin `Domain`: una cookie host-only (sin `Domain`) en un subdomain sobrescribe la del apex (RFC 6265 §5.3, host-only tienen precedencia y van primero en el header `Cookie`).
 
-**TBD acotado (se decide al implementar auth):** firma de ID tokens (JWT plugin, RS256/EdDSA) y registro de clients (estático vs dynamic client registration).
+**Identidad:** `app_user` (identidad de producto) tiene relación 1:1 con la identidad de login de Better Auth — ver `docs/data-model.md` § "Auth y OIDC". Invariante: un humano = un `app_user`, sin importar por qué dominio entró.
+
+**TBD acotado (se decide al implementar auth):** firma de ID tokens (JWT plugin, RS256 vs EdDSA) — detalle de implementación, no afecta la topología.
 
 ## Gate de horario del place
 

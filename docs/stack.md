@@ -49,9 +49,13 @@ DATABASE_URL=
 # App
 NEXT_PUBLIC_APP_URL=https://place.community
 NEXT_PUBLIC_APP_DOMAIN=place.community
+
+# Custom domains (Vercel Domains API — alta/verificación programática)
+VERCEL_API_TOKEN=
+VERCEL_PROJECT_ID=
 ```
 
-Las variables de auth/storage/realtime/pagos se agregan acá cuando se decida cada pieza.
+Las variables de auth/storage/realtime/pagos se agregan acá cuando se decida cada pieza. `VERCEL_API_TOKEN` es secret: vive solo en `.env.local` / Vercel env, nunca en git.
 
 ## Package manager
 
